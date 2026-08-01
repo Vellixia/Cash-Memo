@@ -1,0 +1,397 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "database": { "id": "cashmemo", "name": "Cashmemo", "enabled": true },
+  "policy": {
+    "browserAccess": "deny",
+    "rowSecurity": false,
+    "runtimeServerCredentialScopes": ["rows.read", "rows.write"],
+    "provisioningCredentialScopes": [
+      "databases.read",
+      "databases.write",
+      "tables.read",
+      "tables.write",
+      "columns.read",
+      "columns.write",
+      "indexes.read",
+      "indexes.write"
+    ]
+  },
+  "tables": [
+    {
+      "id": "money_memos",
+      "name": "Money Memos",
+      "permissions": [],
+      "rowSecurity": false,
+      "columns": [
+        { "key": "memo_id", "kind": "varchar", "size": 36, "required": true },
+        { "key": "owner_id", "kind": "varchar", "size": 36, "required": true },
+        {
+          "key": "memo_type",
+          "kind": "enum",
+          "elements": ["income", "expense"],
+          "required": true
+        },
+        {
+          "key": "amount_minor",
+          "kind": "integer",
+          "required": true,
+          "min": 1,
+          "max": 9999999999999999
+        },
+        {
+          "key": "amount_scale",
+          "kind": "integer",
+          "required": true,
+          "min": 0,
+          "max": 4
+        },
+        { "key": "currency", "kind": "varchar", "size": 3, "required": true },
+        { "key": "occurrence_instant_us", "kind": "integer", "required": true },
+        {
+          "key": "occurrence_local_wall",
+          "kind": "varchar",
+          "size": 26,
+          "required": true
+        },
+        {
+          "key": "occurrence_local_date",
+          "kind": "varchar",
+          "size": 10,
+          "required": true
+        },
+        {
+          "key": "occurrence_offset_minutes",
+          "kind": "integer",
+          "required": true,
+          "min": -840,
+          "max": 840
+        },
+        {
+          "key": "category_id",
+          "kind": "varchar",
+          "size": 36,
+          "required": true
+        },
+        {
+          "key": "money_space_id",
+          "kind": "varchar",
+          "size": 36,
+          "required": true
+        },
+        {
+          "key": "note",
+          "kind": "varchar",
+          "size": 1000,
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "note_search",
+          "kind": "text",
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "planned_status",
+          "kind": "enum",
+          "elements": ["planned", "unplanned"],
+          "required": true
+        },
+        {
+          "key": "purpose",
+          "kind": "enum",
+          "elements": ["personal", "work", "mixed"],
+          "required": true
+        },
+        {
+          "key": "lifecycle_status",
+          "kind": "enum",
+          "elements": ["active", "archived", "pending_deletion"],
+          "required": true
+        },
+        {
+          "key": "pre_delete_status",
+          "kind": "enum",
+          "elements": ["active", "archived"],
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "deletion_requested_at_us",
+          "kind": "integer",
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "purge_deadline_us",
+          "kind": "integer",
+          "required": false,
+          "default": null
+        },
+        { "key": "revision", "kind": "integer", "required": true, "min": 1 },
+        {
+          "key": "creation_id",
+          "kind": "varchar",
+          "size": 36,
+          "required": true
+        },
+        {
+          "key": "creation_fingerprint",
+          "kind": "varchar",
+          "size": 64,
+          "required": true
+        },
+        {
+          "key": "fingerprint_key_ciphertext",
+          "kind": "varchar",
+          "size": 512,
+          "required": true
+        },
+        {
+          "key": "fingerprint_key_nonce",
+          "kind": "varchar",
+          "size": 64,
+          "required": true
+        },
+        {
+          "key": "fingerprint_kek_id",
+          "kind": "varchar",
+          "size": 16,
+          "required": true
+        },
+        { "key": "created_at_us", "kind": "integer", "required": true },
+        { "key": "updated_at_us", "kind": "integer", "required": true }
+      ],
+      "indexes": [
+        {
+          "key": "memo_owner_creation_uq",
+          "type": "unique",
+          "columns": ["owner_id", "creation_id"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_life_order",
+          "type": "key",
+          "columns": [
+            "owner_id",
+            "lifecycle_status",
+            "occurrence_instant_us",
+            "created_at_us",
+            "memo_id"
+          ],
+          "orders": ["ASC", "ASC", "DESC", "DESC", "DESC"]
+        },
+        {
+          "key": "memo_owner_date_order",
+          "type": "key",
+          "columns": [
+            "owner_id",
+            "lifecycle_status",
+            "occurrence_local_date",
+            "occurrence_instant_us",
+            "created_at_us",
+            "memo_id"
+          ],
+          "orders": ["ASC", "ASC", "ASC", "DESC", "DESC", "DESC"]
+        },
+        {
+          "key": "memo_owner_type",
+          "type": "key",
+          "columns": ["owner_id", "memo_type"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_currency",
+          "type": "key",
+          "columns": ["owner_id", "currency"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_category",
+          "type": "key",
+          "columns": ["owner_id", "category_id"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_space",
+          "type": "key",
+          "columns": ["owner_id", "money_space_id"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_planned",
+          "type": "key",
+          "columns": ["owner_id", "planned_status"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_purpose",
+          "type": "key",
+          "columns": ["owner_id", "purpose"],
+          "orders": ["ASC", "ASC"]
+        },
+        {
+          "key": "memo_purge_scan",
+          "type": "key",
+          "columns": ["lifecycle_status", "purge_deadline_us", "memo_id"],
+          "orders": ["ASC", "ASC", "ASC"]
+        },
+        {
+          "key": "memo_owner_id",
+          "type": "key",
+          "columns": ["owner_id", "memo_id"],
+          "orders": ["ASC", "ASC"]
+        }
+      ]
+    },
+    {
+      "id": "labels",
+      "name": "Labels",
+      "permissions": [],
+      "rowSecurity": false,
+      "columns": [
+        { "key": "label_id", "kind": "varchar", "size": 36, "required": true },
+        { "key": "owner_id", "kind": "varchar", "size": 36, "required": true },
+        {
+          "key": "kind",
+          "kind": "enum",
+          "elements": ["category", "money_space"],
+          "required": true
+        },
+        { "key": "name", "kind": "varchar", "size": 100, "required": true },
+        { "key": "name_key", "kind": "varchar", "size": 256, "required": true },
+        {
+          "key": "state",
+          "kind": "enum",
+          "elements": ["active", "deactivated"],
+          "required": true
+        },
+        {
+          "key": "memo_reference_count",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        { "key": "revision", "kind": "integer", "required": true, "min": 1 },
+        { "key": "created_at_us", "kind": "integer", "required": true },
+        { "key": "updated_at_us", "kind": "integer", "required": true }
+      ],
+      "indexes": [
+        {
+          "key": "label_owner_kind_name_uq",
+          "type": "unique",
+          "columns": ["owner_id", "kind", "name_key"],
+          "orders": ["ASC", "ASC", "ASC"]
+        },
+        {
+          "key": "label_owner_picker",
+          "type": "key",
+          "columns": ["owner_id", "kind", "state", "name_key"],
+          "orders": ["ASC", "ASC", "ASC", "ASC"]
+        },
+        {
+          "key": "label_owner_id",
+          "type": "key",
+          "columns": ["owner_id", "kind", "label_id"],
+          "orders": ["ASC", "ASC", "ASC"]
+        }
+      ]
+    },
+    {
+      "id": "user_journal_state",
+      "name": "User Journal State",
+      "permissions": [],
+      "rowSecurity": false,
+      "columns": [
+        { "key": "owner_id", "kind": "varchar", "size": 36, "required": true },
+        {
+          "key": "mutation_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "base_result_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "note_search_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "type_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "currency_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "category_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "money_space_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "planned_status_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "purpose_generation",
+          "kind": "integer",
+          "required": true,
+          "min": 0
+        },
+        {
+          "key": "next_pending_deadline_us",
+          "kind": "integer",
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "export_lease_id",
+          "kind": "varchar",
+          "size": 36,
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "export_accepted_at_us",
+          "kind": "integer",
+          "required": false,
+          "default": null
+        },
+        {
+          "key": "export_lease_deadline_us",
+          "kind": "integer",
+          "required": false,
+          "default": null
+        }
+      ],
+      "indexes": [
+        {
+          "key": "journal_owner_uq",
+          "type": "unique",
+          "columns": ["owner_id"],
+          "orders": ["ASC"]
+        }
+      ]
+    }
+  ]
+}

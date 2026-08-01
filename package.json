@@ -1,0 +1,34 @@
+{
+  "name": "cashmemo",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @cashmemo/web",
+    "dev": "npm run dev --workspace @cashmemo/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "npm run lint --workspace @cashmemo/web",
+    "test": "npm run test --workspace @cashmemo/web",
+    "test:run": "npm run test:run --workspace @cashmemo/web",
+    "typecheck": "npm run typecheck --workspace @cashmemo/web"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.3.0",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "fast-xml-parser": "5.2.5",
+    "openapi-typescript": "7.8.0",
+    "prettier": "3.6.2",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3",
+    "yaml": "2.8.0"
+  }
+}

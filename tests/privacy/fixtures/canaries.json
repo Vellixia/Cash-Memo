@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "cashmemo-privacy-canaries-v1",
+  "derivations": ["raw", "json_escaped", "url_encoded", "base64", "sha256"],
+  "entries": [
+    { "id": "amount", "class": "amount", "raw": "CM_CANARY_AMOUNT_9273.41" },
+    {
+      "id": "note",
+      "class": "memo_note",
+      "raw": "CM_CANARY_NOTE_copper-orchid-731"
+    },
+    {
+      "id": "label",
+      "class": "label",
+      "raw": "CM_CANARY_LABEL_hidden-harbor-619"
+    },
+    {
+      "id": "search",
+      "class": "search",
+      "raw": "CM_CANARY_SEARCH_silent-cedar-487"
+    },
+    {
+      "id": "fingerprint",
+      "class": "creation_fingerprint",
+      "raw": "CM_CANARY_FINGERPRINT_9f4d8a761b"
+    },
+    {
+      "id": "key",
+      "class": "cryptographic_key",
+      "raw": "CM_CANARY_KEY_a7d112de56f390"
+    },
+    {
+      "id": "cursor",
+      "class": "page_position",
+      "raw": "CM_CANARY_CURSOR_eyJ2IjoxLCJ4Ijoi"
+    },
+    {
+      "id": "token",
+      "class": "purge_token",
+      "raw": "CM_CANARY_TOKEN_667d9b3e2a"
+    },
+    {
+      "id": "auth",
+      "class": "authentication",
+      "raw": "CM_CANARY_AUTH_session-2f81cc"
+    },
+    {
+      "id": "export",
+      "class": "export_payload",
+      "raw": "CM_CANARY_EXPORT_payload-804"
+    },
+    {
+      "id": "pattern",
+      "class": "pattern_candidate",
+      "raw": "CM_CANARY_PATTERN_4111111111111111"
+    }
+  ],
+  "safeDetectorIds": [
+    "B1_PAN_LUHN",
+    "B2_IBAN_MOD97",
+    "B3_LABELED_ACCOUNT",
+    "B4_LABELED_ROUTING",
+    "B5_LABELED_CARD_SECRET",
+    "B6_LABELED_BANK_CREDENTIAL",
+    "B7_LABELED_BANK_TOKEN",
+    "B8_STATEMENT_PASTE",
+    "B9_LABELED_GOV_ID"
+  ]
+}

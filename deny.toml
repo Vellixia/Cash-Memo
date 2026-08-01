@@ -1,0 +1,59 @@
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+allow = [
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[[bans.deny]]
+name = "mongodb"
+reason = "Cashmemo accesses Appwrite only through supported APIs"
+
+[[bans.deny]]
+name = "redis"
+reason = "Feature 001 has no application Redis dependency"
+
+[[bans.deny]]
+name = "sqlx"
+reason = "Direct database drivers are outside Appwrite API boundary"
+
+[[bans.deny]]
+name = "diesel"
+reason = "Direct database drivers are outside Appwrite API boundary"
+
+[[bans.deny]]
+name = "sea-orm"
+reason = "Direct database drivers are outside Appwrite API boundary"
+
+[[bans.deny]]
+name = "openai"
+reason = "AI is outside Feature 001"
+
+[[bans.deny]]
+name = "whisper-rs"
+reason = "STT is outside Feature 001"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,30 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: {}
+      http: {}
+
+processors:
+  memory_limiter:
+    limit_mib: 256
+  transform/privacy_allowlist:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - keep_keys(attributes, ["http.request.method", "http.response.status_code", "http.route", "cashmemo.error_code", "cashmemo.operation", "service.version"])
+          - set(name, "cashmemo.request")
+  batch: {}
+
+exporters:
+  otlphttp/openobserve:
+    endpoint: http://openobserve:5080/api/default
+    headers:
+      Authorization: ${env:OPENOBSERVE_AUTH_HEADER}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/privacy_allowlist, batch]
+      exporters: [otlphttp/openobserve]

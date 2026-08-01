@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashmemo.local/schemas/money-memo-export-v1.schema.json",
+  "title": "Cashmemo Money Memo Export v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "formatVersion",
+    "acceptedAt",
+    "includeArchived",
+    "currencyRegistry",
+    "references",
+    "moneyMemos"
+  ],
+  "properties": {
+    "format": { "const": "cashmemo.money-memos" },
+    "formatVersion": { "const": 1 },
+    "acceptedAt": { "$ref": "#/$defs/utcInstant" },
+    "includeArchived": { "type": "boolean" },
+    "currencyRegistry": { "const": "iso4217-list-one-2026-01-01" },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "moneySpaces"],
+      "properties": {
+        "categories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reference" }
+        },
+        "moneySpaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reference" }
+        }
+      }
+    },
+    "moneyMemos": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/moneyMemo" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "utcInstant": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$"
+    },
+    "localWallTime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}$"
+    },
+    "utcOffset": {
+      "type": "string",
+      "pattern": "^(?:[+-](?:0\\d|1[0-3]):[0-5]\\d|[+-]14:00)$"
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "state"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "state": { "enum": ["active", "deactivated"] }
+      }
+    },
+    "amount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decimal", "currency", "minorUnitScale"],
+      "properties": {
+        "decimal": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)(\\.\\d+)?$",
+          "description": "Exactly minorUnitScale fractional digits; scale 0 has no decimal point."
+        },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "minorUnitScale": { "type": "integer", "minimum": 0, "maximum": 4 }
+      },
+      "$comment": "Scale branches are generated/verified from contracts/currencies-v1.md and the pinned registry scales.",
+      "allOf": [
+        {
+          "if": { "properties": { "minorUnitScale": { "const": 0 } }, "required": ["minorUnitScale"] },
+          "then": { "properties": { "decimal": { "type": "string", "pattern": "^(0|[1-9]\\d*)$" } } }
+        },
+        {
+          "if": { "properties": { "minorUnitScale": { "const": 1 } }, "required": ["minorUnitScale"] },
+          "then": { "properties": { "decimal": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.\\d{1}$" } } }
+        },
+        {
+          "if": { "properties": { "minorUnitScale": { "const": 2 } }, "required": ["minorUnitScale"] },
+          "then": { "properties": { "decimal": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.\\d{2}$" } } }
+        },
+        {
+          "if": { "properties": { "minorUnitScale": { "const": 3 } }, "required": ["minorUnitScale"] },
+          "then": { "properties": { "decimal": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.\\d{3}$" } } }
+        },
+        {
+          "if": { "properties": { "minorUnitScale": { "const": 4 } }, "required": ["minorUnitScale"] },
+          "then": { "properties": { "decimal": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.\\d{4}$" } } }
+        }
+      ]
+    },
+    "occurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instant", "localWallTime", "utcOffset"],
+      "properties": {
+        "instant": { "$ref": "#/$defs/utcInstant" },
+        "localWallTime": { "$ref": "#/$defs/localWallTime" },
+        "utcOffset": { "$ref": "#/$defs/utcOffset" }
+      }
+    },
+    "moneyMemo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "amount",
+        "occurrence",
+        "categoryId",
+        "moneySpaceId",
+        "note",
+        "plannedStatus",
+        "purpose",
+        "lifecycleStatus",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "type": { "enum": ["income", "expense"] },
+        "amount": { "$ref": "#/$defs/amount" },
+        "occurrence": { "$ref": "#/$defs/occurrence" },
+        "categoryId": { "$ref": "#/$defs/uuid" },
+        "moneySpaceId": { "$ref": "#/$defs/uuid" },
+        "note": { "type": ["string", "null"], "maxLength": 1000 },
+        "plannedStatus": { "enum": ["planned", "unplanned"] },
+        "purpose": { "enum": ["personal", "work", "mixed"] },
+        "lifecycleStatus": { "enum": ["active", "archived"] },
+        "createdAt": { "$ref": "#/$defs/utcInstant" },
+        "updatedAt": { "$ref": "#/$defs/utcInstant" }
+      }
+    }
+  },
+  "description": "UTF-8 RFC 8259 JSON, no BOM, one trailing LF. Reference arrays sort by ID; moneyMemos sort by occurrence instant DESC, createdAt DESC, ID DESC. Object member order is not semantic. Pending-deletion records and internal owner, revision, creation, cursor, export-fence, deletion, fingerprint, key, and suppression metadata are forbidden by additionalProperties=false."
+}

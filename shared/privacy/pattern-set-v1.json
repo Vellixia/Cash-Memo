@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "pattern-set-v1",
+  "preprocessing": {
+    "lineEndings": "CRLF_TO_LF",
+    "unicodeNormalization": "NFKC",
+    "decimalDigits": "UNICODE_ND_TO_ASCII",
+    "keywordCaseFold": "ASCII_LOWER",
+    "candidateSeparators": ["SPACE", "TAB", "HYPHEN"],
+    "labelCandidateMaximumDistanceScalars": 32
+  },
+  "blocking": [
+    {
+      "id": "B1_PAN_LUHN",
+      "digitsMinimum": 13,
+      "digitsMaximum": 19,
+      "checksum": "LUHN"
+    },
+    {
+      "id": "B2_IBAN_MOD97",
+      "charactersMinimum": 15,
+      "charactersMaximum": 34,
+      "checksum": "ISO13616_MOD97_EQ_1"
+    },
+    {
+      "id": "B3_LABELED_ACCOUNT",
+      "candidateMinimum": 6,
+      "candidateMaximum": 34,
+      "labels": [
+        "account number",
+        "account no",
+        "account #",
+        "acct number",
+        "acct no",
+        "a/c no",
+        "nomor rekening",
+        "no rekening",
+        "no. rekening"
+      ]
+    },
+    {
+      "id": "B4_LABELED_ROUTING",
+      "abaDigits": 9,
+      "sortCodeDigits": 6,
+      "labels": ["routing number", "routing no", "aba", "sort code", "bsb"]
+    },
+    {
+      "id": "B5_LABELED_CARD_SECRET",
+      "digitsMinimum": 3,
+      "digitsMaximum": 4,
+      "labels": [
+        "cvv",
+        "cvc",
+        "cid",
+        "card verification code",
+        "card security code",
+        "kode keamanan kartu"
+      ]
+    },
+    {
+      "id": "B6_LABELED_BANK_CREDENTIAL",
+      "tokenMinimum": 4,
+      "tokenMaximum": 128,
+      "labels": [
+        "bank password",
+        "banking password",
+        "online banking password",
+        "internet banking password",
+        "bank pin",
+        "atm pin",
+        "mobile banking pin",
+        "m-banking pin",
+        "password bank",
+        "pin bank"
+      ]
+    },
+    {
+      "id": "B7_LABELED_BANK_TOKEN",
+      "tokenMinimum": 6,
+      "tokenMaximum": 512,
+      "alphabet": "ASCII_ALNUM_DOT_UNDERSCORE_TILDE_PLUS_SLASH_HYPHEN_EQUALS",
+      "labels": [
+        "bank access token",
+        "banking access token",
+        "bank refresh token",
+        "banking token",
+        "mobile banking token",
+        "internet banking token",
+        "bank otp",
+        "banking otp",
+        "bank tac"
+      ]
+    },
+    {
+      "id": "B8_STATEMENT_PASTE",
+      "distinctMarkerMinimum": 2,
+      "laterTransactionLineMinimum": 3,
+      "headers": [
+        "bank statement",
+        "account statement",
+        "rekening koran",
+        "mutasi rekening"
+      ],
+      "markers": [
+        "account number",
+        "nomor rekening",
+        "statement period",
+        "periode",
+        "opening balance",
+        "saldo awal",
+        "closing balance",
+        "saldo akhir",
+        "transaction date",
+        "tanggal transaksi",
+        "debit",
+        "credit"
+      ]
+    },
+    {
+      "id": "B9_LABELED_GOV_ID",
+      "labels": [
+        "ssn",
+        "social security number",
+        "nik",
+        "nomor induk kependudukan",
+        "government id",
+        "national id",
+        "identity number"
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "id": "W1_BANKING_CONTEXT",
+      "phrases": [
+        "bank account",
+        "card number",
+        "bank statement",
+        "bank token",
+        "bank password",
+        "rekening",
+        "kartu kredit",
+        "kartu debit"
+      ]
+    },
+    {
+      "id": "W2_UNLABELED_LONG_NUMBER",
+      "digitsMinimum": 6,
+      "digitsMaximum": 34
+    },
+    {
+      "id": "W3_STATEMENT_HEADER",
+      "usesBlockingHeaderSet": "B8_STATEMENT_PASTE"
+    }
+  ],
+  "copy": {
+    "adjacentWarning": "Do not enter bank credentials, account or routing numbers, card details, verification codes, banking tokens, bank statements, or government identifiers.",
+    "limitations": "Cashmemo checks a finite published pattern set and may miss sensitive content.",
+    "blockingCorrection": "Remove prohibited data before submitting.",
+    "warningCorrection": "Edit or remove the text, or continue unchanged if it contains no prohibited data."
+  }
+}

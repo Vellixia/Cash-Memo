@@ -1,0 +1,50 @@
+name: quality
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - uses: dtolnay/rust-toolchain@master
+        with: { toolchain: 1.97.1, components: rustfmt, clippy }
+      - uses: extractions/setup-just@v3
+      - run: npm ci
+      - name: Secret and architecture scans
+        run: |
+          just secrets-scan
+          just architecture-check
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: backend/Cargo.toml
+      - name: Formatting and linting
+        run: |
+          just format-check
+          just lint
+      - name: Contract and schema checks
+        run: just contracts
+      - name: Strict type checks
+        run: just typecheck
+      - name: Unit tests
+        run: just test-unit
+      - name: Real integration tests
+        run: just test-integration-real
+      - name: Privacy tests
+        run: just test-privacy-real
+      - name: Acceptance
+        run: just acceptance-all
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feature-001-sanitized-evidence
+          path: docs/evidence/001/
+          retention-days: 30

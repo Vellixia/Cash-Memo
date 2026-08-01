@@ -1,0 +1,18 @@
+[package]
+name = "cashmemo"
+description = "Cashmemo modular-monolith process"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+axum.workspace = true
+cashmemo-appwrite-adapter = { path = "../appwrite-adapter", version = "=0.1.0" }
+cashmemo-application = { path = "../application", version = "=0.1.0" }
+cashmemo-http-adapter = { path = "../http-adapter", version = "=0.1.0" }
+tokio.workspace = true
+
+[lints]
+workspace = true

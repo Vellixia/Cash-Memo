@@ -1,0 +1,10 @@
+[package]
+name = "cashmemo-architecture-tests"
+edition = "2024"
+license = "LicenseRef-Proprietary"
+publish = false
+
+[[test]]
+name = "domain_boundaries"
+path = "domain_boundaries.rs"
+
