@@ -1,9 +1,11 @@
 //! Pattern Set result and safe public metadata. Candidate text is never represented here.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 /// Published Pattern Set v1 blocking IDs safe only in HTTP 422 field responses.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub enum SafeDetectorId {
     /// Luhn-valid PAN-shaped value.
     #[serde(rename = "B1_PAN_LUHN")]
@@ -34,8 +36,14 @@ pub enum SafeDetectorId {
     B9LabeledGovId,
 }
 
+impl fmt::Debug for SafeDetectorId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("SafeDetectorId([REDACTED])")
+    }
+}
+
 /// Safe outcome with no candidate, position, normalization, hash, or derivative.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum PatternOutcome {
     /// No declared v1 pattern.
     Clear,
@@ -45,8 +53,18 @@ pub enum PatternOutcome {
     Blocking(SafeDetectorId),
 }
 
+impl fmt::Debug for PatternOutcome {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clear => formatter.write_str("PatternOutcome::Clear"),
+            Self::Warning(_) => formatter.write_str("PatternOutcome::Warning([REDACTED])"),
+            Self::Blocking(_) => formatter.write_str("PatternOutcome::Blocking([REDACTED])"),
+        }
+    }
+}
+
 /// Warning identifiers kept only in synchronous local decision flow.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum WarningId {
     /// Banking phrase context.
     W1BankingContext,
@@ -54,6 +72,12 @@ pub enum WarningId {
     W2UnlabeledLongNumber,
     /// Statement header without full paste threshold.
     W3StatementHeader,
+}
+
+impl fmt::Debug for WarningId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("WarningId([REDACTED])")
+    }
 }
 
 /// Release-visible governance trace without candidate data.

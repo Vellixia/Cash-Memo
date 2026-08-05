@@ -70,7 +70,7 @@ impl fmt::Debug for FieldViolation {
             .field("field", &self.field)
             .field("rule", &self.rule)
             .field("message", &self.message)
-            .field("detector_id", &self.detector_id)
+            .field("has_detector_id", &self.detector_id.is_some())
             .finish()
     }
 }
@@ -142,7 +142,7 @@ impl fmt::Debug for DomainError {
             .field("code", &self.code)
             .field("message", &self.message)
             .field("retryable", &self.retryable)
-            .field("violations", &self.violations)
+            .field("violation_count", &self.violations.len())
             .field("has_existing_memo", &self.existing_memo_id.is_some())
             .finish()
     }

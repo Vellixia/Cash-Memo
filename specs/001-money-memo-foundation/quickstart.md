@@ -33,15 +33,23 @@ Expected result:
 - no value printed to terminal/log;
 - `just secrets-scan` reports zero committed secrets.
 
+`APPWRITE_SERVER_API_KEY` is created only by supported Appwrite bootstrap APIs and stored in the
+separate ignored `config/local-secrets/appwrite-runtime.env`. Validate both files without exposing
+values after bootstrap:
+
+```bash
+just environment-check
+```
+
 Do not copy example values into version control.
 
 ## Start real local stack
 
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d
+just appwrite-ready
+docker compose --env-file config/local-secrets/cashmemo.env \
+  -f infra/compose/docker-compose.yml up -d --build
 just stack-health
-just appwrite-provision
-just appwrite-contract
 ```
 
 Expected:
@@ -59,8 +67,10 @@ Expected:
 just dev
 ```
 
-Open URL printed by target. Sign-in flow is prerequisite outside Feature 001; seeded synthetic
-accounts are supplied by development fixture. Browser API responses must show
+Open URL printed by target. Sign-in UI is prerequisite outside Feature 001. US1 acceptance creates
+isolated synthetic accounts and real sessions through supported Appwrite APIs, sends the opaque
+session only as the protected `cashmemo_session` cookie, and deletes test accounts afterward. No
+production route has a local-account fallback. Browser API responses must show
 `Cache-Control: no-store`; service-worker cache inspector must contain static assets only.
 
 ## Validate User Story 1: create and durable retry

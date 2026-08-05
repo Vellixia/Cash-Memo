@@ -253,7 +253,11 @@ function statementHeader(value: string): boolean {
 }
 
 function statementPaste(value: string): boolean {
-  if (!statementHeader(value)) return false;
+  const lines = value.split("\n");
+  const headerIndex = lines.findIndex((line) =>
+    statementHeaders.some((header) => line.includes(header)),
+  );
+  if (headerIndex < 0) return false;
   const markers = [
     "account number",
     "nomor rekening",
@@ -273,8 +277,14 @@ function statementPaste(value: string): boolean {
   const date =
     /(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}\/[0-9]{2}\/[0-9]{4}|[0-9]{2}-[0-9]{2}-[0-9]{4})/u;
   return (
-    value.split("\n").filter((line) => date.test(line) && /[0-9]/u.test(line))
-      .length >= 3
+    lines.slice(headerIndex + 1).filter((line) => {
+      const match = date.exec(line);
+      if (match === null) return false;
+      const withoutDate = `${line.slice(0, match.index)} ${line.slice(match.index + match[0].length)}`;
+      return /(?:^|[^a-z0-9])[0-9]+(?:[.,][0-9]+)?(?:$|[^a-z0-9])/u.test(
+        withoutDate,
+      );
+    }).length >= 3
   );
 }
 

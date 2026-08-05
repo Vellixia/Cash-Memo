@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/v1/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve the current account through live Appwrite session validation */
+        get: operations["getAuthenticatedSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/money-memos": {
         parameters: {
             query?: never;
@@ -305,6 +322,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuthenticatedSession: {
+            /** @description Current Appwrite account ID; locally transformed before durable draft use. */
+            accountId: string;
+        };
         /** @enum {string} */
         MoneyMemoType: "income" | "expense";
         /** @enum {string} */
@@ -646,6 +667,29 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAuthenticatedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated account used only to derive the one-way local draft partition */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthenticatedSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     createMoneyMemo: {
         parameters: {
             query?: never;

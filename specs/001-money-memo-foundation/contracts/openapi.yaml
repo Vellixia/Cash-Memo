@@ -13,6 +13,8 @@ servers:
 security:
   - appwriteSession: []
 tags:
+  - name: Authentication
+    description: Live Appwrite-backed session bootstrap for protected browser routes.
   - name: Money Memos
     description: Confirmed memo create/read/edit/archive operations and owner-scoped query.
   - name: Recently Deleted
@@ -24,6 +26,21 @@ tags:
   - name: Reference
     description: Immutable reference registries used for validation.
 paths:
+  /v1/auth/session:
+    get:
+      tags: [Authentication]
+      operationId: getAuthenticatedSession
+      summary: Resolve the current account through live Appwrite session validation
+      responses:
+        '200':
+          description: Authenticated account used only to derive the one-way local draft partition
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthenticatedSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /v1/money-memos:
     post:
       tags: [Money Memos]
@@ -500,6 +517,16 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
   schemas:
+    AuthenticatedSession:
+      type: object
+      additionalProperties: false
+      required: [accountId]
+      properties:
+        accountId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Current Appwrite account ID; locally transformed before durable draft use.
     MoneyMemoType:
       type: string
       enum: [income, expense]

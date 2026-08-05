@@ -1,4 +1,6 @@
 FROM node:24.14.0-alpine AS builder
+ARG CASHMEMO_API_ORIGIN=http://backend:3001
+ENV CASHMEMO_API_ORIGIN=${CASHMEMO_API_ORIGIN}
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
@@ -15,4 +17,3 @@ COPY --from=builder /src/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
-

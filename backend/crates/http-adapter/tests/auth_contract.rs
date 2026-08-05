@@ -122,3 +122,35 @@ async fn valid_session_reaches_protected_route_without_owner_input() {
     );
     assert!(safe_error.get("ownerId").is_none());
 }
+
+#[tokio::test]
+async fn session_bootstrap_is_live_protected_and_returns_only_current_account() {
+    let router = build_router(AppState::new(Arc::new(ScenarioValidator)));
+    let response = router
+        .oneshot(
+            Request::get("/api/v1/auth/session")
+                .header(header::COOKIE, "cashmemo_session=valid-session")
+                .body(Body::empty())
+                .unwrap_or_else(|_| panic!("request build failed")),
+        )
+        .await
+        .unwrap_or_else(|error| match error {});
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .unwrap_or_else(|_| panic!("response body unavailable"));
+    let value: Value = serde_json::from_slice(&body)
+        .unwrap_or_else(|_| panic!("response JSON unavailable"));
+    assert_eq!(value.get("accountId").and_then(Value::as_str), Some("valid_owner"));
+    assert_eq!(value.as_object().map(serde_json::Map::len), Some(1));
+
+    let rejected = build_router(AppState::new(Arc::new(ScenarioValidator)))
+        .oneshot(
+            Request::get("/api/v1/auth/session")
+                .body(Body::empty())
+                .unwrap_or_else(|_| panic!("request build failed")),
+        )
+        .await
+        .unwrap_or_else(|error| match error {});
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+}

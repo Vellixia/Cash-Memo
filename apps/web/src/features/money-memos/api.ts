@@ -40,7 +40,6 @@ export function useActiveLabels(kind: "category" | "money_space") {
 }
 
 export function useCreateMoneyMemo(options: {
-  onConfirmed: () => Promise<void>;
   onRetainDraft: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -51,7 +50,6 @@ export function useCreateMoneyMemo(options: {
         body: JSON.stringify(request),
       }),
     onSuccess: async () => {
-      await options.onConfirmed();
       await queryClient.invalidateQueries({ queryKey: moneyMemoKeys.active });
     },
     onError: async () => {

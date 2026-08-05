@@ -45,6 +45,33 @@ function operations(document) {
 }
 
 function assertNonBreaking(baseline, current) {
+  if (baseline.contract === "cashmemo-openapi-v1") {
+    const next = operations(current);
+    for (const [operation, statuses] of Object.entries(baseline.operations)) {
+      invariant(next.has(operation), `breaking removal of ${operation}`);
+      const responses = next.get(operation).responses ?? {};
+      for (const status of statuses)
+        invariant(
+          status in responses,
+          `breaking response removal ${operation} ${status}`,
+        );
+    }
+    for (const [name, schema] of Object.entries(baseline.schemas)) {
+      const currentSchema = current.components?.schemas?.[name];
+      invariant(currentSchema, `breaking schema removal ${name}`);
+      for (const required of schema.required ?? [])
+        invariant(
+          currentSchema.required?.includes(required),
+          `breaking required-property removal ${name}.${required}`,
+        );
+      for (const member of schema.enum ?? [])
+        invariant(
+          currentSchema.enum?.includes(member),
+          `breaking enum removal ${name}.${member}`,
+        );
+    }
+    return;
+  }
   const previous = operations(baseline);
   const next = operations(current);
   for (const [operation, oldValue] of previous) {
@@ -142,7 +169,11 @@ const baselineArg = process.argv.indexOf("--against");
 if (baselineArg >= 0) {
   const baselinePath = process.argv[baselineArg + 1];
   invariant(baselinePath, "--against requires a baseline path");
-  assertNonBreaking(parse(readFileSync(resolve(baselinePath), "utf8")), api);
+  const baselineRaw = readFileSync(resolve(baselinePath), "utf8");
+  const baseline = baselinePath.endsWith(".json")
+    ? JSON.parse(baselineRaw)
+    : parse(baselineRaw);
+  assertNonBreaking(baseline, api);
 }
 
 process.stdout.write("OpenAPI semantic contract checks passed\n");

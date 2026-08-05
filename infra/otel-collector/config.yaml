@@ -20,7 +20,7 @@ exporters:
   otlphttp/openobserve:
     endpoint: http://openobserve:5080/api/default
     headers:
-      Authorization: ${env:OPENOBSERVE_AUTH_HEADER}
+      Authorization: Basic ${env:OPENOBSERVE_AUTH_CREDENTIAL}
 
 service:
   pipelines:

@@ -204,6 +204,10 @@ impl CreateMemoPersistence for CreateMoneyMemoStore {
             .find_raw(owner, prepared.values.creation_id, Some(&transaction_id))
             .await?
         {
+            self.client
+                .rollback_transaction(&transaction_id)
+                .await
+                .map_err(map_dependency)?;
             return self
                 .map_stored(owner, &row)
                 .await

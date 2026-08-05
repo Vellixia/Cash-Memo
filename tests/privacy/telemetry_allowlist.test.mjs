@@ -22,7 +22,7 @@ test("OTel collector keeps only the reviewed diagnostic allowlist before export"
   ]);
   assert.equal(
     configuration.exporters["otlphttp/openobserve"].headers.Authorization,
-    "${env:OPENOBSERVE_AUTH_HEADER}",
+    "Basic ${env:OPENOBSERVE_AUTH_CREDENTIAL}",
   );
   const encoded = JSON.stringify(configuration);
   for (const forbidden of [

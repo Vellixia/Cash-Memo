@@ -21,6 +21,7 @@ export type ComposeDraft = {
 const DATABASE_NAME = "cashmemo_local";
 const PARTITION_DOMAIN = "cashmemo.local-compose-partition.v1\0";
 const PARTITION_KEY_ID = "compose-partition-hmac-v1";
+const ACTIVE_CREATE_DRAFT_ID = "active-create";
 
 type ComposeMetadata = { id: string; material: ArrayBuffer };
 
@@ -94,17 +95,29 @@ export class ComposeDraftDatabase extends Dexie {
     accountId: string,
     payload: ComposePayload,
   ): Promise<ComposeDraft> {
+    const userPartition = await localPartitionTag(accountId);
     const draft: ComposeDraft = {
-      draftId: crypto.randomUUID(),
-      userPartition: await localPartitionTag(accountId),
+      draftId: ACTIVE_CREATE_DRAFT_ID,
+      userPartition,
       mode: "create",
       creationId: crypto.randomUUID(),
       formPayload: { ...payload },
       retryState: "editing",
       updatedAt: Date.now(),
     };
-    await this.composeDrafts.add(draft);
-    return draft;
+    try {
+      await this.composeDrafts.add(draft);
+      return draft;
+    } catch (error) {
+      if (!(error instanceof Dexie.ConstraintError)) throw error;
+      const winner = await this.composeDrafts.get([
+        userPartition,
+        ACTIVE_CREATE_DRAFT_ID,
+      ]);
+      if (winner === undefined)
+        throw new Error("Compose draft unavailable");
+      return winner;
+    }
   }
 
   async loadForAccount(

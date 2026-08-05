@@ -15,6 +15,7 @@ use cashmemo_application::use_cases::query_label_references::LabelReferenceQuery
 use crate::routes::create_money_memo::create_money_memo;
 use crate::routes::currencies::currencies;
 use crate::routes::label_reference::query_labels;
+use crate::routes::session::authenticated_session;
 
 /// Shared HTTP state. It stores capabilities, never an authenticated owner.
 #[derive(Clone)]
@@ -65,6 +66,7 @@ impl AppState {
 /// Builds the protected Feature 001 API shell.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/api/v1/auth/session", get(authenticated_session))
         .route("/api/v1/reference/currencies", get(currencies))
         .route("/api/v1/labels/query", axum::routing::post(query_labels))
         .route("/api/v1/money-memos", post(create_money_memo))

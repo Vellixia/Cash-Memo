@@ -48,6 +48,80 @@ struct ExistingStore {
     create_calls: AtomicU64,
 }
 
+struct ResponseLossStore {
+    value: Mutex<Option<StoredCreation>>,
+    create_calls: AtomicU64,
+}
+
+#[async_trait]
+impl CreateMemoPersistence for ResponseLossStore {
+    async fn find_creation(
+        &self,
+        _owner: &AuthenticatedOwner,
+        _creation_id: cashmemo_domain::CreationId,
+    ) -> Result<Option<StoredCreation>, DomainError> {
+        self.value
+            .lock()
+            .map(|value| value.clone())
+            .map_err(|_| {
+                DomainError::retryable(
+                    cashmemo_domain::ErrorCode::DependencyUnavailable,
+                    "test store unavailable",
+                )
+            })
+    }
+
+    async fn create(
+        &self,
+        owner: &AuthenticatedOwner,
+        prepared: &PreparedCreation,
+    ) -> Result<PersistCreationOutcome, DomainError> {
+        self.create_calls.fetch_add(1, Ordering::SeqCst);
+        let memo = MoneyMemo {
+            id: prepared.memo_id,
+            owner: owner.id().clone(),
+            creation_id: prepared.values.creation_id,
+            memo_type: prepared.values.memo_type,
+            money: prepared.values.money.clone(),
+            occurrence: prepared.values.occurrence.clone(),
+            category: LabelReference {
+                id: prepared.values.category_id,
+                name: "General".to_owned(),
+                state: LabelState::Active,
+            },
+            money_space: LabelReference {
+                id: prepared.values.money_space_id,
+                name: "Personal".to_owned(),
+                state: LabelState::Active,
+            },
+            note: prepared.values.note.clone(),
+            planned_status: prepared.values.planned_status,
+            purpose: prepared.values.purpose,
+            lifecycle: Lifecycle::ACTIVE,
+            revision: Revision::INITIAL,
+            created_at: prepared.accepted_at,
+            updated_at: prepared.accepted_at,
+        };
+        let stored = StoredCreation {
+            memo,
+            fingerprint: prepared.fingerprint.clone(),
+        };
+        self.value
+            .lock()
+            .map_err(|_| {
+                DomainError::retryable(
+                    cashmemo_domain::ErrorCode::DependencyUnavailable,
+                    "test store unavailable",
+                )
+            })?
+            .replace(stored);
+        Err(DomainError::retryable(
+            cashmemo_domain::ErrorCode::DependencyUnavailable,
+            "mutation response unavailable",
+        ))
+    }
+}
+
 #[async_trait]
 impl CreateMemoPersistence for ExistingStore {
     async fn find_creation(
@@ -114,6 +188,34 @@ async fn one_thousand_matching_retries_return_current_state_without_writes() {
         assert_eq!(retry.memo.money.decimal(), "99.99");
     }
     assert_eq!(store.create_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn response_loss_retry_resolves_persisted_creation_without_second_write() {
+    let now = must(Timestamp::parse_canonical("2026-07-30T12:15:00.000000Z"));
+    let owner = AuthenticatedOwner::after_account_validation(must(
+        OwnerId::parse_authenticated_account("owner-a"),
+    ));
+    let keyring = Arc::new(must(KekKeyring::new(
+        "kek-test-a",
+        vec![must(RuntimeKek::new("kek-test-a", [0x52; 32]))],
+    )));
+    let store = Arc::new(ResponseLossStore {
+        value: Mutex::new(None),
+        create_calls: AtomicU64::new(0),
+    });
+    let service = CreateMoneyMemoService::new(
+        store.clone(),
+        keyring,
+        Arc::new(ManualClock::new(now)),
+    );
+
+    let first = service.execute(&owner, candidate()).await;
+    assert!(first.is_err());
+    let retry = must(service.execute(&owner, candidate()).await);
+    assert!(!retry.created);
+    assert_eq!(retry.memo.revision, Revision::INITIAL);
+    assert_eq!(store.create_calls.load(Ordering::SeqCst), 1);
 }
 
 fn current_archived_memo(

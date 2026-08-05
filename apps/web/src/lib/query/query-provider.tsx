@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 
+import { AccountSessionProvider } from "@/lib/auth/session";
+
 export function QueryProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [client] = useState(
     () =>
@@ -19,5 +21,11 @@ export function QueryProvider({ children }: Readonly<{ children: ReactNode }>) {
       }),
   );
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <AccountSessionProvider queryClient={client}>
+        {children}
+      </AccountSessionProvider>
+    </QueryClientProvider>
+  );
 }

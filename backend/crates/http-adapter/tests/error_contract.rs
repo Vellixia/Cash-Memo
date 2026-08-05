@@ -39,6 +39,12 @@ fn privacy_rejection_is_http_422_with_allowlisted_id_only() {
     ] {
         assert!(!encoded.contains(forbidden));
     }
+    let domain_debug = format!("{error:?}");
+    let response_debug = format!("{response:?}");
+    for detector in ["B1_PAN_LUHN", "B1PanLuhn"] {
+        assert!(!domain_debug.contains(detector));
+        assert!(!response_debug.contains(detector));
+    }
 }
 
 #[test]

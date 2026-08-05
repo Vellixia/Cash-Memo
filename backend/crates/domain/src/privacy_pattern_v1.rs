@@ -1,11 +1,18 @@
 //! Deterministic finite Pattern Set v1 detector with ephemeral preprocessing.
 
+use std::fmt;
+
 use regex::Regex;
+use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
 use crate::{DomainError, ErrorCode, FieldViolation};
 
 const REGISTRY: &str = include_str!("../../../../shared/privacy/pattern-set-v1.json");
+const REGISTRY_SHA256: [u8; 32] = [
+    0xb2, 0x6a, 0xda, 0x11, 0xeb, 0xa9, 0xe9, 0x76, 0x95, 0xb5, 0xaa, 0xc1, 0x55, 0x61, 0x31, 0xcd,
+    0x10, 0xc7, 0xb2, 0x80, 0x99, 0x86, 0x7d, 0x4d, 0xb1, 0x72, 0x1b, 0x5f, 0x96, 0x9e, 0xf1, 0x5d,
+];
 const DECIMAL_DIGIT_STARTS: &[u32] = &[
     0x0030, 0x0660, 0x06f0, 0x07c0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66, 0x0ce6,
     0x0d66, 0x0de6, 0x0e50, 0x0ed0, 0x0f20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80,
@@ -16,7 +23,7 @@ const DECIMAL_DIGIT_STARTS: &[u32] = &[
 ];
 
 /// Published blocking detector identifiers.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum BlockingDetector {
     /// Luhn-valid 13–19 digit PAN-like candidate.
     B1PanLuhn,
@@ -38,6 +45,12 @@ pub enum BlockingDetector {
     B9LabeledGovId,
 }
 
+impl fmt::Debug for BlockingDetector {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("BlockingDetector([REDACTED])")
+    }
+}
+
 impl BlockingDetector {
     /// Exact safe public ID. It is permitted only in HTTP 422 field errors.
     #[must_use]
@@ -57,7 +70,7 @@ impl BlockingDetector {
 }
 
 /// Published warning-only detector identifiers; never transmitted as an attestation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum WarningDetector {
     /// Ambiguous banking phrase.
     W1BankingContext,
@@ -67,8 +80,14 @@ pub enum WarningDetector {
     W3StatementHeader,
 }
 
+impl fmt::Debug for WarningDetector {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("WarningDetector([REDACTED])")
+    }
+}
+
 /// One finite detector decision. It intentionally contains no candidate, offsets, or derivatives.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum PatternDecision {
     /// No declared v1 pattern matched.
     Clear,
@@ -78,8 +97,22 @@ pub enum PatternDecision {
     Warn(WarningDetector),
 }
 
-/// Confirms the checked-in registry is valid JSON and exactly versioned.
+impl fmt::Debug for PatternDecision {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clear => formatter.write_str("PatternDecision::Clear"),
+            Self::Block(_) => formatter.write_str("PatternDecision::Block([REDACTED])"),
+            Self::Warn(_) => formatter.write_str("PatternDecision::Warn([REDACTED])"),
+        }
+    }
+}
+
+/// Confirms the complete checked-in registry is the reviewed byte-exact v1 artifact.
 pub fn validate_registry() -> Result<(), DomainError> {
+    let digest: [u8; 32] = Sha256::digest(REGISTRY.as_bytes()).into();
+    if digest != REGISTRY_SHA256 {
+        return Err(unavailable());
+    }
     let value: serde_json::Value = serde_json::from_str(REGISTRY).map_err(|_| unavailable())?;
     if value.get("version").and_then(serde_json::Value::as_str) != Some("pattern-set-v1") {
         return Err(unavailable());
@@ -400,9 +433,14 @@ fn statement_header(value: &str) -> bool {
 }
 
 fn statement_paste(value: &str) -> bool {
-    if !statement_header(value) {
+    let all_lines: Vec<_> = lines(value).collect();
+    let Some(header_index) = all_lines.iter().position(|line| {
+        statement_headers()
+            .iter()
+            .any(|header| line.contains(header))
+    }) else {
         return false;
-    }
+    };
     let markers = [
         "account number",
         "nomor rekening",
@@ -425,11 +463,24 @@ fn statement_paste(value: &str) -> bool {
     {
         return false;
     }
-    let date = Regex::new(r"(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})").ok();
-    date.is_some_and(|date| {
-        lines(value)
+    let date = Regex::new(
+        r"(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})",
+    )
+    .ok();
+    let amount = Regex::new(r"(?:^|[^a-z0-9])\d+(?:[.,]\d+)?(?:$|[^a-z0-9])").ok();
+    date.zip(amount).is_some_and(|(date, amount)| {
+        all_lines
+            .iter()
+            .skip(header_index + 1)
             .filter(|line| {
-                date.is_match(line) && line.chars().any(|character| character.is_ascii_digit())
+                date.find(line).is_some_and(|matched| {
+                    let without_date = format!(
+                        "{} {}",
+                        &line[..matched.start()],
+                        &line[matched.end()..]
+                    );
+                    amount.is_match(&without_date)
+                })
             })
             .take(3)
             .count()

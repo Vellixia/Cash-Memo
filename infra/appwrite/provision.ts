@@ -68,7 +68,10 @@ async function request(
 
 async function exists(path: string): Promise<boolean> {
   const response = await fetch(`${endpoint}${path}`, {
-    headers: { "X-Appwrite-Project": project, "X-Appwrite-Key": key },
+    headers: {
+      "X-Appwrite-Project": project,
+      "X-Appwrite-Key": key,
+    },
     cache: "no-store",
   });
   if (response.status === 404) return false;

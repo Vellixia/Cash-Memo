@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { ApiProblemError } from "@/lib/api/client";
-import { useAccountPartition } from "@/lib/auth/session";
+import { useAccountSession } from "@/lib/auth/session";
 import type { CurrencyRegistry, Label } from "@/features/money-memos/api";
 import {
   useActiveLabels,
@@ -19,28 +21,31 @@ const fallbackSpaces: Label[] = [
 ];
 
 export default function NewMoneyMemoPage() {
-  const accountId =
-    useAccountPartition()?.accountId ??
-    (process.env.NODE_ENV === "development"
-      ? "local-development-account"
-      : null);
+  const [confirmed, setConfirmed] = useState(false);
+  const session = useAccountSession();
+  const accountId = session.account?.accountId ?? null;
   const compose = useComposeSession(accountId);
   const currencies = useCurrencies();
   const categories = useActiveLabels("category");
   const spaces = useActiveLabels("money_space");
   const creation = useCreateMoneyMemo({
-    onConfirmed: compose.complete,
     onRetainDraft: compose.retainFailure,
   });
 
   if (accountId === null) {
     return (
       <main className="mx-auto max-w-3xl p-6">
-        <p role="alert">Authenticated session required.</p>
+        <p role={session.status === "loading" ? "status" : "alert"}>
+          {session.status === "loading"
+            ? "Checking authenticated session…"
+            : session.status === "unavailable"
+              ? "Authentication service is temporarily unavailable."
+              : "Authenticated session required."}
+        </p>
       </main>
     );
   }
-  if (creation.isSuccess && compose.draft === null) {
+  if (confirmed && compose.draft === null) {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <h1 className="text-3xl font-semibold">Money Memo saved</h1>
@@ -102,9 +107,11 @@ export default function NewMoneyMemoPage() {
         categories={categoryItems}
         moneySpaces={spaceItems}
         onAutosave={compose.autosave}
-        onCreate={async (request) =>
-          creation.mutateAsync(request).then(() => undefined)
-        }
+        onCreate={async (request) => {
+          await creation.mutateAsync(request);
+          await compose.complete();
+          setConfirmed(true);
+        }}
         {...(serviceMessage === undefined ? {} : { serviceMessage })}
       />
     </main>

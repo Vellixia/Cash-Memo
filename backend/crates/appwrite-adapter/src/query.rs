@@ -57,7 +57,9 @@ impl OwnerScope {
     /// Private journal-state lookup.
     #[must_use]
     pub fn journal_target(&self) -> Vec<String> {
-        self.list_base()
+        // Owner uniqueness permits at most one row. Keep the bound below Appwrite's GraphQL
+        // complexity ceiling even if the invariant is violated, so the adapter can fail closed.
+        vec![self.owner_equal.clone(), limit(2)]
     }
 
     /// Adds a non-owner equality predicate; owner overrides are rejected.
@@ -76,7 +78,8 @@ impl OwnerScope {
     }
 
     fn list_base(&self) -> Vec<String> {
-        vec![self.owner_equal.clone(), limit(200)]
+        // `rows { data }` costs two GraphQL complexity points per result in Appwrite 1.9.
+        vec![self.owner_equal.clone(), limit(100)]
     }
 }
 

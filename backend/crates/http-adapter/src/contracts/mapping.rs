@@ -1,7 +1,7 @@
 //! Audited DTO-domain mapping.
 
 use cashmemo_domain::error::{DomainError as SafeDomainError, ErrorCode as DomainCode};
-use cashmemo_domain::label::LabelState;
+use cashmemo_domain::label::LabelState as DomainLabelState;
 use cashmemo_domain::lifecycle::LifecycleStatus as DomainLifecycle;
 use cashmemo_domain::money::Currency;
 use cashmemo_domain::money_memo::{
@@ -12,7 +12,7 @@ use cashmemo_domain::occurrence::{LocalWall, Occurrence, UtcOffset, ZoneResoluti
 use cashmemo_domain::{CreationId, DomainError, LabelId, Timestamp};
 
 use super::generated::{
-    ErrorCode, ErrorResponse, FieldError, LabelReference, LifecycleStatus, MoneyMemo,
+    ErrorCode, ErrorResponse, FieldError, LabelReference, LabelState, LifecycleStatus, MoneyMemo,
     MoneyMemoCreateRequest, MoneyMemoType, OccurrenceCreate, PlannedStatus, Purpose,
     SafeDetectorId,
 };
@@ -84,10 +84,10 @@ pub fn map_create(
 
 /// Maps state string without exposing label internals.
 #[must_use]
-pub const fn label_state(value: LabelState) -> &'static str {
+pub const fn label_state(value: DomainLabelState) -> LabelState {
     match value {
-        LabelState::Active => "active",
-        LabelState::Deactivated => "deactivated",
+        DomainLabelState::Active => LabelState::Active,
+        DomainLabelState::Deactivated => LabelState::Deactivated,
     }
 }
 
@@ -110,12 +110,12 @@ pub fn map_money_memo(value: &DomainMemo) -> Result<MoneyMemo, DomainError> {
         category: LabelReference {
             id: value.category.id.to_string(),
             name: value.category.name.clone(),
-            state: label_state(value.category.state).to_owned(),
+            state: label_state(value.category.state),
         },
         money_space: LabelReference {
             id: value.money_space.id.to_string(),
             name: value.money_space.name.clone(),
-            state: label_state(value.money_space.state).to_owned(),
+            state: label_state(value.money_space.state),
         },
         note: value.note.clone(),
         planned_status: match value.planned_status {

@@ -1,4 +1,4 @@
-//! Redacted bounded Appwrite REST/GraphQL client.
+//! Redacted Appwrite REST/GraphQL client with ambiguity-safe request behavior.
 
 use std::fmt;
 use std::time::Duration;
@@ -141,7 +141,7 @@ impl AppwriteClient {
             }
         });
         let value = self
-            .server_json(Method::POST, "/graphql", Some(payload))
+            .replayable_read_json(Method::POST, "/graphql", Some(payload))
             .await?;
         let envelope: GraphQlEnvelope =
             serde_json::from_value(value).map_err(|_| AppwriteError::Unavailable)?;
@@ -207,6 +207,17 @@ impl AppwriteClient {
         .map(|_| ())
     }
 
+    /// Explicitly rolls back a supported `TablesDB` transaction.
+    pub async fn rollback_transaction(&self, transaction_id: &str) -> Result<(), AppwriteError> {
+        self.server_json(
+            Method::PATCH,
+            &format!("/tablesdb/transactions/{transaction_id}"),
+            Some(json!({ "commit": false, "rollback": true })),
+        )
+        .await
+        .map(|_| ())
+    }
+
     /// Supported server REST request. Response content never enters an error.
     pub async fn server_json(
         &self,
@@ -214,38 +225,49 @@ impl AppwriteClient {
         path: &str,
         body: Option<Value>,
     ) -> Result<Value, AppwriteError> {
+        let mut request = self
+            .client
+            .request(method, format!("{}{}", self.config.endpoint, path))
+            .header("X-Appwrite-Project", &self.config.project_id)
+            .header("X-Appwrite-Key", &self.config.api_key)
+            .header("Cache-Control", "no-store");
+        if let Some(value) = &body {
+            request = request.json(value);
+        }
+        // A timeout or lost response can occur after Appwrite accepted a mutation. Never replay a
+        // request here. The creation use case resolves ambiguity through its stable creation ID.
+        let response = request
+            .send()
+            .await
+            .map_err(|_| AppwriteError::Unavailable)?;
+        if !response.status().is_success() {
+            return Err(classify(response.status()));
+        }
+        if response.status() == StatusCode::NO_CONTENT {
+            return Ok(Value::Null);
+        }
+        response
+            .json::<Value>()
+            .await
+            .map_err(|_| AppwriteError::Unavailable)
+    }
+
+    async fn replayable_read_json(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<Value, AppwriteError> {
         for attempt in 0_u64..=2 {
-            let mut request = self
-                .client
-                .request(method.clone(), format!("{}{}", self.config.endpoint, path))
-                .header("X-Appwrite-Project", &self.config.project_id)
-                .header("X-Appwrite-Key", &self.config.api_key)
-                .header("Cache-Control", "no-store");
-            if let Some(value) = &body {
-                request = request.json(value);
-            }
-            let response = match request.send().await {
-                Ok(response) => response,
-                Err(_) if attempt < 2 => {
-                    tokio::time::sleep(Duration::from_millis(25 * (attempt + 1))).await;
-                    continue;
-                }
-                Err(_) => return Err(AppwriteError::Unavailable),
-            };
-            if response.status().is_server_error() && attempt < 2 {
-                tokio::time::sleep(Duration::from_millis(25 * (attempt + 1))).await;
-                continue;
-            }
-            if !response.status().is_success() {
-                return Err(classify(response.status()));
-            }
-            if response.status() == StatusCode::NO_CONTENT {
-                return Ok(Value::Null);
-            }
-            return response
-                .json::<Value>()
+            match self
+                .server_json(method.clone(), path, body.clone())
                 .await
-                .map_err(|_| AppwriteError::Unavailable);
+            {
+                Err(AppwriteError::Unavailable) if attempt < 2 => {
+                    tokio::time::sleep(Duration::from_millis(25 * (attempt + 1))).await;
+                }
+                result => return result,
+            }
         }
         Err(AppwriteError::Unavailable)
     }

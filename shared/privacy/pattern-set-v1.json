@@ -95,6 +95,9 @@
       "id": "B8_STATEMENT_PASTE",
       "distinctMarkerMinimum": 2,
       "laterTransactionLineMinimum": 3,
+      "transactionLinesMustFollowHeader": true,
+      "dateFormats": ["YYYY-MM-DD", "DD/MM/YYYY", "DD-MM-YYYY"],
+      "amountToken": "SEPARATE_ASCII_DIGIT_TOKEN",
       "headers": [
         "bank statement",
         "account statement",
