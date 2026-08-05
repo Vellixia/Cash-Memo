@@ -16,12 +16,10 @@ const listed = spawnSync(
   ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
   { encoding: "buffer" },
 );
-if (listed.status !== 0) throw new Error("unable to enumerate repository files");
+if (listed.status !== 0)
+  throw new Error("unable to enumerate repository files");
 
-const paths = listed.stdout
-  .toString("utf8")
-  .split("\0")
-  .filter(Boolean);
+const paths = listed.stdout.toString("utf8").split("\0").filter(Boolean);
 let failures = 0;
 
 for (const path of paths) {
@@ -47,7 +45,10 @@ for (const path of paths) {
 }
 
 if (failures > 0) process.exitCode = 1;
-else process.stdout.write("high-entropy scan passed with narrow reviewed allowlists\n");
+else
+  process.stdout.write(
+    "high-entropy scan passed with narrow reviewed allowlists\n",
+  );
 
 function threshold(token) {
   return /^[0-9a-f]+$/iu.test(token) ? 3.6 : 4.35;
@@ -69,10 +70,10 @@ function isReviewedNonSecret(path, token, line) {
   if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(token)) return true;
   if (!/[0-9]/u.test(token)) return true;
   if (line.includes("sha256:") || line.includes("sourceSha256")) return true;
-  if (line.includes("REGISTRY_SHA256") || line.includes("expected =")) return true;
-  if (line.includes("github.com/")) return true;
-  if (/^\.specify\/integrations\/.+\.manifest\.json$/u.test(path))
+  if (line.includes("REGISTRY_SHA256") || line.includes("expected ="))
     return true;
+  if (line.includes("github.com/")) return true;
+  if (/^\.specify\/integrations\/.+\.manifest\.json$/u.test(path)) return true;
   if (path === ".specify/memory/.constitution-template.json") return true;
   if (
     path === "scripts/currencies/build-registry.mjs" ||

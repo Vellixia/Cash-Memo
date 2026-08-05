@@ -72,9 +72,7 @@ fn b8_requires_three_later_rows_with_amount_separate_from_date() {
         )
     );
     assert_ne!(
-        detect(&format!(
-            "{header}\n2026-01-01\n2026-01-02\n2026-01-03"
-        )),
+        detect(&format!("{header}\n2026-01-01\n2026-01-02\n2026-01-03")),
         PatternDecision::Block(
             cashmemo_domain::privacy_pattern_v1::BlockingDetector::B8StatementPaste
         )
@@ -110,17 +108,14 @@ fn complete_registry_labels_headers_phrases_and_boundaries_are_executed() {
                 .as_str()
                 .unwrap_or_else(|| panic!("label unavailable"));
             let candidate = match (id, label) {
-                ("B3_LABELED_ACCOUNT", _) => "ABC123456",
                 ("B4_LABELED_ROUTING", "sort code" | "bsb") => "123456",
                 ("B4_LABELED_ROUTING", _) => "111000025",
                 ("B5_LABELED_CARD_SECRET", _) => "123",
                 ("B6_LABELED_BANK_CREDENTIAL", _) => "hunter22",
                 ("B7_LABELED_BANK_TOKEN", _) => "abcdefgh",
                 ("B9_LABELED_GOV_ID", "ssn" | "social security number") => "123-45-6789",
-                ("B9_LABELED_GOV_ID", "nik" | "nomor induk kependudukan") => {
-                    "1234567890123450"
-                }
-                ("B9_LABELED_GOV_ID", _) => "ABC123456",
+                ("B9_LABELED_GOV_ID", "nik" | "nomor induk kependudukan") => "1234567890123450",
+                ("B3_LABELED_ACCOUNT" | "B9_LABELED_GOV_ID", _) => "ABC123456",
                 _ => continue,
             };
             let PatternDecision::Block(detector) = detect(&format!("{label}: {candidate}")) else {

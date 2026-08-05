@@ -5,10 +5,7 @@ import {
   useComposeSession,
   type ComposeSessionDatabase,
 } from "../src/features/money-memos/use-compose-session";
-import type {
-  ComposeDraft,
-  ComposePayload,
-} from "../src/lib/compose/db";
+import type { ComposeDraft, ComposePayload } from "../src/lib/compose/db";
 
 function draft(accountId: string): ComposeDraft {
   return {
@@ -43,11 +40,7 @@ class FakeDatabase implements ComposeSessionDatabase {
     return created;
   }
 
-  async save(
-    accountId: string,
-    _draftId: string,
-    payload: ComposePayload,
-  ) {
+  async save(accountId: string, _draftId: string, payload: ComposePayload) {
     this.concurrentSaves += 1;
     this.maxConcurrentSaves = Math.max(
       this.maxConcurrentSaves,
@@ -122,10 +115,7 @@ describe("compose session account and write ordering", () => {
       await first;
       await second;
     });
-    expect(database.saves).toEqual([
-      { amount: "1.00" },
-      { amount: "2.00" },
-    ]);
+    expect(database.saves).toEqual([{ amount: "1.00" }, { amount: "2.00" }]);
     expect(database.maxConcurrentSaves).toBe(1);
     expect(result.current.draft?.formPayload).toEqual({ amount: "2.00" });
   });

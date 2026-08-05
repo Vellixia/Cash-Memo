@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 
 type TestSession = Readonly<{
   userId: string;
@@ -23,20 +29,29 @@ test.describe("US1 real authenticated production journey", () => {
     await deleteUser(request, session.userId);
   });
 
-  test("validates, preserves warning input, and persists one exact memo", async ({ page }) => {
+  test("validates, preserves warning input, and persists one exact memo", async ({
+    page,
+  }) => {
     let createCount = 0;
     let submittedCreationId = "";
     const createStatuses: number[] = [];
     const pageErrors: string[] = [];
     page.on("request", (request) => {
-      if (request.method() === "POST" && request.url().endsWith("/api/v1/money-memos")) {
+      if (
+        request.method() === "POST" &&
+        request.url().endsWith("/api/v1/money-memos")
+      ) {
         createCount += 1;
         const value = request.postDataJSON() as { creationId?: unknown };
-        if (typeof value.creationId === "string") submittedCreationId = value.creationId;
+        if (typeof value.creationId === "string")
+          submittedCreationId = value.creationId;
       }
     });
     page.on("response", (response) => {
-      if (response.request().method() === "POST" && response.url().endsWith("/api/v1/money-memos")) {
+      if (
+        response.request().method() === "POST" &&
+        response.url().endsWith("/api/v1/money-memos")
+      ) {
         createStatuses.push(response.status());
       }
     });
@@ -45,34 +60,51 @@ test.describe("US1 real authenticated production journey", () => {
     await openCompose(page);
     await expect.poll(() => composeDraftCount(page)).toBe(1);
     await page.getByRole("button", { name: "Save Money Memo" }).click();
-    await expect(page.getByRole("alert", { name: "Correct these fields" })).toContainText(
-      "positive amount",
-    );
+    await expect(
+      page.getByRole("alert", { name: "Correct these fields" }),
+    ).toContainText("positive amount");
     expect(createCount).toBe(0);
 
     await page.getByLabel("Amount").fill("42.50");
-    await page.getByLabel("Note (optional)").fill("Discuss bank account policy");
+    await page
+      .getByLabel("Note (optional)")
+      .fill("Discuss bank account policy");
     await page.getByRole("button", { name: "Save Money Memo" }).click();
-    await expect(page.getByRole("button", { name: "Continue unchanged" })).toBeVisible();
-    await expect(page.getByLabel("Note (optional)")).toHaveValue("Discuss bank account policy");
+    await expect(
+      page.getByRole("button", { name: "Continue unchanged" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Note (optional)")).toHaveValue(
+      "Discuss bank account policy",
+    );
     expect(createCount).toBe(0);
 
     await page.getByRole("button", { name: "Continue unchanged" }).click();
     await page.getByRole("button", { name: "Save Money Memo" }).click();
     await expect.poll(() => createStatuses).toEqual([201]);
     expect(pageErrors).toEqual([]);
-    await expect.poll(() => composeContainsCreation(page, submittedCreationId)).toBe(false);
+    await expect
+      .poll(() => composeContainsCreation(page, submittedCreationId))
+      .toBe(false);
     await expect.poll(() => composeDraftCount(page)).toBe(0);
-    await expect(page.getByRole("heading", { name: "Money Memo saved" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Money Memo saved" }),
+    ).toBeVisible();
     expect(createCount).toBe(1);
   });
 
-  test("browser reopen restores draft and stable creation identifier", async ({ page }) => {
+  test("browser reopen restores draft and stable creation identifier", async ({
+    page,
+  }) => {
     const creationIds: string[] = [];
     page.on("request", (request) => {
-      if (request.method() !== "POST" || !request.url().endsWith("/api/v1/money-memos")) return;
+      if (
+        request.method() !== "POST" ||
+        !request.url().endsWith("/api/v1/money-memos")
+      )
+        return;
       const value = request.postDataJSON() as { creationId?: unknown };
-      if (typeof value.creationId === "string") creationIds.push(value.creationId);
+      if (typeof value.creationId === "string")
+        creationIds.push(value.creationId);
     });
 
     await openCompose(page);
@@ -82,14 +114,18 @@ test.describe("US1 real authenticated production journey", () => {
     await expect(page.getByLabel("Amount")).toHaveValue("73.25");
 
     await page.getByRole("button", { name: "Save Money Memo" }).click();
-    await expect(page.getByRole("heading", { name: "Money Memo saved" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Money Memo saved" }),
+    ).toBeVisible();
     expect(creationIds).toHaveLength(1);
     expect(creationIds[0]).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
     );
   });
 
-  test("lost create response retains draft and same-ID retry returns existing memo", async ({ page }) => {
+  test("lost create response retains draft and same-ID retry returns existing memo", async ({
+    page,
+  }) => {
     const creationIds: string[] = [];
     let attempt = 0;
     await page.route("**/api/v1/money-memos", async (route) => {
@@ -99,7 +135,8 @@ test.describe("US1 real authenticated production journey", () => {
         return;
       }
       const value = request.postDataJSON() as { creationId?: unknown };
-      if (typeof value.creationId === "string") creationIds.push(value.creationId);
+      if (typeof value.creationId === "string")
+        creationIds.push(value.creationId);
       attempt += 1;
       if (attempt === 1) {
         const accepted = await route.fetch();
@@ -119,15 +156,22 @@ test.describe("US1 real authenticated production journey", () => {
     await expect(page.getByLabel("Amount")).toHaveValue("81.75");
 
     await page.getByRole("button", { name: "Save Money Memo" }).click();
-    await expect(page.getByRole("heading", { name: "Money Memo saved" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Money Memo saved" }),
+    ).toBeVisible();
     expect(creationIds).toHaveLength(2);
     expect(creationIds[1]).toBe(creationIds[0]);
   });
 
-  test("blocking finding preserves input and sends no mutation", async ({ page }) => {
+  test("blocking finding preserves input and sends no mutation", async ({
+    page,
+  }) => {
     let createCount = 0;
     page.on("request", (request) => {
-      if (request.method() === "POST" && request.url().endsWith("/api/v1/money-memos")) {
+      if (
+        request.method() === "POST" &&
+        request.url().endsWith("/api/v1/money-memos")
+      ) {
         createCount += 1;
       }
     });
@@ -136,14 +180,18 @@ test.describe("US1 real authenticated production journey", () => {
     await page.getByLabel("Note (optional)").fill("4111111111111111");
     await page.getByRole("button", { name: "Save Money Memo" }).click();
     await expect(page.getByText(/cannot be submitted/i)).toBeVisible();
-    await expect(page.getByLabel("Note (optional)")).toHaveValue("4111111111111111");
+    await expect(page.getByLabel("Note (optional)")).toHaveValue(
+      "4111111111111111",
+    );
     expect(createCount).toBe(0);
   });
 });
 
 async function openCompose(page: Page): Promise<void> {
   await page.goto("/money-memos/new");
-  await expect(page.getByRole("heading", { name: "Create Money Memo" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Create Money Memo" }),
+  ).toBeVisible();
   await expect(page.getByText(/Do not enter bank credentials/i)).toBeVisible();
   await expect(page.getByLabel("Category")).toHaveValue(/.+/u);
   await expect(page.getByLabel("Money Space")).toHaveValue(/.+/u);
@@ -174,7 +222,10 @@ async function createSession(request: APIRequestContext): Promise<TestSession> {
   return { userId, sessionSecret: value.secret };
 }
 
-async function authenticate(context: BrowserContext, sessionSecret: string): Promise<void> {
+async function authenticate(
+  context: BrowserContext,
+  sessionSecret: string,
+): Promise<void> {
   await context.addCookies([
     {
       name: "cashmemo_session",
@@ -187,7 +238,10 @@ async function authenticate(context: BrowserContext, sessionSecret: string): Pro
   ]);
 }
 
-async function deleteUser(request: APIRequestContext, userId: string): Promise<void> {
+async function deleteUser(
+  request: APIRequestContext,
+  userId: string,
+): Promise<void> {
   const response = await request.delete(`${endpoint}/users/${userId}`, {
     headers: serverHeaders(),
   });
@@ -203,7 +257,8 @@ function serverHeaders(): Record<string, string> {
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
-  if (value === undefined || value.length === 0) throw new Error(`${name} required`);
+  if (value === undefined || value.length === 0)
+    throw new Error(`${name} required`);
   return value;
 }
 
@@ -227,7 +282,10 @@ async function composeDraftCount(page: Page): Promise<number> {
   );
 }
 
-async function composeContainsCreation(page: Page, creationId: string): Promise<boolean> {
+async function composeContainsCreation(
+  page: Page,
+  creationId: string,
+): Promise<boolean> {
   return page.evaluate(
     ({ expected }) =>
       new Promise<boolean>((resolve, reject) => {

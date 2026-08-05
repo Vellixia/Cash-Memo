@@ -4,8 +4,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Reviewed source-contract digest. Drift gate requires explicit DTO review on contract changes.
-pub const OPENAPI_SHA256: &str =
-    "189764b52354b1c793a23f1fe5d1a2f7223e4d925de2d324ef1fb7448fe45975";
+pub const OPENAPI_SHA256: &str = "189764b52354b1c793a23f1fe5d1a2f7223e4d925de2d324ef1fb7448fe45975";
 
 fn required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
@@ -345,7 +344,7 @@ impl std::fmt::Debug for FieldError {
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum CurrentResource {
-    MoneyMemo(MoneyMemo),
+    MoneyMemo(Box<MoneyMemo>),
     Label(Label),
 }
 

@@ -259,10 +259,7 @@ impl AppwriteClient {
         body: Option<Value>,
     ) -> Result<Value, AppwriteError> {
         for attempt in 0_u64..=2 {
-            match self
-                .server_json(method.clone(), path, body.clone())
-                .await
-            {
+            match self.server_json(method.clone(), path, body.clone()).await {
                 Err(AppwriteError::Unavailable) if attempt < 2 => {
                     tokio::time::sleep(Duration::from_millis(25 * (attempt + 1))).await;
                 }

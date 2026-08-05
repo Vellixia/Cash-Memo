@@ -12,10 +12,7 @@ const emptyPayload: ComposePayload = {};
 
 export interface ComposeSessionDatabase {
   listForAccount(accountId: string): Promise<ComposeDraft[]>;
-  openCreate(
-    accountId: string,
-    payload: ComposePayload,
-  ): Promise<ComposeDraft>;
+  openCreate(accountId: string, payload: ComposePayload): Promise<ComposeDraft>;
   save(
     accountId: string,
     draftId: string,

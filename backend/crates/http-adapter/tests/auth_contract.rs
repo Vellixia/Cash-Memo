@@ -139,9 +139,12 @@ async fn session_bootstrap_is_live_protected_and_returns_only_current_account() 
     let body = axum::body::to_bytes(response.into_body(), 4096)
         .await
         .unwrap_or_else(|_| panic!("response body unavailable"));
-    let value: Value = serde_json::from_slice(&body)
-        .unwrap_or_else(|_| panic!("response JSON unavailable"));
-    assert_eq!(value.get("accountId").and_then(Value::as_str), Some("valid_owner"));
+    let value: Value =
+        serde_json::from_slice(&body).unwrap_or_else(|_| panic!("response JSON unavailable"));
+    assert_eq!(
+        value.get("accountId").and_then(Value::as_str),
+        Some("valid_owner")
+    );
     assert_eq!(value.as_object().map(serde_json::Map::len), Some(1));
 
     let rejected = build_router(AppState::new(Arc::new(ScenarioValidator)))

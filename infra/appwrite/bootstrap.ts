@@ -43,28 +43,33 @@ await allowConflict(() =>
     },
   }),
 );
-const key = await call(`/projects/${projectId}/keys`, "console", sessionCookie, {
-  method: "POST",
-  body: {
-    keyId: `key${randomUUID().replaceAll("-", "").slice(0, 24)}`,
-    name: "Cashmemo isolated test gate",
-    scopes: [
-      "databases.read",
-      "databases.write",
-      "tables.read",
-      "tables.write",
-      "columns.read",
-      "columns.write",
-      "indexes.read",
-      "indexes.write",
-      "rows.read",
-      "rows.write",
-      "users.read",
-      "users.write",
-      "sessions.write",
-    ],
+const key = await call(
+  `/projects/${projectId}/keys`,
+  "console",
+  sessionCookie,
+  {
+    method: "POST",
+    body: {
+      keyId: `key${randomUUID().replaceAll("-", "").slice(0, 24)}`,
+      name: "Cashmemo isolated test gate",
+      scopes: [
+        "databases.read",
+        "databases.write",
+        "tables.read",
+        "tables.write",
+        "columns.read",
+        "columns.write",
+        "indexes.read",
+        "indexes.write",
+        "rows.read",
+        "rows.write",
+        "users.read",
+        "users.write",
+        "sessions.write",
+      ],
+    },
   },
-});
+);
 const apiKey = stringField(key, "secret");
 const temporary = `${runtimePath}.tmp`;
 await writeFile(
@@ -150,9 +155,7 @@ async function call(
     headers: {
       "Content-Type": "application/json",
       "X-Appwrite-Project": project,
-      ...(sessionCookie === undefined
-        ? {}
-        : { Cookie: sessionCookie }),
+      ...(sessionCookie === undefined ? {} : { Cookie: sessionCookie }),
     },
     body: JSON.stringify(options.body),
     cache: "no-store",
@@ -173,7 +176,11 @@ async function allowConflict(
   try {
     await action();
   } catch (error) {
-    if (!(error instanceof Error) || !("status" in error) || error.status !== 409)
+    if (
+      !(error instanceof Error) ||
+      !("status" in error) ||
+      error.status !== 409
+    )
       throw error;
   }
 }

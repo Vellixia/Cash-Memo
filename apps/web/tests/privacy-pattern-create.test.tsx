@@ -81,14 +81,10 @@ describe("Pattern Set v1 create boundary", () => {
   it("applies B8 only to three later rows with amount tokens separate from dates", () => {
     const header = "bank statement\naccount number\nopening balance";
     expect(
-      detectPatternV1(
-        `2026-01-01 10\n2026-01-02 20\n2026-01-03 30\n${header}`,
-      ),
+      detectPatternV1(`2026-01-01 10\n2026-01-02 20\n2026-01-03 30\n${header}`),
     ).not.toEqual({ kind: "block", detectorId: "B8_STATEMENT_PASTE" });
     expect(
-      detectPatternV1(
-        `${header}\n2026-01-01\n2026-01-02\n2026-01-03`,
-      ),
+      detectPatternV1(`${header}\n2026-01-01\n2026-01-02\n2026-01-03`),
     ).not.toEqual({ kind: "block", detectorId: "B8_STATEMENT_PASTE" });
     expect(
       detectPatternV1(
@@ -117,15 +113,14 @@ describe("Pattern Set v1 create boundary", () => {
           (label === "sort code" || label === "bsb")
             ? "123456"
             : detector.id === "B9_LABELED_GOV_ID" && label === "ssn"
-            ? "123-45-6789"
-            : detector.id === "B9_LABELED_GOV_ID" &&
-                label === "social security number"
               ? "123-45-6789"
               : detector.id === "B9_LABELED_GOV_ID" &&
-                  (label === "nik" ||
-                    label === "nomor induk kependudukan")
-                ? "1234567890123450"
-                : fixture;
+                  label === "social security number"
+                ? "123-45-6789"
+                : detector.id === "B9_LABELED_GOV_ID" &&
+                    (label === "nik" || label === "nomor induk kependudukan")
+                  ? "1234567890123450"
+                  : fixture;
         expect(detectPatternV1(`${label}: ${candidate}`)).toEqual({
           kind: "block",
           detectorId: detector.id,

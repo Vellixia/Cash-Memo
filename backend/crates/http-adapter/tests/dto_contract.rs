@@ -1,4 +1,4 @@
-//! Structural drift tests for the reviewed Rust OpenAPI binding.
+//! Structural drift tests for the reviewed Rust `OpenAPI` binding.
 
 use cashmemo_http_adapter::contracts::generated::{
     ErrorResponse, MoneyMemo, MoneyMemoEditRequest, MoneyMemoQuery, OccurrenceEdit,
@@ -60,7 +60,10 @@ fn occurrence_edit_uses_camel_case_fields_and_exact_confirmations() {
     });
     let parsed: MoneyMemoEditRequest =
         serde_json::from_value(valid.clone()).unwrap_or_else(|_| panic!("valid DTO rejected"));
-    assert!(matches!(parsed.occurrence, OccurrenceEdit::ChangeOffset { .. }));
+    assert!(matches!(
+        parsed.occurrence,
+        OccurrenceEdit::ChangeOffset { .. }
+    ));
 
     let mut snake = valid.clone();
     snake["occurrence"]["local_wall_time"] = snake["occurrence"]["localWallTime"].take();

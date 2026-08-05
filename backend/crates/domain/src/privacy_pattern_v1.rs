@@ -463,10 +463,7 @@ fn statement_paste(value: &str) -> bool {
     {
         return false;
     }
-    let date = Regex::new(
-        r"(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})",
-    )
-    .ok();
+    let date = Regex::new(r"(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})").ok();
     let amount = Regex::new(r"(?:^|[^a-z0-9])\d+(?:[.,]\d+)?(?:$|[^a-z0-9])").ok();
     date.zip(amount).is_some_and(|(date, amount)| {
         all_lines
@@ -474,11 +471,8 @@ fn statement_paste(value: &str) -> bool {
             .skip(header_index + 1)
             .filter(|line| {
                 date.find(line).is_some_and(|matched| {
-                    let without_date = format!(
-                        "{} {}",
-                        &line[..matched.start()],
-                        &line[matched.end()..]
-                    );
+                    let without_date =
+                        format!("{} {}", &line[..matched.start()], &line[matched.end()..]);
                     amount.is_match(&without_date)
                 })
             })

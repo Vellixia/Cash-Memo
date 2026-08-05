@@ -114,8 +114,7 @@ export class ComposeDraftDatabase extends Dexie {
         userPartition,
         ACTIVE_CREATE_DRAFT_ID,
       ]);
-      if (winner === undefined)
-        throw new Error("Compose draft unavailable");
+      if (winner === undefined) throw new Error("Compose draft unavailable");
       return winner;
     }
   }

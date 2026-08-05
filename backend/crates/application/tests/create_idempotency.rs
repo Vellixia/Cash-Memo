@@ -60,15 +60,12 @@ impl CreateMemoPersistence for ResponseLossStore {
         _owner: &AuthenticatedOwner,
         _creation_id: cashmemo_domain::CreationId,
     ) -> Result<Option<StoredCreation>, DomainError> {
-        self.value
-            .lock()
-            .map(|value| value.clone())
-            .map_err(|_| {
-                DomainError::retryable(
-                    cashmemo_domain::ErrorCode::DependencyUnavailable,
-                    "test store unavailable",
-                )
-            })
+        self.value.lock().map(|value| value.clone()).map_err(|_| {
+            DomainError::retryable(
+                cashmemo_domain::ErrorCode::DependencyUnavailable,
+                "test store unavailable",
+            )
+        })
     }
 
     async fn create(
@@ -204,11 +201,8 @@ async fn response_loss_retry_resolves_persisted_creation_without_second_write() 
         value: Mutex::new(None),
         create_calls: AtomicU64::new(0),
     });
-    let service = CreateMoneyMemoService::new(
-        store.clone(),
-        keyring,
-        Arc::new(ManualClock::new(now)),
-    );
+    let service =
+        CreateMoneyMemoService::new(store.clone(), keyring, Arc::new(ManualClock::new(now)));
 
     let first = service.execute(&owner, candidate()).await;
     assert!(first.is_err());

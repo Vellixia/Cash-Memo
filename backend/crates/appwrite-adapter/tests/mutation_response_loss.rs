@@ -28,8 +28,7 @@ async fn response_loss_server() -> (String, Arc<AtomicUsize>, tokio::task::JoinH
     let count = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&count);
     let task = tokio::spawn(async move {
-        while let Ok(Ok((socket, _))) =
-            timeout(Duration::from_millis(500), listener.accept()).await
+        while let Ok(Ok((socket, _))) = timeout(Duration::from_millis(500), listener.accept()).await
         {
             observed.fetch_add(1, Ordering::SeqCst);
             drop(socket);
