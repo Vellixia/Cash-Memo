@@ -50,7 +50,8 @@ test-integration-real:
   @set -a; source config/local-secrets/cashmemo.env; source config/local-secrets/appwrite-runtime.env; set +a; cargo test --manifest-path tests/integration-appwrite/Cargo.toml
 
 test-privacy-real:
-  @npm exec -- tsx tests/privacy/scan_captures.ts --self-test
+  @just appwrite-ready
+  @bash scripts/privacy/run-live-us1.sh
 
 test-acceptance-real:
   @just appwrite-ready
@@ -97,7 +98,7 @@ _acceptance-us1-create:
   @cargo test --manifest-path backend/Cargo.toml -p cashmemo-http-adapter --test create_contract --test auth_contract --test error_contract
   @npm run test:run --workspace @cashmemo/web -- --run tests/compose-draft.test.ts tests/privacy-pattern-create.test.tsx
   @set -a; source config/local-secrets/cashmemo.env; source config/local-secrets/appwrite-runtime.env; set +a; cargo test --manifest-path tests/integration-appwrite/Cargo.toml --test create_idempotency --test auth_isolation --test not_found_isolation --test direct_tablesdb_denial
-  @npm exec -- tsx tests/privacy/scan_captures.ts --self-test
+  @just test-privacy-real
   @node --test tests/privacy/telemetry_allowlist.test.mjs
   @set -a; source config/local-secrets/cashmemo.env; source config/local-secrets/appwrite-runtime.env; set +a; npm exec -- playwright test tests/acceptance/us1_create.spec.ts
 
