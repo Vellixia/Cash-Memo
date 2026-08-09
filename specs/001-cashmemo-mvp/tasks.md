@@ -40,25 +40,25 @@
 
 **Purpose**: Provider-neutral schemas, exact money/time rules, safe errors/evidence, and reusable test controls.
 
-- [ ] T013 [P] Add OpenAPI 3.1 lint, example validation, operation security/error coverage, and provider-type exclusion tests in `apps/server/tests/contract/openapi.contract.spec.ts` (FR-080)
-- [ ] T014 Generate deterministic server/client contract types and drift checks from `specs/001-cashmemo-mvp/contracts/openapi.yaml` into `packages/contracts/src/generated/` using `packages/contracts/openapi-codegen.config.mjs`
-- [ ] T015 Implement stable privacy-safe product error codes and HTTP mappings without echoed input/provider data in `packages/domain/src/errors/product-error.ts` and `apps/server/src/adapters/http/error-mapper.ts` (FR-008, FR-049, FR-089)
-- [ ] T016 [P] Write money parser, precision, sign, zero, overflow, registry, serialization, and 10,000-case property contracts in `packages/domain/tests/money.property.spec.ts` (FR-013, FR-014; SC-005)
-- [ ] T017 Build pinned CLDR/ISO-reviewed versioned supported-currency registry with no exchange-rate fields in `packages/currency-registry/src/registry.ts`, `packages/currency-registry/data/registry-v1.json`, and `packages/currency-registry/REVIEW.md` (FR-015)
-- [ ] T018 Implement positive integer-minor-unit Money value object, decimal-string API serialization, and currency-partitioned collection types in `packages/domain/src/money/money.ts` (FR-013–FR-017)
-- [ ] T019 [P] Write occurrence tuple, future-bound, relative-anchor, reporting-zone, DST gap/repetition, and generated-zone contracts in `packages/domain/tests/occurrence.property.spec.ts` (FR-018–FR-021)
-- [ ] T020 Implement authoritative instant plus local/IANA/offset/tzdb occurrence semantics and half-open month boundaries in `packages/domain/src/time/occurrence.ts` and `packages/domain/src/time/reporting-period.ts` (FR-018–FR-021)
-- [ ] T021 [P] Write Money Memo, draft, audio, export, and account lifecycle transition property tests in `packages/domain/tests/lifecycle.property.spec.ts`
-- [ ] T022 Implement typed lifecycle state machines that structurally separate authoritative memos from drafts/provider/audio state in `packages/domain/src/lifecycle/state-machines.ts` (Constitution II, III, V)
-- [ ] T023 [P] Write revision compare-and-set and idempotency replay/conflict property contracts in `packages/domain/tests/reliability.property.spec.ts` (FR-023, FR-029, FR-047)
-- [ ] T024 Implement revision, canonical request HMAC, retry-result, and deterministic job-key primitives in `packages/domain/src/reliability/primitives.ts` (Constitution VII)
-- [ ] T025 [P] Define non-content-bearing privacy results, boundary enums, warning codes, and project-owned `PrivacyBoundaryPort` in `packages/privacy-rules/src/contracts.ts` (FR-075–FR-077)
-- [ ] T026 [P] Write compile/runtime tests for allowlisted diagnostic event builders that cannot accept bodies, arbitrary objects, query values, secrets, or detector material in `packages/domain/tests/telemetry-event.spec.ts` (FR-078, FR-079)
-- [ ] T027 [P] Write typed evidence-writer rejection, quarantine, manifest-schema, and canary tests in `packages/test-support/tests/evidence-writer.spec.ts` (FR-104, FR-118, FR-119)
-- [ ] T028 Implement content-safe evidence writer and hash-only artifact manifest in `packages/test-support/src/evidence/evidence-writer.ts` and `ops/evidence/README.md` (FR-118, FR-119)
-- [ ] T029 [P] Provide deterministic clock, timezone, tzdb-version, and deadline controls in `packages/test-support/src/time/controlled-clock.ts`
-- [ ] T030 [P] Implement strict project-port STT, extraction, email, object-store, and telemetry fakes in `packages/test-support/src/providers/fakes.ts`
-- [ ] T031 [P] Build reusable two-account isolation, fault-proxy, lost-response, duplicate-delivery, and provider-capture harnesses in `packages/test-support/src/harness/index.ts` (FR-082, FR-111)
+- [x] T013 [P] Add OpenAPI 3.1 lint, example validation, operation security/error coverage, and provider-type exclusion tests in `apps/server/tests/contract/openapi.contract.spec.ts` (FR-080)
+- [x] T014 Generate deterministic server/client contract types and drift checks from `specs/001-cashmemo-mvp/contracts/openapi.yaml` into `packages/contracts/src/generated/` using `packages/contracts/openapi-codegen.config.mjs`
+- [x] T015 Implement stable privacy-safe product error codes and HTTP mappings without echoed input/provider data in `packages/domain/src/errors/product-error.ts` and `apps/server/src/adapters/http/error-mapper.ts` (FR-008, FR-049, FR-089)
+- [x] T016 [P] Write money parser, precision, sign, zero, overflow, registry, serialization, and 10,000-case property contracts in `packages/domain/tests/money.property.spec.ts` (FR-013, FR-014; SC-005)
+- [x] T017 Build pinned CLDR/ISO-reviewed versioned supported-currency registry with no exchange-rate fields in `packages/currency-registry/src/registry.ts`, `packages/currency-registry/data/registry-v1.json`, and `packages/currency-registry/REVIEW.md` (FR-015)
+- [x] T018 Implement positive integer-minor-unit Money value object, decimal-string API serialization, and currency-partitioned collection types in `packages/domain/src/money/money.ts` (FR-013–FR-017)
+- [x] T019 [P] Write occurrence tuple, future-bound, relative-anchor, reporting-zone, DST gap/repetition, and generated-zone contracts in `packages/domain/tests/occurrence.property.spec.ts` (FR-018–FR-021)
+- [x] T020 Implement authoritative instant plus local/IANA/offset/tzdb occurrence semantics and half-open month boundaries in `packages/domain/src/time/occurrence.ts` and `packages/domain/src/time/reporting-period.ts` (FR-018–FR-021)
+- [x] T021 [P] Write Money Memo, draft, audio, export, and account lifecycle transition property tests in `packages/domain/tests/lifecycle.property.spec.ts`
+- [x] T022 Implement typed lifecycle state machines that structurally separate authoritative memos from drafts/provider/audio state in `packages/domain/src/lifecycle/state-machines.ts` (Constitution II, III, V)
+- [x] T023 [P] Write revision compare-and-set and idempotency replay/conflict property contracts in `packages/domain/tests/reliability.property.spec.ts` (FR-023, FR-029, FR-047)
+- [x] T024 Implement revision, canonical request HMAC, retry-result, and deterministic job-key primitives in `packages/domain/src/reliability/primitives.ts` (Constitution VII)
+- [x] T025 [P] Define non-content-bearing privacy results, boundary enums, warning codes, and project-owned `PrivacyBoundaryPort` in `packages/privacy-rules/src/contracts.ts` (FR-075–FR-077)
+- [x] T026 [P] Write compile/runtime tests for allowlisted diagnostic event builders that cannot accept bodies, arbitrary objects, query values, secrets, or detector material in `packages/domain/tests/telemetry-event.spec.ts` (FR-078, FR-079)
+- [x] T027 [P] Write typed evidence-writer rejection, quarantine, manifest-schema, and canary tests in `packages/test-support/tests/evidence-writer.spec.ts` (FR-104, FR-118, FR-119)
+- [x] T028 Implement content-safe evidence writer and hash-only artifact manifest in `packages/test-support/src/evidence/evidence-writer.ts` and `ops/evidence/README.md` (FR-118, FR-119)
+- [x] T029 [P] Provide deterministic clock, timezone, tzdb-version, and deadline controls in `packages/test-support/src/time/controlled-clock.ts`
+- [x] T030 [P] Implement strict project-port STT, extraction, email, object-store, and telemetry fakes in `packages/test-support/src/providers/fakes.ts`
+- [x] T031 [P] Build reusable two-account isolation, fault-proxy, lost-response, duplicate-delivery, and provider-capture harnesses in `packages/test-support/src/harness/index.ts` (FR-082, FR-111)
 
 **Checkpoint**: Shared contracts and invariants fail before dependent application behavior exists; evidence tooling cannot encode user content.
 

@@ -17,5 +17,10 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/server.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["dist", "coverage"]
+  "exclude": ["dist", "coverage"],
+  "references": [
+    { "path": "../../packages/contracts/tsconfig.json" },
+    { "path": "../../packages/currency-registry/tsconfig.json" },
+    { "path": "../../packages/domain/tsconfig.json" }
+  ]
 }

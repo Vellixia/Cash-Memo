@@ -1,0 +1,14 @@
+{
+  "name": "@cashmemo/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cashmemo/contracts": "workspace:*",
+    "@cashmemo/domain": "workspace:*"
+  }
+}

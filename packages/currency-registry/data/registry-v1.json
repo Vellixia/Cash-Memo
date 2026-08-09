@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1",
+  "registryVersion": "cldr47-iso4217-2026-01-01-cashmemo-v1",
+  "reviewedAt": "2026-08-09",
+  "sources": {
+    "cldrSupplemental": {
+      "release": "47",
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/release-47/common/supplemental/supplementalData.xml",
+      "sha256": "3fb813039e4ab5041afc78c27fe35704b48e114513f008722e3e366473ed10b4"
+    },
+    "cldrEnglish": {
+      "release": "47",
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/release-47/common/main/en.xml",
+      "sha256": "cdb3d09f4d5cd206616a57cc8a8cb54c458c6678758c59b8b817125fe2dfb147"
+    },
+    "cldrIndonesian": {
+      "release": "47",
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/release-47/common/main/id.xml",
+      "sha256": "b6a46305320587dee685c3422ac4c081ad183463b2156795edd2b6690bb3d23a"
+    },
+    "iso4217": {
+      "published": "2026-01-01",
+      "url": "https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml",
+      "sha256": "838dfb991648cf36df939edd5fe3811737962b75a32252847d239cedd1e291c9"
+    }
+  },
+  "currencies": [
+    {
+      "code": "AED",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "United Arab Emirates Dirham",
+      "symbol": "AED"
+    },
+    {
+      "code": "AUD",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Australian Dollar",
+      "symbol": "A$"
+    },
+    {
+      "code": "CAD",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Canadian Dollar",
+      "symbol": "CA$"
+    },
+    {
+      "code": "CHF",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Swiss Franc",
+      "symbol": "CHF"
+    },
+    {
+      "code": "CNY",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Chinese Yuan",
+      "symbol": "CN¥"
+    },
+    { "code": "EUR", "exponent": 2, "enabled": true, "displayName": "Euro", "symbol": "€" },
+    {
+      "code": "GBP",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "British Pound",
+      "symbol": "£"
+    },
+    {
+      "code": "HKD",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Hong Kong Dollar",
+      "symbol": "HK$"
+    },
+    {
+      "code": "IDR",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Indonesian Rupiah",
+      "symbol": "Rp"
+    },
+    { "code": "INR", "exponent": 2, "enabled": true, "displayName": "Indian Rupee", "symbol": "₹" },
+    { "code": "JPY", "exponent": 0, "enabled": true, "displayName": "Japanese Yen", "symbol": "¥" },
+    {
+      "code": "KRW",
+      "exponent": 0,
+      "enabled": true,
+      "displayName": "South Korean Won",
+      "symbol": "₩"
+    },
+    {
+      "code": "KWD",
+      "exponent": 3,
+      "enabled": true,
+      "displayName": "Kuwaiti Dinar",
+      "symbol": "KWD"
+    },
+    {
+      "code": "MYR",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Malaysian Ringgit",
+      "symbol": "MYR"
+    },
+    {
+      "code": "NZD",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "New Zealand Dollar",
+      "symbol": "NZ$"
+    },
+    {
+      "code": "PHP",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Philippine Peso",
+      "symbol": "₱"
+    },
+    {
+      "code": "SAR",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Saudi Riyal",
+      "symbol": "SAR"
+    },
+    {
+      "code": "SGD",
+      "exponent": 2,
+      "enabled": true,
+      "displayName": "Singapore Dollar",
+      "symbol": "SGD"
+    },
+    { "code": "THB", "exponent": 2, "enabled": true, "displayName": "Thai Baht", "symbol": "THB" },
+    { "code": "USD", "exponent": 2, "enabled": true, "displayName": "US Dollar", "symbol": "$" },
+    {
+      "code": "VND",
+      "exponent": 0,
+      "enabled": true,
+      "displayName": "Vietnamese Dong",
+      "symbol": "₫"
+    }
+  ]
+}

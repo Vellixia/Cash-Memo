@@ -1,0 +1,20 @@
+{
+  "name": "@cashmemo/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cashmemo/currency-registry": "workspace:*",
+    "@js-temporal/polyfill": "0.5.1"
+  }
+}
