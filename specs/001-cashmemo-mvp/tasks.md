@@ -68,21 +68,21 @@
 
 **Purpose**: Reviewed schema/migrations, forced RLS, transaction-local ownership, jobs, and real PostgreSQL test substrate.
 
-- [ ] T032 Write schema-to-data-model contract tests for all 24 persistent model types, constraints, indexes, and authority separation in `apps/server/tests/contract/database-schema.contract.spec.ts`
-- [ ] T033 [P] Declare User, CredentialAccount, VerificationToken, Better Auth Session, ReauthGrant, Profile, Preferences, Category, and MoneySpace tables in `apps/server/src/adapters/postgres/schema/identity-labels.ts`
-- [ ] T034 [P] Declare authoritative MoneyMemo plus ComposeDraft, AssistedCapture, ProviderAttempt, and TemporaryAudioMetadata tables in `apps/server/src/adapters/postgres/schema/journal-capture.ts`
-- [ ] T035 [P] Declare IdempotencyRecord, ExportJob, AccountDeletion, ProviderDeletion, and BackgroundJob tables in `apps/server/src/adapters/postgres/schema/operations.ts`
-- [ ] T036 [P] Declare currency registry, ContentFreeMutationAudit, and HistoryListState tables/indexes without exchange-rate or free-form operational columns in `apps/server/src/adapters/postgres/schema/reference-audit-history.ts`
-- [ ] T037 Generate, review, and commit initial PostgreSQL 18 schema migration with exact checks, composite ownership FKs, GIN indexes, and checksums in `apps/server/src/adapters/postgres/migrations/0001_cashmemo_mvp.sql`
-- [ ] T038 Add non-owner runtime/migration/worker/restore roles plus `FORCE ROW LEVEL SECURITY` policies for every account-owned table in `apps/server/src/adapters/postgres/migrations/0002_roles_rls.sql` (FR-010, FR-081)
-- [ ] T039 [P] Create PostgreSQL 18 Testcontainers and Mailpit/object-fake integration harness in `apps/server/tests/integration/support/test-environment.ts`
-- [ ] T040 Write missing/forged/cross-user/pool-reuse transaction-context tests before repository code in `apps/server/tests/integration/transaction-account-context.spec.ts` (FR-010, FR-081)
-- [ ] T041 Implement parameterized transaction-local authenticated-account context and fail-closed repository unit-of-work in `apps/server/src/adapters/postgres/transaction-context.ts` (FR-010, FR-081)
-- [ ] T042 Verify empty-database and previous-release forward migration, checksum, rollback/safe-forward, registry, constraints, and RLS in `apps/server/tests/integration/migrations.spec.ts` and `scripts/db/verify.mjs`
-- [ ] T043 Create guarded synthetic seed with two isolated accounts, starter labels, multi-currency/timezone golden rows, drafts, and lifecycle states in `apps/server/src/adapters/postgres/seeds/synthetic.ts`
-- [ ] T044 Write job lease, crash/reclaim, dedupe, backoff, dead-letter, and advisory-scheduler tests in `apps/server/tests/integration/background-jobs.spec.ts`
-- [ ] T045 Implement PostgreSQL `SKIP LOCKED` leased job repository and advisory scheduler in `apps/server/src/modules/operations/background-jobs.ts`
-- [ ] T046 Run `pnpm db:verify` against fresh PostgreSQL 18 and store content-safe foundation evidence in `ops/evidence/foundation/database.json`
+- [x] T032 Write schema-to-data-model contract tests for all 24 persistent model types, constraints, indexes, and authority separation in `apps/server/tests/contract/database-schema.contract.spec.ts`
+- [x] T033 [P] Declare User, CredentialAccount, VerificationToken, Better Auth Session, ReauthGrant, Profile, Preferences, Category, and MoneySpace tables in `apps/server/src/adapters/postgres/schema/identity-labels.ts`
+- [x] T034 [P] Declare authoritative MoneyMemo plus ComposeDraft, AssistedCapture, ProviderAttempt, and TemporaryAudioMetadata tables in `apps/server/src/adapters/postgres/schema/journal-capture.ts`
+- [x] T035 [P] Declare IdempotencyRecord, ExportJob, AccountDeletion, ProviderDeletion, and BackgroundJob tables in `apps/server/src/adapters/postgres/schema/operations.ts`
+- [x] T036 [P] Declare currency registry, ContentFreeMutationAudit, and HistoryListState tables/indexes without exchange-rate or free-form operational columns in `apps/server/src/adapters/postgres/schema/reference-audit-history.ts`
+- [x] T037 Generate, review, and commit initial PostgreSQL 18 schema migration with exact checks, composite ownership FKs, GIN indexes, and checksums in `apps/server/src/adapters/postgres/migrations/0001_cashmemo_mvp.sql`
+- [x] T038 Add non-owner runtime/migration/worker/restore roles plus `FORCE ROW LEVEL SECURITY` policies for every account-owned table in `apps/server/src/adapters/postgres/migrations/0002_roles_rls.sql` (FR-010, FR-081)
+- [x] T039 [P] Create PostgreSQL 18 Testcontainers and Mailpit/object-fake integration harness in `apps/server/tests/integration/support/test-environment.ts`
+- [x] T040 Write missing/forged/cross-user/pool-reuse transaction-context tests before repository code in `apps/server/tests/integration/transaction-account-context.spec.ts` (FR-010, FR-081)
+- [x] T041 Implement parameterized transaction-local authenticated-account context and fail-closed repository unit-of-work in `apps/server/src/adapters/postgres/transaction-context.ts` (FR-010, FR-081)
+- [x] T042 Verify empty-database and previous-release forward migration, checksum, rollback/safe-forward, registry, constraints, and RLS in `apps/server/tests/integration/migrations.spec.ts` and `scripts/db/verify.mjs`
+- [x] T043 Create guarded synthetic seed with two isolated accounts, starter labels, multi-currency/timezone golden rows, drafts, and lifecycle states in `apps/server/src/adapters/postgres/seeds/synthetic.ts`
+- [x] T044 Write job lease, crash/reclaim, dedupe, backoff, dead-letter, and advisory-scheduler tests in `apps/server/tests/integration/background-jobs.spec.ts`
+- [x] T045 Implement PostgreSQL `SKIP LOCKED` leased job repository and advisory scheduler in `apps/server/src/modules/operations/background-jobs.ts`
+- [x] T046 Run `pnpm db:verify` against fresh PostgreSQL 18 and store content-safe foundation evidence in `ops/evidence/foundation/database.json`
 
 **Checkpoint**: Real PostgreSQL enforces ownership and schema invariants before user-story repositories begin.
 

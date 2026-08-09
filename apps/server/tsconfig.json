@@ -12,15 +12,17 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "skipLibCheck": true,
     "rootDir": ".",
     "outDir": "dist",
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/server.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "include": ["drizzle.config.ts", "src/**/*.ts", "tests/**/*.ts"],
   "exclude": ["dist", "coverage"],
   "references": [
     { "path": "../../packages/contracts/tsconfig.json" },
     { "path": "../../packages/currency-registry/tsconfig.json" },
-    { "path": "../../packages/domain/tsconfig.json" }
+    { "path": "../../packages/domain/tsconfig.json" },
+    { "path": "../../packages/test-support/tsconfig.json" }
   ]
 }

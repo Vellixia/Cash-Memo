@@ -9,5 +9,7 @@ pnpm-lock.yaml
 .specify/
 .mcp.json
 archive/
+ops/evidence/
+packages/currency-registry/REVIEW.md
 specs/
 specs/001-cashmemo-mvp/contracts/openapi.yaml

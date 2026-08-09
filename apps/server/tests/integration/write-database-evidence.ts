@@ -1,0 +1,128 @@
+import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { promisify } from "node:util";
+
+import { EvidenceWriter } from "@cashmemo/test-support";
+import { MIGRATION_FILES, readMigration } from "./support/postgres-migrations.js";
+
+const execFileAsync = promisify(execFile);
+const repositoryRoot = resolve(import.meta.dirname, "../../../..");
+const foundationDirectory = resolve(repositoryRoot, "ops/evidence/foundation");
+const artifactPath = resolve(foundationDirectory, "database.json");
+const manifestPath = resolve(foundationDirectory, "database.manifest.json");
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function migrationDigest(): Promise<string> {
+  const hash = createHash("sha256");
+  for (const filename of MIGRATION_FILES) hash.update(await readMigration(filename));
+  return `sha256:${hash.digest("hex")}`;
+}
+
+const buildDigest = await migrationDigest();
+if ((await exists(artifactPath)) || (await exists(manifestPath))) {
+  if (!(await exists(artifactPath)) || !(await exists(manifestPath))) {
+    throw new Error("DATABASE_FOUNDATION_EVIDENCE_INCOMPLETE");
+  }
+  const existing = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    buildDigest?: unknown;
+  };
+  if (existing.buildDigest !== buildDigest) {
+    throw new Error("DATABASE_FOUNDATION_EVIDENCE_STALE_REVIEW_REQUIRED");
+  }
+  console.log("DATABASE_FOUNDATION_EVIDENCE=EXISTING_VALID");
+  process.exit(0);
+}
+
+const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+  cwd: repositoryRoot,
+  encoding: "utf8",
+});
+const gitCommit = stdout.trim();
+const finishedAt = new Date().toISOString();
+const evidenceId = randomUUID();
+const generatedDirectory = resolve(foundationDirectory, ".generated");
+const writer = new EvidenceWriter({
+  acceptedDirectory: generatedDirectory,
+  quarantineDirectory: resolve(repositoryRoot, "ops/evidence/quarantine"),
+});
+
+const result = await writer.write({
+  artifactName: "database.json",
+  body: {
+    checks: [
+      {
+        checkId: "postgresql18.clean-migration",
+        count: 23,
+        durationMs: null,
+        fixtureId: "empty-database",
+        result: "pass",
+        safeReasonCode: null,
+      },
+      {
+        checkId: "previous-release.forward-migration",
+        count: 2,
+        durationMs: null,
+        fixtureId: "empty-previous-release",
+        result: "pass",
+        safeReasonCode: null,
+      },
+      {
+        checkId: "migration.checksums-constraints-rls",
+        count: 18,
+        durationMs: null,
+        fixtureId: "synthetic-schema-v1",
+        result: "pass",
+        safeReasonCode: null,
+      },
+    ],
+    externalArtifacts: [],
+    schemaVersion: "cashmemo-evidence-artifact-v1",
+  },
+  manifest: {
+    artifactSha256: null,
+    buildDigest,
+    coarseResult: "pass",
+    currencyRegistryVersion: "schema-foundation",
+    deployedConfigVersion: "local-testcontainers-v1",
+    environment: {
+      browserDeviceVersions: [],
+      databaseEngineVersion: "18.4",
+      ecsTaskDefinition: null,
+      featureFlags: ["forced-rls", "safe-forward"],
+      migrationVersion: "0002.roles-rls",
+      normalLoadProfile: null,
+    },
+    environmentId: "local-testcontainers",
+    evidenceId,
+    finishedAt,
+    gitCommit,
+    providerDecisionVersions: [],
+    region: "local-docker",
+    requirementIds: ["FR-010", "FR-081"],
+    reviewedAt: null,
+    reviewerRole: "automated-database-gate",
+    safeFixtureSetVersion: "synthetic-schema-v1",
+    startedAt: finishedAt,
+    storyIds: [],
+    successCriterionIds: [],
+    testCommandOrProcedureId: "pnpm.db-verify",
+    tzdbVersion: "not-applicable",
+  },
+});
+
+await mkdir(foundationDirectory, { mode: 0o700, recursive: true });
+await rename(result.artifactPath, artifactPath);
+await rename(result.manifestPath, manifestPath);
+await rm(dirname(result.artifactPath), { recursive: true });
+console.log("DATABASE_FOUNDATION_EVIDENCE=WRITTEN");

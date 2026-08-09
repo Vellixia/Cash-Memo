@@ -9,6 +9,15 @@
   },
   "dependencies": {
     "@cashmemo/contracts": "workspace:*",
-    "@cashmemo/domain": "workspace:*"
+    "@cashmemo/domain": "workspace:*",
+    "@cashmemo/test-support": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "12.1.0",
+    "@types/pg": "8.21.0",
+    "drizzle-kit": "0.31.10",
+    "testcontainers": "12.1.0"
   }
 }
