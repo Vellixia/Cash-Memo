@@ -1,14 +1,17 @@
 node_modules/
+.pnpm-store/
 out/
 dist/
 build/
 coverage/
 target/
+*.tsbuildinfo
 *.log
 *.tmp
 
 .env
 .env.*
+!.env.example
 !.env.schema.json
 .secrets/
 *.pem

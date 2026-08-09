@@ -1,0 +1,88 @@
+name: Supply-chain baseline
+
+on:
+  pull_request:
+  push:
+    branches: [main, "001-cashmemo-mvp"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Audit, licenses, image, and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out current tree
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.13.1 --activate
+
+      - name: Install frozen dependency graph
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Enforce production license denylist
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawnSync } from "node:child_process";
+
+          const result = spawnSync("pnpm", ["licenses", "list", "--prod", "--json"], {
+            encoding: "utf8",
+          });
+          if (result.status !== 0) {
+            console.error("Unable to inspect production dependency licenses.");
+            process.exit(1);
+          }
+          const raw = result.stdout.trim();
+          const licenses = raw === "No licenses in packages found" ? {} : JSON.parse(raw);
+          const forbidden = /(?:^|\b)(?:AGPL|SSPL|BUSL|Commons Clause|Elastic License)(?:\b|$)/i;
+          const denied = Object.keys(licenses).filter((license) => forbidden.test(license));
+          const unknown = Object.keys(licenses).filter((license) => /unknown|unlicensed/i.test(license));
+          if (denied.length > 0 || unknown.length > 0) {
+            console.error("Production dependency license policy failed; inspect the local license report.");
+            process.exit(1);
+          }
+          console.log(`LICENSE_POLICY=PASS groups=${Object.keys(licenses).length}`);
+          NODE
+
+      - name: Build immutable production image input
+        run: >-
+          docker build --target production --file infra/containers/Dockerfile --tag
+          "cashmemo:${GITHUB_SHA}" .
+
+      - name: Scan image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cashmemo:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Generate SPDX JSON SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: cashmemo:${{ github.sha }}
+          format: spdx-json
+          artifact-name: cashmemo-${{ github.sha }}.spdx.json
+          upload-artifact: true

@@ -1,0 +1,13 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+pnpm-lock.yaml
+.agents/
+.claude/
+.specify/
+.mcp.json
+archive/
+specs/
+specs/001-cashmemo-mvp/contracts/openapi.yaml

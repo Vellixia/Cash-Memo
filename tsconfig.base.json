@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "strict": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": false,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "incremental": true,
+    "paths": {
+      "@cashmemo/contracts": ["./packages/contracts/src/index.ts"],
+      "@cashmemo/currency-registry": ["./packages/currency-registry/src/index.ts"],
+      "@cashmemo/domain": ["./packages/domain/src/index.ts"],
+      "@cashmemo/privacy-rules": ["./packages/privacy-rules/src/index.ts"],
+      "@cashmemo/test-support": ["./packages/test-support/src/index.ts"]
+    }
+  }
+}

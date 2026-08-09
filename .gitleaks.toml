@@ -1,0 +1,35 @@
+title = "Cashmemo current-tree secret policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "cashmemo-banking-secret-assignment"
+description = "Banking, card-secret, or identity-secret value assigned in source"
+regex = '''(?i)(?:bank[_ -]?account|bank[_ -]?credential|bank[_ -]?token|card[_ -]?number|cvv|government[_ -]?id)[\t ]*[:=][\t ]*["']?([A-Za-z0-9][A-Za-z0-9+/_=-]{5,})'''
+secretGroup = 1
+keywords = ["account", "bank", "card", "credential", "cvv", "government", "token"]
+
+[[allowlists]]
+description = "Public fixture placeholders and explicitly local-only bootstrap literals"
+condition = "OR"
+regexTarget = "match"
+regexes = [
+  '''(?i)(?:example|synthetic|fixture|placeholder)[-_][A-Za-z0-9_-]+''',
+  '''cashmemo-local-only''',
+]
+
+[[allowlists]]
+description = "Generated dependency integrity metadata contains public hashes, not secrets"
+condition = "OR"
+paths = ['''pnpm-lock\.yaml''']
+
+[[allowlists]]
+description = "Locally generated, git-ignored HTTPS material is checked by the tracked-file guard"
+condition = "OR"
+paths = ['''(?:^|/)\.secrets/local-dev/(?:localhost|cashmemo-local-ca)\.(?:key|crt)$''']
+
+[[allowlists]]
+description = "Locally generated, git-ignored environment material is checked by the tracked-file guard"
+condition = "OR"
+paths = ['''(?:^|/)\.env(?:\.[^/]+)?$''']

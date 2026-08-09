@@ -1,0 +1,56 @@
+name: Constitutional verification
+
+on:
+  pull_request:
+  push:
+    branches: [main, "001-cashmemo-mvp"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ordered-gates:
+    name: Ordered quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out current tree
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.13.1 --activate
+
+      - name: Install frozen dependency graph
+        run: pnpm install --frozen-lockfile
+
+      - name: Format and lint
+        run: pnpm gate:format-lint
+
+      - name: Typecheck and contract drift
+        run: pnpm gate:typecheck-drift
+
+      - name: Unit and property tests
+        run: pnpm gate:unit-property
+
+      - name: Integration and contract tests
+        run: pnpm gate:integration-contract
+
+      - name: Privacy and security tests
+        run: pnpm gate:privacy-security
+
+      - name: Acceptance suites
+        run: pnpm gate:acceptance
