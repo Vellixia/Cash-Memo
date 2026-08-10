@@ -8,11 +8,13 @@ import { startTestEnvironment, type TestEnvironment } from "./support/test-envir
 const ACCOUNT_ONE = "00000000-0000-4000-8000-000000000001";
 const ACCOUNT_TWO = "00000000-0000-4000-8000-000000000002";
 const RUNTIME_PASSWORD = "cashmemo-runtime-test-only";
+const IDENTITY_PASSWORD = "cashmemo-identity-test-only";
 
 describe("transaction-local authenticated-account context", () => {
   let environment: TestEnvironment;
   let adminPool: Pool;
   let runtimePool: Pool;
+  let identityPool: Pool;
 
   beforeAll(async () => {
     environment = await startTestEnvironment({ services: ["postgres"] });
@@ -24,10 +26,13 @@ describe("transaction-local authenticated-account context", () => {
       `CREATE ROLE cashmemo_http LOGIN PASSWORD '${RUNTIME_PASSWORD}' IN ROLE cashmemo_runtime`,
     );
     await adminPool.query(
-      `INSERT INTO users (id, email, email_verified_at, status)
+      `CREATE ROLE cashmemo_identity_login LOGIN PASSWORD '${IDENTITY_PASSWORD}' IN ROLE cashmemo_identity`,
+    );
+    await adminPool.query(
+      `INSERT INTO users (id, name, email, email_verified, status)
        VALUES
-         ($1, 'account-one@example.test', now(), 'active'),
-         ($2, 'account-two@example.test', now(), 'active')`,
+         ($1, 'Cashmemo account', 'account-one@example.test', true, 'active'),
+         ($2, 'Cashmemo account', 'account-two@example.test', true, 'active')`,
       [ACCOUNT_ONE, ACCOUNT_TWO],
     );
 
@@ -35,9 +40,15 @@ describe("transaction-local authenticated-account context", () => {
     runtimeUrl.username = "cashmemo_http";
     runtimeUrl.password = RUNTIME_PASSWORD;
     runtimePool = new Pool({ connectionString: runtimeUrl.toString(), max: 1 });
+
+    const identityUrl = new URL(environment.postgres.connectionUri);
+    identityUrl.username = "cashmemo_identity_login";
+    identityUrl.password = IDENTITY_PASSWORD;
+    identityPool = new Pool({ connectionString: identityUrl.toString(), max: 1 });
   }, 120_000);
 
   afterAll(async () => {
+    await identityPool.end();
     await runtimePool.end();
     await adminPool.end();
     await environment.stop();
@@ -81,5 +92,41 @@ describe("transaction-local authenticated-account context", () => {
       "SELECT count(*) FROM users",
     );
     expect(outsideTransaction.rows[0]?.count).toBe("0");
+  });
+
+  it("proves identity pool cannot access account-owned domain tables", async () => {
+    await expect(identityPool.query("SELECT count(*) FROM money_memos")).rejects.toMatchObject({
+      code: "42501",
+    });
+    await expect(identityPool.query("SELECT count(*) FROM profiles")).rejects.toMatchObject({
+      code: "42501",
+    });
+    await expect(identityPool.query("SELECT count(*) FROM preferences")).rejects.toMatchObject({
+      code: "42501",
+    });
+  });
+
+  it("proves identity pool cannot SET ROLE to cashmemo_runtime", async () => {
+    await expect(identityPool.query("SET ROLE cashmemo_runtime")).rejects.toMatchObject({
+      code: "42501",
+    });
+  });
+
+  it("proves runtime pool cannot access sessions (revoked in 0004)", async () => {
+    await expect(runtimePool.query("SELECT count(*) FROM sessions")).rejects.toMatchObject({
+      code: "42501",
+    });
+  });
+
+  it("proves runtime pool cannot access credential_accounts (revoked in 0004)", async () => {
+    await expect(
+      runtimePool.query("SELECT count(*) FROM credential_accounts"),
+    ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("proves runtime pool cannot access verification_tokens (revoked in 0004)", async () => {
+    await expect(
+      runtimePool.query("SELECT count(*) FROM verification_tokens"),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 });

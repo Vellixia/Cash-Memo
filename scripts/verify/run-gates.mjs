@@ -71,7 +71,12 @@ async function walkFiles(root) {
   const files = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "archive") {
+    if (
+      entry.name.startsWith(".") ||
+      entry.name === "node_modules" ||
+      entry.name === "archive" ||
+      entry.name === "dist"
+    ) {
       continue;
     }
     const target = path.join(root, entry.name);
@@ -130,6 +135,14 @@ async function runVitestSuite(suite) {
   await run("pnpm", ["exec", "vitest", "run", ...files.map(relative)], {
     label: `test:${suite}`,
   });
+}
+
+async function runAuthCompatibility() {
+  await runVitestSuite("auth");
+  await runArtifactScript(
+    "tests/providers/write-better-auth-compat-evidence.ts",
+    "test:auth:evidence",
+  );
 }
 
 async function requireRealMode({ evidence = [], flag, names = [] }) {
@@ -489,6 +502,7 @@ async function main([command, subject]) {
   if (command === "protected") return runProtectedSuite(subject);
   if (command === "providers") return runRealProviders();
   if (command === "stories") return runAllStoryAcceptance();
+  if (command === "test" && subject === "auth") return runAuthCompatibility();
   if (command === "test") return runVitestSuite(subject);
   if (command === "typecheck") return runTypecheck();
   if (command === "verify") return runVerification();

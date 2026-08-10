@@ -20,9 +20,9 @@
 **Purpose**: Reproducible workspace, local production-like boundary, and blocking gate skeleton.
 
 - [x] T001 Pin Node.js 24 LTS, Corepack, pnpm, workspace packages, and frozen dependency baseline in `.tool-versions`, `package.json`, `pnpm-workspace.yaml`, and `pnpm-lock.yaml`
-- [x] T002 Create planned modular-monolith workspace entry points and strict shared TypeScript configuration in `apps/web/tsconfig.json`, `apps/server/tsconfig.json`, `packages/tsconfig.json`, and `tsconfig.base.json`
+- [x] T002 Create planned modular-monolith workspace entry points, strict shared TypeScript configuration, and minimal executable/testable `apps/web` React/Vite/Vitest foundation in `apps/web/tsconfig.json`, `apps/server/tsconfig.json`, `packages/tsconfig.json`, `tsconfig.base.json`, `apps/web/package.json`, `apps/web/vite.config.ts`, `apps/web/index.html`, `apps/web/src/main.tsx`, `apps/web/src/app/router.tsx`, `apps/web/tests/setup.ts`, and `playwright.config.ts` — REOPENED: extend to include minimal web application scaffold required by T058–T060/T062–T063
 - [x] T003 [P] Configure formatting and linting with zero-warning CI behavior in `prettier.config.mjs` and `eslint.config.mjs`
-- [x] T004 [P] Define fail-closed runtime configuration schema and safe-name-only example variables in `.env.example` and `apps/server/src/bootstrap/environment.schema.ts` (FR-083)
+- [x] T004 [P] Define fail-closed runtime configuration schema and safe-name-only example variables in `.env.example` and `apps/server/src/bootstrap/environment.schema.ts` (FR-083) — REOPENED: add AUTH_DATABASE_URL for dedicated identity database principal
 - [x] T005 [P] Provide HTTPS local PostgreSQL 18, Mailpit, object fake, and OpenTelemetry sink bootstrap in `infra/containers/compose.yaml` and `scripts/local/bootstrap-https.mjs`
 - [x] T006 [P] Define pinned non-root, read-only-root-filesystem development/production image baseline in `infra/containers/Dockerfile`
 - [x] T007 [P] Configure secret and secret-like-value scanning without printing suspected values in `.gitleaks.toml` and `.github/workflows/secret-scan.yml` (FR-083)
@@ -68,21 +68,21 @@
 
 **Purpose**: Reviewed schema/migrations, forced RLS, transaction-local ownership, jobs, and real PostgreSQL test substrate.
 
-- [x] T032 Write schema-to-data-model contract tests for all 24 persistent model types, constraints, indexes, and authority separation in `apps/server/tests/contract/database-schema.contract.spec.ts`
-- [x] T033 [P] Declare User, CredentialAccount, VerificationToken, Better Auth Session, ReauthGrant, Profile, Preferences, Category, and MoneySpace tables in `apps/server/src/adapters/postgres/schema/identity-labels.ts`
+- [x] T032 Reconcile schema-to-data-model contract tests for all 24 persistent model types, including Better Auth-owned User/CredentialAccount/Verification/Session fields, compatibility-only null fields, constraints, indexes, and authority separation in `apps/server/tests/contract/database-schema.contract.spec.ts`
+- [x] T033 [P] Reconcile User, CredentialAccount, VerificationToken, Better Auth Session, ReauthGrant, Profile, Preferences, Category, and MoneySpace declarations with pinned Better Auth 1.6.26 model/field mappings in `apps/server/src/adapters/postgres/schema/identity-labels.ts`
 - [x] T034 [P] Declare authoritative MoneyMemo plus ComposeDraft, AssistedCapture, ProviderAttempt, and TemporaryAudioMetadata tables in `apps/server/src/adapters/postgres/schema/journal-capture.ts`
 - [x] T035 [P] Declare IdempotencyRecord, ExportJob, AccountDeletion, ProviderDeletion, and BackgroundJob tables in `apps/server/src/adapters/postgres/schema/operations.ts`
 - [x] T036 [P] Declare currency registry, ContentFreeMutationAudit, and HistoryListState tables/indexes without exchange-rate or free-form operational columns in `apps/server/src/adapters/postgres/schema/reference-audit-history.ts`
 - [x] T037 Generate, review, and commit initial PostgreSQL 18 schema migration with exact checks, composite ownership FKs, GIN indexes, and checksums in `apps/server/src/adapters/postgres/migrations/0001_cashmemo_mvp.sql`
 - [x] T038 Add non-owner runtime/migration/worker/restore roles plus `FORCE ROW LEVEL SECURITY` policies for every account-owned table in `apps/server/src/adapters/postgres/migrations/0002_roles_rls.sql` (FR-010, FR-081)
 - [x] T039 [P] Create PostgreSQL 18 Testcontainers and Mailpit/object-fake integration harness in `apps/server/tests/integration/support/test-environment.ts`
-- [x] T040 Write missing/forged/cross-user/pool-reuse transaction-context tests before repository code in `apps/server/tests/integration/transaction-account-context.spec.ts` (FR-010, FR-081)
+- [x] T040 Write missing/forged/cross-user/pool-reuse transaction-context tests before repository code in `apps/server/tests/integration/transaction-account-context.spec.ts` (FR-010, FR-081) — REOPENED: extend to cover pre-auth identity role, runtime role, pool reuse, role isolation, and forbidden cross-role access
 - [x] T041 Implement parameterized transaction-local authenticated-account context and fail-closed repository unit-of-work in `apps/server/src/adapters/postgres/transaction-context.ts` (FR-010, FR-081)
-- [x] T042 Verify empty-database and previous-release forward migration, checksum, rollback/safe-forward, registry, constraints, and RLS in `apps/server/tests/integration/migrations.spec.ts` and `scripts/db/verify.mjs`
+- [x] T042 Create/review `apps/server/src/adapters/postgres/migrations/0003_better_auth_compat.sql` and `0004_identity_access_boundary.sql` without modifying 0001/0002, then verify empty 0001→0002→0003→0004 and representative accepted pre-0003 forward migration, checksums, safe-forward, registry, constraints, and RLS in `apps/server/tests/integration/migrations.spec.ts` and `scripts/db/verify.mjs` — REOPENED: add 0004 identity access boundary migration and verify full chain
 - [x] T043 Create guarded synthetic seed with two isolated accounts, starter labels, multi-currency/timezone golden rows, drafts, and lifecycle states in `apps/server/src/adapters/postgres/seeds/synthetic.ts`
 - [x] T044 Write job lease, crash/reclaim, dedupe, backoff, dead-letter, and advisory-scheduler tests in `apps/server/tests/integration/background-jobs.spec.ts`
 - [x] T045 Implement PostgreSQL `SKIP LOCKED` leased job repository and advisory scheduler in `apps/server/src/modules/operations/background-jobs.ts`
-- [x] T046 Run `pnpm db:verify` against fresh PostgreSQL 18 and store content-safe foundation evidence in `ops/evidence/foundation/database.json`
+- [x] T046 Rerun `pnpm db:verify` against fresh and accepted pre-0004 PostgreSQL 18 states, then replace stale content-safe foundation evidence in `ops/evidence/foundation/database.json` — REOPENED: verify 0001→0002→0003→0004 chain and replace stale evidence
 
 **Checkpoint**: Real PostgreSQL enforces ownership and schema invariants before user-story repositories begin.
 
@@ -94,23 +94,23 @@
 
 **Independent Test**: Signup → verify → login → session restore/revocation → onboarding/preferences → empty journal, with invalid-session and second-user denial.
 
-- [ ] T047 [P] [US1] Build isolated pinned-Better-Auth compatibility contract for verification, reset single use, supported DB `session.token`, restoration, `expiresIn=7d`, `updateAge=1h`, 30-day app revocation, and current/other/all revocation in `tests/providers/better-auth.compat.spec.ts` (FR-001–FR-003)
-- [ ] T048 [US1] Execute `pnpm test:auth:better-auth-compat` against real PostgreSQL, record schema/query snapshots without token values in `ops/evidence/provider/better-auth-compat.json`, and block T049–T063 on any unsupported behavior
-- [ ] T049 [P] [US1] Write auth, verification, reset, enumeration-safe error, cookie, session, and recent-auth HTTP contract tests in `apps/server/tests/contract/identity-api.contract.spec.ts` (FR-001–FR-003, FR-008)
-- [ ] T050 [US1] Configure Better Auth PostgreSQL adapter, Argon2id callbacks, supported core token semantics, disabled cookie cache/stateless/secondary storage, and secure host-only cookie in `apps/server/src/modules/identity/better-auth.adapter.ts`
-- [ ] T051 [US1] Implement signup, verification/resend, login, logout, one-hour single-use reset, and reset-driven revoke-all flows in `apps/server/src/modules/identity/identity.service.ts` (FR-001, FR-008, FR-009)
-- [ ] T052 [P] [US1] Implement project-owned email port, generic verification/reset templates, Mailpit adapter, and content-free delivery events in `apps/server/src/modules/identity/email.port.ts` and `apps/server/src/adapters/aws/ses-email.adapter.ts`
-- [ ] T053 [P] [US1] Write controlled-clock session inactivity/refresh/absolute-expiry, fixation, reset, revoke-current/others/all, and ReauthGrant tests in `apps/server/tests/integration/sessions.spec.ts` (FR-002, FR-003, FR-088)
-- [ ] T054 [US1] Implement protected-request session middleware, 30-day supported revocation, ten-minute one-time scoped ReauthGrant, and session-revocation use cases in `apps/server/src/modules/identity/session.service.ts` (FR-002, FR-003, FR-088)
-- [ ] T055 [P] [US1] Write onboarding, starter-label, default-currency override, stale-preference, timezone-warning, and retry tests in `apps/server/tests/integration/onboarding.spec.ts` (FR-004–FR-007, FR-009)
-- [ ] T056 [US1] Implement idempotent onboarding, privacy-notice acceptance, revisioned preferences, and exact starter-label seeding in `apps/server/src/modules/onboarding/onboarding.service.ts` (FR-004–FR-007, FR-051)
-- [ ] T057 [US1] Implement provider-neutral identity, onboarding, preferences, account, and session HTTP controllers from OpenAPI in `apps/server/src/modules/identity/identity.controller.ts` and `apps/server/src/modules/onboarding/onboarding.controller.ts`
-- [ ] T058 [P] [US1] Write browser tests for signup, verification, login/logout, restore, invalid session, onboarding privacy copy, and empty state in `apps/web/tests/component/us1-auth-onboarding.spec.tsx`
-- [ ] T059 [US1] Implement authentication, verification/reset, session-expired, and fail-closed protected-route UI in `apps/web/src/features/auth/AuthRoutes.tsx`
-- [ ] T060 [US1] Implement privacy onboarding, preferences with timezone warning, starter-label/empty journal presentation, and recoverable preference form state in `apps/web/src/features/onboarding/OnboardingFlow.tsx` (FR-004–FR-007)
-- [ ] T061 [US1] Execute account/session endpoint and RLS two-user denial matrix in `tests/security/us1-account-isolation.spec.ts` (FR-008, FR-010; SC-015)
-- [ ] T062 [US1] Create `pnpm acceptance:us1` Playwright suite covering all US1 scenarios, failure states, privacy copy, and shared isolation regressions in `tests/acceptance/us1-private-journal.spec.ts`
-- [ ] T063 [US1] Invoke `pnpm acceptance:us1` in HTTPS integration environment and write content-safe story evidence to `ops/evidence/stories/us1.json` (FR-118)
+- [x] T047 [P] [US1] Build isolated pinned-Better-Auth compatibility contract for verification, reset single use, supported DB `session.token`, restoration, `expiresIn=7d`, `updateAge=1h`, 30-day app revocation, and current/other/all revocation in `tests/providers/better-auth.compat.spec.ts` (FR-001–FR-003)
+- [x] T048 [US1] After T032, T033, T042, T046, and T047 pass, execute all eight `pnpm test:auth:better-auth-compat` cases against real PostgreSQL, require zero Better Auth schema mismatch, verify email/reset at-rest/replay/expiry/cleanup and null OAuth fields, record schema/query snapshots without token values in `ops/evidence/provider/better-auth-compat.json`, and block T049–T063 on any unsupported behavior
+- [x] T049 [P] [US1] Write auth, verification, reset, enumeration-safe error, cookie, session, and recent-auth HTTP contract tests in `apps/server/tests/contract/identity-api.contract.spec.ts` (FR-001–FR-003, FR-008)
+- [x] T050 [US1] Configure Better Auth PostgreSQL adapter with dedicated identity pool (`cashmemo_identity`), Argon2id callbacks, supported core token semantics, disabled cookie cache/stateless/secondary storage, and secure host-only cookie in `apps/server/src/modules/identity/better-auth.adapter.ts` — REOPENED: adapter must use dedicated identity pool instead of cashmemo_runtime
+- [x] T051 [US1] Implement signup, verification/resend, login, logout, one-hour single-use reset, and reset-driven revoke-all flows in `apps/server/src/modules/identity/identity.service.ts` (FR-001, FR-008, FR-009)
+- [x] T052 [P] [US1] Implement project-owned email port, generic verification/reset templates, Mailpit adapter, and content-free delivery events in `apps/server/src/modules/identity/email.port.ts` and `apps/server/src/adapters/aws/ses-email.adapter.ts`
+- [x] T053 [P] [US1] Write controlled-clock session inactivity/refresh/absolute-expiry, fixation, reset, revoke-current/others/all, and ReauthGrant tests in `apps/server/tests/integration/sessions.spec.ts` (FR-002, FR-003, FR-088)
+- [x] T054 [US1] Implement protected-request session middleware, 30-day supported revocation, ten-minute one-time scoped ReauthGrant, and session-revocation use cases in `apps/server/src/modules/identity/session.service.ts` (FR-002, FR-003, FR-088)
+- [x] T055 [P] [US1] Write onboarding, starter-label, default-currency override, stale-preference, timezone-warning, and retry tests in `apps/server/tests/integration/onboarding.spec.ts` (FR-004–FR-007, FR-009)
+- [x] T056 [US1] Implement idempotent onboarding, privacy-notice acceptance, revisioned preferences, and exact starter-label seeding in `apps/server/src/modules/onboarding/onboarding.service.ts` (FR-004–FR-007, FR-051)
+- [x] T057 [US1] Implement provider-neutral identity, onboarding, preferences, account, and session HTTP controllers from OpenAPI in `apps/server/src/modules/identity/identity.controller.ts` and `apps/server/src/modules/onboarding/onboarding.controller.ts`
+- [x] T058 [P] [US1] Write browser tests for signup, verification, login/logout, restore, invalid session, onboarding privacy copy, and empty state in `apps/web/tests/component/us1-auth-onboarding.spec.tsx` — DEPENDS ON: T002 web scaffold
+- [x] T059 [US1] Implement authentication, verification/reset, session-expired, and fail-closed protected-route UI in `apps/web/src/features/auth/AuthRoutes.tsx` — DEPENDS ON: T002 web scaffold
+- [x] T060 [US1] Implement privacy onboarding, preferences with timezone warning, starter-label/empty journal presentation, and recoverable preference form state in `apps/web/src/features/onboarding/OnboardingFlow.tsx` (FR-004–FR-007) — DEPENDS ON: T002 web scaffold
+- [x] T061 [US1] Execute account/session endpoint and RLS two-user denial matrix in `tests/security/us1-account-isolation.spec.ts` (FR-008, FR-010; SC-015)
+- [x] T062 [US1] Create `pnpm acceptance:us1` Playwright suite covering all US1 scenarios, failure states, privacy copy, and shared isolation regressions in `tests/acceptance/us1-private-journal.spec.ts` — DEPENDS ON: T002 web scaffold, T058–T060
+- [x] T063 [US1] Invoke `pnpm acceptance:us1` in HTTPS integration environment and write content-safe story evidence to `ops/evidence/stories/us1.json` (FR-118)
 
 **Checkpoint**: US1 independently works. Failed T048 forbids undocumented auth workarounds.
 
@@ -177,7 +177,7 @@
 - [ ] T096 [P] [US6] Write detector-before-label/search, URL/log exclusion, Unicode/control-input, and no-cross-user-value tests in `apps/server/tests/privacy/search-label-boundaries.spec.ts` (FR-056, FR-060, FR-075, FR-078)
 - [ ] T097 [US6] Implement owned Category/MoneySpace create/rename/deactivate/restore services with normalized active uniqueness and reference safety in `apps/server/src/modules/labels/labels.service.ts` (FR-051–FR-055)
 - [ ] T098 [US6] Implement category and Money Space OpenAPI endpoints with revision/idempotency/privacy checks in `apps/server/src/modules/labels/labels.controller.ts`
-- [ ] T099 [US6] Add generated `simple` text-search projection, GIN index, and transactional label-name refresh migration in `apps/server/src/adapters/postgres/migrations/0003_search_projection.sql` (FR-056)
+- [ ] T099 [US6] Add generated `simple` text-search projection, GIN index, and transactional label-name refresh migration in `apps/server/src/adapters/postgres/migrations/0005_search_projection.sql` (FR-056)
 - [ ] T100 [US6] Implement account-first search and intersection-filter repository with bound transient query values in `apps/server/src/modules/history/search.repository.ts` (FR-056–FR-060)
 - [ ] T101 [US6] Increment HistoryListState transactionally for label rename/status changes affecting search/filter membership in `apps/server/src/modules/labels/history-invalidation.ts` (FR-030, FR-052, SC-026)
 - [ ] T102 [P] [US6] Implement label management UI that presents Money Spaces only as context labels and preserves failed edits in `apps/web/src/features/labels/LabelManager.tsx` (FR-052–FR-055)
@@ -486,7 +486,7 @@ P1–P16 + external approvals ─→ P17 real-service/full-release evidence
 
 - No dependency cycle exists.
 - Phase 6 must finish before any history/search acceptance claims stable multi-page traversal.
-- T048 failure blocks T049–T063 and forbids custom session-token workarounds.
+- T048 depends explicitly on reconciled T032, T033, T042, T046, and T047. Its failure blocks T049–T063 and forbids custom session-token workarounds.
 - T176 is required before purge workers T177/T178; real irreversible-deletion acceptance remains open until T185–T200 and T268.
 - Phase-local acceptance suite creation always precedes its invocation: US1 T062→T063, US2 T067→T083, US3 T150→T151, US4 T114→T115, US5 T162→T163, US6 T105→T106, US7 T123→T124, US8 T183→T184, full MVP T269→T270.
 - T151/T184 explicitly cannot close real-provider/restore requirements; only Phase 17 can.

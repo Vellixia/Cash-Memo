@@ -4,24 +4,40 @@ import { resolve } from "node:path";
 
 import type { Pool } from "pg";
 
-export const MIGRATION_FILES = ["0001_cashmemo_mvp.sql", "0002_roles_rls.sql"] as const;
+export const ACCEPTED_PRE_0003_MIGRATION_FILES = [
+  "0001_cashmemo_mvp.sql",
+  "0002_roles_rls.sql",
+] as const;
+export const MIGRATION_FILES = [
+  ...ACCEPTED_PRE_0003_MIGRATION_FILES,
+  "0003_better_auth_compat.sql",
+  "0004_identity_access_boundary.sql",
+] as const;
+export type MigrationFilename = (typeof MIGRATION_FILES)[number];
 
 export const migrationDirectory = resolve(
   import.meta.dirname,
   "../../../src/adapters/postgres/migrations",
 );
 
-export async function readMigration(filename: (typeof MIGRATION_FILES)[number]): Promise<string> {
+export async function readMigration(filename: MigrationFilename): Promise<string> {
   return readFile(resolve(migrationDirectory, filename), "utf8");
 }
 
-export async function applyMigrations(pool: Pool): Promise<void> {
-  for (const filename of MIGRATION_FILES) {
+export async function applyMigrationFiles(
+  pool: Pool,
+  filenames: readonly MigrationFilename[],
+): Promise<void> {
+  for (const filename of filenames) {
     const migration = await readMigration(filename);
     for (const statement of migration.split("--> statement-breakpoint")) {
       if (statement.trim().length > 0) await pool.query(statement);
     }
   }
+}
+
+export async function applyMigrations(pool: Pool): Promise<void> {
+  await applyMigrationFiles(pool, MIGRATION_FILES);
 }
 
 export async function verifyMigrationChecksums(): Promise<Readonly<Record<string, string>>> {

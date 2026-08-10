@@ -47,10 +47,10 @@ async function insertReferenceData(client: PoolClient): Promise<void> {
 
 async function insertAccounts(client: PoolClient): Promise<void> {
   await client.query(
-    `INSERT INTO users (id, email, email_verified_at, status)
+    `INSERT INTO users (id, name, email, email_verified, status)
      VALUES
-       ($1, 'synthetic-one@example.test', timestamp '2026-01-01 00:00:00+00', 'active'),
-       ($2, 'synthetic-two@example.test', timestamp '2026-01-01 00:00:00+00', 'active')
+       ($1, 'Cashmemo account', 'synthetic-one@example.test', true, 'active'),
+       ($2, 'Cashmemo account', 'synthetic-two@example.test', true, 'active')
      ON CONFLICT (id) DO NOTHING`,
     [syntheticIds.accountOne, syntheticIds.accountTwo],
   );

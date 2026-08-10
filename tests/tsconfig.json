@@ -2,8 +2,11 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "noEmit": true,
-    "types": ["node", "vitest/globals"]
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals", "@playwright/test"]
   },
   "include": ["**/*.ts", "**/*.tsx"]
 }

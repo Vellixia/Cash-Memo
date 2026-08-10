@@ -1,44 +1,38 @@
 <!--
 Sync Impact Report
 ==================
-Version change: TEMPLATE (unversioned placeholders) → 1.0.0
-Bump rationale: Initial ratification. First concrete constitution replacing the
-unfilled template; no prior version to compare for backward compatibility.
+Version change: 1.0.0 → 2.0.0
+Bump rationale: Principle I previously imposed universal rejection of prohibited data on
+every arbitrary input path. Cashmemo permanently supports free text and voice, where finite
+detectors cannot prove complete semantic detection. Replacing that absolute with dedicated-
+collection prohibitions, mandatory behavior for supported detectors, and explicit best-effort
+limits is a backward-incompatible principle redefinition and therefore requires a MAJOR bump.
 
 Modified principles:
-  [PRINCIPLE_1_NAME] → I. Privacy by Default
-  [PRINCIPLE_2_NAME] → II. User-Confirmed Truth
-  [PRINCIPLE_3_NAME] → III. Temporary Audio
-  [PRINCIPLE_4_NAME] → IV. Graceful Degradation
-  [PRINCIPLE_5_NAME] → V. Data Ownership
+  I. Privacy by Default → I. Privacy by Default (reconciled dedicated collection,
+  finite detection controls, diagnostic isolation, and arbitrary-input limitations)
 
 Added sections:
-  - Principle VI. Architecture Discipline (expanded beyond template's 5 slots)
-  - Principle VII. Reliability
-  - Principle VIII. Security
-  - Principle IX. Quality Gates
-  - Principle X. Scope Discipline
-  - Product Constraints (filled [SECTION_2_NAME])
-  - Development Workflow & Evidence (filled [SECTION_3_NAME])
+  - none
 
 Removed sections: none
 
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md — "Constitution Check" defers to this file
-     dynamically ("[Gates determined based on constitution file]"); Complexity Tracking
-     table already carries violation justification. No edit required.
-  ✅ .specify/templates/spec-template.md — no constitution-specific slots; independently
-     testable user stories (Principle IX) already the template's organizing unit.
-  ✅ .specify/templates/tasks-template.md — task categorization by user story already
-     satisfies Principle IX; principle-driven task types (privacy tests, deletion tests,
-     idempotency) are per-feature, not template-level.
+  ✅ .specify/templates/plan-template.md — Constitution Check resolves principles dynamically;
+     no edit required.
+  ✅ .specify/templates/spec-template.md — principle-specific privacy controls belong in each
+     feature's requirements; no edit required.
+  ✅ .specify/templates/tasks-template.md — detector, privacy, and limitation evidence tasks are
+     generated from feature requirements; no edit required.
   ✅ .specify/templates/checklist-template.md — no changes required.
-  ✅ .claude/skills/speckit-*/SKILL.md — all reference `.specify/memory/constitution.md`
-     generically; no outdated or agent-specific naming found.
+  ✅ .agents/skills/speckit-*/SKILL.md and .claude/skills/speckit-*/SKILL.md — all resolve
+     constitution rules dynamically; no outdated semantic reference found.
   ✅ Runtime guidance docs — repository has no README.md or docs/ yet; when added, they
      MUST reference this constitution.
 
-Follow-up TODOs: none. All placeholders resolved.
+Follow-up TODOs:
+  ✅ specs/001-cashmemo-mvp/spec.md — FR-077 and Constitution Alignment reconciled during the
+    resumed clarification session. Remaining clarifications are unrelated to this amendment.
 -->
 
 # Cashmemo Constitution
@@ -47,10 +41,27 @@ Follow-up TODOs: none. All placeholders resolved.
 
 ### I. Privacy by Default
 
-- The system MUST NOT request, accept, transmit, or store bank credentials, bank account
-  numbers, payment card numbers, CVV/CVC codes, bank statements, banking access tokens, or
-  government identification numbers. Any input path that could receive such a value MUST
-  reject it at the trust boundary rather than storing and later scrubbing it.
+- Cashmemo MUST NOT intentionally request or encourage users to provide, infer into dedicated
+  attributes, or provide dedicated fields for bank credentials, bank account numbers, payment
+  card numbers, CVV/CVC codes, full bank statements, banking access tokens, or government
+  identification numbers. Cashmemo MUST NOT use any of these data classes to connect to a bank
+  or as an intended product input.
+- At every persistence or provider-transmission boundary covered by a supported finite detector,
+  the detector MUST run before the boundary is crossed. When it identifies candidate prohibited
+  content, Cashmemo MUST apply the warning or blocking behavior defined by the governing feature
+  specification; it MUST NOT silently persist or transmit the matched candidate first and scrub
+  it later. Detector rules, boundary coverage, and warning/blocking behavior MUST be testable.
+- Detection within arbitrary free text, transcripts, or natural language is finite and MUST be
+  treated as best effort. Specifications, interfaces, evidence, and product claims MUST NOT imply
+  complete semantic detection, and MUST disclose material false-positive and false-negative
+  limitations for supported detectors.
+- Candidate sensitive content, matched values, normalized detector material, and detector
+  derivatives MUST NOT enter logs, traces, metrics, analytics, diagnostics, crash reports,
+  acceptance evidence, or AI/STT requests unrelated to the user's explicit current capture
+  operation. Diagnostics MUST identify operations and records only through content-free values
+  and opaque identifiers.
+- Every arbitrary free-text, transcript-editing, or voice entry point MUST clearly instruct users
+  not to enter sensitive banking, card-secret, statement, access-token, or identity information.
 - Data collection MUST be limited to what Money Memo functionality requires. Adding a new
   persisted field REQUIRES an explicit specification entry stating why the feature cannot
   work without it.
@@ -60,8 +71,10 @@ Follow-up TODOs: none. All placeholders resolved.
   identifier only.
 
 Rationale: Cashmemo's reason to exist is that recording money does not require handing over
-banking access. A single leaked log line breaks that promise permanently and cannot be
-retracted.
+banking access. Product-controlled collection and handling can be absolute; semantic recognition
+inside arbitrary language cannot. Strong, testable controls over dedicated fields, detected
+candidates, diagnostics, provider boundaries, and user guidance protect the promise without
+claiming an impossible universal detector.
 
 ### II. User-Confirmed Truth
 
@@ -171,9 +184,12 @@ full cross-user disclosure.
 - The required gate set is: formatting, linting, type checking, unit tests, integration
   tests, privacy tests, and acceptance evidence. All gates MUST pass before a feature is
   considered complete.
-- Privacy tests MUST at minimum assert that prohibited data classes (Principle I) are
-  rejected at the boundary and that sensitive content is absent from log, trace, and error
-  output.
+- Privacy tests MUST at minimum assert that released interfaces contain no dedicated collection
+  or solicitation for prohibited data classes; each supported finite detector applies its
+  specified warning/blocking behavior before covered persistence and provider boundaries; and
+  candidate values, detector material, and sensitive content remain absent from diagnostics,
+  evidence, and unrelated provider requests. Evidence MUST also verify that arbitrary-input
+  detection is described as best effort rather than semantically complete.
 - Mock-only evidence is insufficient where a requirement expects real integration behavior.
   Such requirements MUST be evidenced against the real dependency or against a fake verified
   by a contract test run against the real dependency.
@@ -207,9 +223,12 @@ expenses using text or voice. Cashmemo does not connect to bank accounts.
 - **Confirmed record**: a Money Memo the user explicitly confirmed. Authoritative per
   Principle II.
 
-**Prohibited data classes** — never requested, accepted, or stored: bank credentials, bank
-account numbers, payment card numbers, CVV/CVC codes, bank statements, banking access tokens,
-government identification numbers.
+**Prohibited data classes** — never intentionally requested or encouraged, inferred into
+dedicated attributes, or collected through dedicated fields: bank credentials, bank account
+numbers, payment card numbers, CVV/CVC codes, full bank statements, banking access tokens, and
+government identification numbers. Arbitrary user text or speech may incidentally contain such
+content; Principle I governs user guidance, supported finite detectors, warning/blocking behavior,
+provider boundaries, diagnostic isolation, and honest best-effort limitations.
 
 **Technology boundaries**
 
@@ -239,6 +258,9 @@ government identification numbers.
   requirement.
 - Deletion, retention, and audio-lifecycle behavior (Principles III and V) record evidence
   per specified path, not per happy path.
+- Principle I evidence records each supported detector's covered boundaries and expected
+  warning/blocking result, seeded diagnostic and unrelated-provider non-disclosure checks, and
+  the measured or documented limits of arbitrary-language detection.
 
 **Review expectations**
 
@@ -266,9 +288,19 @@ Versioning is semantic:
 - **MINOR**: a principle or section is added, or existing guidance is materially expanded.
 - **PATCH**: clarifications, wording, and non-semantic refinements.
 
+**Version 2.0.0 reconciliation record**: Version 1.0.0 required every input path to reject all
+prohibited sensitive information before acceptance, transmission, or storage. That universal rule
+was structurally incompatible with Cashmemo's permanent arbitrary natural-language text and voice
+capabilities because finite detectors cannot prove complete semantic recognition. Version 2.0.0
+narrows only that impossible absolute: dedicated collection remains prohibited; supported detector
+hits require defined pre-boundary controls; detector and candidate material remains excluded from
+diagnostics and unrelated provider requests; user guidance is mandatory; and detection outside
+finite rules is explicitly best effort. This amendment is a general product rule, not a Feature 001
+exception.
+
 **Compliance review**: Every feature's Constitution Check gate is evaluated against this
 file before Phase 0 research and re-evaluated after Phase 1 design. Constitution conflicts
 found during analysis are CRITICAL and are resolved by adjusting the spec, plan, or tasks —
 never by reinterpreting or silently ignoring a principle.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-07-31
+**Version**: 2.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-09

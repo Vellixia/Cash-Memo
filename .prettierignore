@@ -13,3 +13,4 @@ ops/evidence/
 packages/currency-registry/REVIEW.md
 specs/
 specs/001-cashmemo-mvp/contracts/openapi.yaml
+test-results/

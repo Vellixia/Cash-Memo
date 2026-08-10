@@ -1,0 +1,121 @@
+installed:
+- quality-gates
+settings:
+  auto_execute_hooks: true
+hooks:
+  after_constitution:
+  - extension: quality-gates
+    command: speckit.quality-gates.spec
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.spec?
+    description: Require active specifications to remain compatible with the amended
+      constitution
+    condition: null
+  after_specify:
+  - extension: quality-gates
+    command: speckit.quality-gates.spec
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.spec?
+    description: Block structurally invalid, contradictory, or constitution-incompatible
+      specifications
+    condition: null
+  after_clarify:
+  - extension: quality-gates
+    command: speckit.quality-gates.spec
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.spec?
+    description: Require clarification decisions to be incorporated without contradictions
+    condition: null
+  after_checklist:
+  - extension: quality-gates
+    command: speckit.quality-gates.spec
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.spec?
+    description: Recheck specification quality after requirements-checklist work
+    condition: null
+  before_plan:
+  - extension: quality-gates
+    command: speckit.quality-gates.spec
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.spec?
+    description: Require stable, clarified, constitution-compatible specification
+      before planning
+    condition: null
+  after_plan:
+  - extension: quality-gates
+    command: speckit.quality-gates.artifacts
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.artifacts?
+    description: Require spec-plan consistency and constitution-compatible scoped
+      architecture
+    condition: null
+  before_tasks:
+  - extension: quality-gates
+    command: speckit.quality-gates.artifacts
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.artifacts?
+    description: Require stable specification and plan before task generation
+    condition: null
+  after_tasks:
+  - extension: quality-gates
+    command: speckit.quality-gates.artifacts
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.artifacts?
+    description: Require requirement coverage, valid ordering, real parallelism, paths,
+      and ownership
+    condition: null
+  before_implement:
+  - extension: quality-gates
+    command: speckit.quality-gates.artifacts
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.artifacts?
+    description: Block implementation when artifact analysis has critical/high findings
+      or task cycles
+    condition: null
+  after_implement:
+  - extension: quality-gates
+    command: speckit.quality-gates.implementation
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.implementation?
+    description: Require actual implementation and evidence for checked tasks within
+      selected scope
+    condition: null
+  before_converge:
+  - extension: quality-gates
+    command: speckit.quality-gates.implementation
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.implementation?
+    description: Require evidence-aware implementation assessment before convergence
+    condition: null
+  after_converge:
+  - extension: quality-gates
+    command: speckit.quality-gates.implementation
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Execute speckit.quality-gates.implementation?
+    description: Block feature completion while unbuilt work or acceptance/evidence
+      gaps remain
+    condition: null

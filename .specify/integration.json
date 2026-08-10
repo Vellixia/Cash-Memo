@@ -6,7 +6,11 @@
   ],
   "integration_settings": {
     "codex": {
-      "script": "py",
+      "script": "sh",
+      "raw_options": "--skills",
+      "parsed_options": {
+        "skills": true
+      },
       "invoke_separator": "-"
     }
   },

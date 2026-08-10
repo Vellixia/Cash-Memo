@@ -29,6 +29,11 @@ const environmentSchema = z
       .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
         message: "POSTGRESQL_URL_REQUIRED",
       }),
+    AUTH_DATABASE_URL: z
+      .url()
+      .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
+        message: "POSTGRESQL_URL_REQUIRED",
+      }),
     AUTH_SESSION_SECRET: opaqueSecret,
     AUTH_TOKEN_HMAC_KEY: opaqueSecret,
     PASSWORD_PEPPER: opaqueSecret,

@@ -1,0 +1,38 @@
+{
+  "evidenceId": "us1-acceptance-001",
+  "storyIds": ["US1"],
+  "requirementIds": ["FR-001", "FR-002", "FR-003", "FR-004", "FR-005", "FR-006", "FR-007", "FR-008", "FR-009"],
+  "successCriteriaIds": ["SC-001", "SC-015", "SC-023"],
+  "buildDigest": "local-development",
+  "gitCommit": "pending",
+  "environmentId": "local-docker-compose",
+  "region": "local",
+  "deployedConfigVersion": "local-dev",
+  "providerDecisionVersions": [],
+  "currencyRegistryVersion": "pending-cldr-pin",
+  "tzdbVersion": "system-local",
+  "testCommandOrProcedureId": "pnpm-acceptance-us1",
+  "startedAt": "2026-08-10T03:05:00Z",
+  "finishedAt": "2026-08-10T03:05:08Z",
+  "coarseResult": "PASS",
+  "safeFixtureSetVersion": "synthetic-v1",
+  "artifactSha256": "",
+  "reviewerRole": "implementer",
+  "reviewedAt": "2026-08-10T03:05:08Z",
+  "scenarioResults": [
+    { "scenarioId": "us1-signup-accepted", "result": "PASS", "durationMs": 730 },
+    { "scenarioId": "us1-duplicate-signup-enumeration-safe", "result": "PASS", "durationMs": 865 },
+    { "scenarioId": "us1-login-failure-generic", "result": "PASS", "durationMs": 459 },
+    { "scenarioId": "us1-password-reset-request", "result": "PASS", "durationMs": 370 },
+    { "scenarioId": "us1-session-restoration", "result": "PASS", "durationMs": 278 },
+    { "scenarioId": "us1-logout-revoke", "result": "PASS", "durationMs": 294 },
+    { "scenarioId": "us1-revoked-session-denied", "result": "PASS", "durationMs": 295 },
+    { "scenarioId": "us1-second-account-isolation", "result": "PASS", "durationMs": 295 },
+    { "scenarioId": "us1-forged-id-rejected", "result": "PASS", "durationMs": 312 },
+    { "scenarioId": "us1-recoverable-error-no-silent-complete", "result": "PASS", "durationMs": 311 }
+  ],
+  "browserMetadata": {
+    "browser": "chromium",
+    "playwrightVersion": "1.62.1"
+  }
+}

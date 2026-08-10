@@ -1,0 +1,1 @@
+../../../.specify/extensions/quality-gates/.specify-dev/agent-commands/claude/speckit-quality-gates-spec/SKILL.md

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   customType,
   foreignKey,
@@ -13,12 +14,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-
-const citext = customType<{ data: string }>({
-  dataType() {
-    return "citext";
-  },
-});
 
 const bytea = customType<{ data: Buffer }>({
   dataType() {
@@ -48,20 +43,17 @@ export const onboardingState = pgEnum("onboarding_state", [
 ]);
 export const categoryKind = pgEnum("category_kind", ["income", "expense"]);
 export const labelStatus = pgEnum("label_status", ["active", "inactive"]);
-export const verificationPurpose = pgEnum("verification_purpose", [
-  "verify_email",
-  "reset_password",
-]);
-
 const timestampWithTimezone = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 
 export const users = pgTable(
   "users",
   {
-    id: uuid("id").primaryKey(),
-    email: citext("email").notNull(),
-    emailVerifiedAt: timestampWithTimezone("email_verified_at"),
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
     status: userStatus("status").notNull().default("pending_verification"),
     createdAt: timestampWithTimezone("created_at").notNull().defaultNow(),
     updatedAt: timestampWithTimezone("updated_at").notNull().defaultNow(),
@@ -71,10 +63,12 @@ export const users = pgTable(
   },
   (table) => [
     unique("users_email_unique").on(table.email),
+    check("users_auth_name_compatibility", sql`${table.name} = 'Cashmemo account'`),
+    check("users_email_normalized", sql`${table.email} = lower(${table.email})`),
     check("users_revision_positive", sql`${table.revision} > 0`),
     check(
       "users_verified_active_state",
-      sql`${table.status} NOT IN ('active', 'deletion_grace', 'purging') OR ${table.emailVerifiedAt} IS NOT NULL`,
+      sql`${table.status} NOT IN ('active', 'deletion_grace', 'purging') OR ${table.emailVerified} = true`,
     ),
   ],
 );
@@ -82,13 +76,19 @@ export const users = pgTable(
 export const credentialAccounts = pgTable(
   "credential_accounts",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: text("account_id").notNull(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
-    passwordHash: text("password_hash").notNull(),
-    passwordChangedAt: timestampWithTimezone("password_changed_at").notNull(),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestampWithTimezone("access_token_expires_at"),
+    refreshTokenExpiresAt: timestampWithTimezone("refresh_token_expires_at"),
+    scope: text("scope"),
+    passwordHash: text("password_hash"),
     createdAt: timestampWithTimezone("created_at").notNull().defaultNow(),
     updatedAt: timestampWithTimezone("updated_at").notNull().defaultNow(),
   },
@@ -96,7 +96,15 @@ export const credentialAccounts = pgTable(
     unique("credential_accounts_owner_provider_unique").on(table.userId, table.provider),
     unique("credential_accounts_owner_id_unique").on(table.userId, table.id),
     check("credential_accounts_provider_credential", sql`${table.provider} = 'credential'`),
-    check("credential_accounts_password_hash_nonempty", sql`length(${table.passwordHash}) > 0`),
+    check("credential_accounts_account_id_nonempty", sql`length(${table.accountId}) > 0`),
+    check(
+      "credential_accounts_password_hash_nonempty",
+      sql`${table.provider} <> 'credential' OR (${table.passwordHash} IS NOT NULL AND length(${table.passwordHash}) > 0)`,
+    ),
+    check(
+      "credential_accounts_credential_oauth_fields_null",
+      sql`${table.provider} <> 'credential' OR (${table.accessToken} IS NULL AND ${table.refreshToken} IS NULL AND ${table.idToken} IS NULL AND ${table.accessTokenExpiresAt} IS NULL AND ${table.refreshTokenExpiresAt} IS NULL AND ${table.scope} IS NULL)`,
+    ),
     index("credential_accounts_owner_idx").on(table.userId),
   ],
 );
@@ -104,23 +112,21 @@ export const credentialAccounts = pgTable(
 export const verificationTokens = pgTable(
   "verification_tokens",
   {
-    id: uuid("id").primaryKey(),
-    purpose: verificationPurpose("purpose").notNull(),
-    subjectHmac: bytea("subject_hmac").notNull(),
-    tokenHash: bytea("token_hash").notNull(),
+    id: uuid("id").defaultRandom().primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
     expiresAt: timestampWithTimezone("expires_at").notNull(),
-    usedAt: timestampWithTimezone("used_at"),
     createdAt: timestampWithTimezone("created_at").notNull().defaultNow(),
+    updatedAt: timestampWithTimezone("updated_at").notNull().defaultNow(),
   },
   (table) => [
-    unique("verification_tokens_token_hash_unique").on(table.tokenHash),
+    check("verification_tokens_identifier_nonempty", sql`char_length(${table.identifier}) = 43`),
     check(
-      "verification_tokens_subject_hmac_nonempty",
-      sql`octet_length(${table.subjectHmac}) >= 32`,
+      "verification_tokens_value_nonempty",
+      sql`${table.value} ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'`,
     ),
-    check("verification_tokens_token_hash_nonempty", sql`octet_length(${table.tokenHash}) >= 32`),
     check("verification_tokens_expiry_after_create", sql`${table.expiresAt} > ${table.createdAt}`),
-    index("verification_tokens_subject_purpose_idx").on(table.subjectHmac, table.purpose),
+    index("verification_tokens_identifier_idx").on(table.identifier),
     index("verification_tokens_expiry_idx").on(table.expiresAt),
   ],
 );
@@ -128,7 +134,7 @@ export const verificationTokens = pgTable(
 export const sessions = pgTable(
   "sessions",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

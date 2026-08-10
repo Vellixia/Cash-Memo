@@ -1,0 +1,1610 @@
+openapi: 3.1.0
+info:
+  title: Cashmemo MVP Product API
+  version: 1.0.0
+  license:
+    name: Proprietary - internal product contract; no rights granted
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Stable provider-neutral API. Only MoneyMemo responses are authoritative financial
+    records. Draft, capture, transcript, and extraction responses are non-authoritative.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+tags:
+  - name: Auth
+    description: Verified email/password, supported Better Auth database sessions, revocation, and reauthentication.
+  - name: Account
+    description: Current account and onboarding behavior.
+  - name: Preferences
+    description: Default currency, locale, and reporting-timezone preferences.
+  - name: Memos
+    description: Authoritative Money Memo creation, retrieval, editing, lifecycle, and versioned traversal.
+  - name: Drafts
+    description: Non-authoritative manual, natural-language, transcript, and structured drafts.
+  - name: Voice
+    description: Temporary-audio, transcription, extraction, and degraded voice-capture states.
+  - name: Labels
+    description: User-owned categories and organizational Money Spaces.
+  - name: Reporting
+    description: Deterministic currency-partitioned current-month and monthly review calculations.
+  - name: Exports
+    description: Versioned export generation, secure delivery, expiry, and deletion.
+  - name: Deletion
+    description: Recently Deleted, irreversible purge, and account-deletion lifecycle.
+
+paths:
+  /auth/sign-up:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: signUp
+      summary: Sign up
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignUpRequest' }
+      responses:
+        '202':
+          description: Generic accepted response; does not reveal prior account existence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenericAuthAccepted' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/verification/resend:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: resendVerification
+      summary: Resend verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '202':
+          description: Enumeration-safe accepted response.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenericAuthAccepted' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: verifyEmail
+      summary: Verify email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 32, maxLength: 512 }
+      responses:
+        '204': { description: Email verified; user must sign in. }
+        '400': { $ref: '#/components/responses/AuthActionInvalid' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: login
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Session cookie set; journal access requires active verified account.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionView' }
+        '401': { $ref: '#/components/responses/AuthFailed' }
+        '403': { $ref: '#/components/responses/EmailNotVerified' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/password-reset/request:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: requestPasswordReset
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '202':
+          description: Enumeration-safe accepted response.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenericAuthAccepted' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/password-reset/complete:
+    post:
+      tags: [Auth]
+      security: []
+      operationId: completePasswordReset
+      summary: Complete password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, newPassword]
+              properties:
+                token: { type: string, minLength: 32, maxLength: 512 }
+                newPassword: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '204': { description: Password changed and all sessions revoked. }
+        '400': { $ref: '#/components/responses/AuthActionInvalid' }
+  /auth/session:
+    get:
+      tags: [Auth]
+      operationId: getSession
+      summary: Get session
+      responses:
+        '200':
+          description: Current active session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionView' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Logout
+      responses:
+        '204': { description: Current session revoked and cookie cleared. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /auth/reauthenticate:
+    post:
+      tags: [Auth]
+      operationId: reauthenticate
+      summary: Reauthenticate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password, scopes]
+              properties:
+                password: { type: string, minLength: 1, maxLength: 128 }
+                scopes:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { $ref: '#/components/schemas/ReauthScope' }
+      responses:
+        '200':
+          description: Session-bound grant; destructive grants are single-use.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [reauthGrant, scopes, expiresAt]
+                properties:
+                  reauthGrant: { type: string, minLength: 32, maxLength: 512 }
+                  scopes: { type: array, items: { $ref: '#/components/schemas/ReauthScope' } }
+                  expiresAt: { $ref: '#/components/schemas/Instant' }
+        '401': { $ref: '#/components/responses/AuthFailed' }
+  /auth/sessions/revoke-others:
+    post:
+      tags: [Auth]
+      operationId: revokeOtherSessions
+      summary: Revoke other sessions
+      parameters:
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      responses:
+        '204': { description: All sessions except current revoked. }
+        '401': { $ref: '#/components/responses/ReauthRequired' }
+
+  /me:
+    get:
+      tags: [Account]
+      operationId: getMe
+      summary: Get me
+      responses:
+        '200':
+          description: Account/profile state; contains no journal values.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeView' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /me/onboarding:
+    put:
+      tags: [Account]
+      operationId: completeOnboarding
+      summary: Complete onboarding
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OnboardingRequest' }
+      responses:
+        '200':
+          description: Onboarding complete; identical retry returns same state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeView' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /me/preferences:
+    get:
+      tags: [Preferences]
+      operationId: getPreferences
+      summary: Get preferences
+      responses:
+        '200':
+          description: Current preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferencesView' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    patch:
+      tags: [Preferences]
+      operationId: updatePreferences
+      summary: Update preferences
+      parameters:
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision]
+              properties:
+                expectedRevision: { $ref: '#/components/schemas/Revision' }
+                defaultCurrency: { $ref: '#/components/schemas/CurrencyCode' }
+                reportingTimezone: { $ref: '#/components/schemas/Timezone' }
+                locale: { type: string, minLength: 2, maxLength: 35 }
+      responses:
+        '200':
+          description: Updated preferences; timezone changes include warning code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferencesView' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+  /me/account-deletion:
+    post:
+      tags: [Deletion]
+      operationId: requestAccountDeletion
+      summary: Request account deletion
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirmation]
+              properties:
+                confirmation: { const: DELETE_MY_CASHMEMO_ACCOUNT }
+      responses:
+        '202':
+          description: Seven-day grace started; journal access suspended.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountDeletionView' }
+        '401': { $ref: '#/components/responses/ReauthRequired' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+    get:
+      tags: [Deletion]
+      operationId: getAccountDeletion
+      summary: Get account deletion
+      responses:
+        '200':
+          description: Current account deletion state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountDeletionView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Deletion]
+      operationId: cancelAccountDeletion
+      summary: Cancel account deletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision]
+              properties:
+                expectedRevision: { $ref: '#/components/schemas/Revision' }
+      responses:
+        '204': { description: Grace-period deletion canceled and account reactivated. }
+        '409': { $ref: '#/components/responses/StateConflict' }
+
+  /memos:
+    post:
+      tags: [Memos]
+      operationId: confirmManualMemo
+      summary: Confirm manual memo
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ManualMemoConfirmRequest' }
+      responses:
+        '201':
+          description: Explicitly confirmed authoritative Money Memo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    get:
+      tags: [Memos]
+      operationId: listMemos
+      summary: List memos
+      description: Lists active by default. No free-text search term is accepted in a URL.
+      parameters:
+        - name: cursor
+          in: query
+          description: Opaque authenticated continuation bound to result-set version and canonical list state.
+          schema: { type: string, maxLength: 512 }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: lifecycle, in: query, schema: { $ref: '#/components/schemas/HistoryLifecycle' } }
+      responses:
+        '200':
+          description: Version-bound stable keyset page ordered by occurrence then immutable ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemoPage' }
+        '409': { $ref: '#/components/responses/ResultsChanged' }
+  /memos/search:
+    post:
+      tags: [Memos]
+      operationId: searchMemos
+      summary: Search memos
+      description: POST keeps sensitive search/filter values out of URLs and access logs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemoSearchRequest' }
+      responses:
+        '200':
+          description: Intersection-filtered, version-bound stable keyset page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemoPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/ResultsChanged' }
+  /memos/{memoId}:
+    parameters:
+      - { $ref: '#/components/parameters/MemoId' }
+    get:
+      tags: [Memos]
+      operationId: getMemo
+      summary: Get memo
+      responses:
+        '200':
+          description: Owned authoritative memo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Memos]
+      operationId: updateMemo
+      summary: Update memo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoneyMemoUpdate' }
+      responses:
+        '200':
+          description: Current authoritative values replaced; revision incremented.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+  /memos/{memoId}/archive:
+    post:
+      tags: [Memos]
+      operationId: archiveMemo
+      summary: Archive memo
+      parameters:
+        - { $ref: '#/components/parameters/MemoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Archived; still included in deterministic aggregates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+    delete:
+      tags: [Memos]
+      operationId: restoreArchivedMemo
+      summary: Restore archived memo
+      parameters:
+        - { $ref: '#/components/parameters/MemoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Restored to active.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+  /memos/{memoId}/recently-deleted:
+    post:
+      tags: [Deletion]
+      operationId: moveMemoToRecentlyDeleted
+      summary: Move memo to recently deleted
+      parameters:
+        - { $ref: '#/components/parameters/MemoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Hidden from normal views; prior state retained for 30-day restore.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecentlyDeletedMemo' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+    delete:
+      tags: [Deletion]
+      operationId: restoreRecentlyDeletedMemo
+      summary: Restore recently deleted memo
+      parameters:
+        - { $ref: '#/components/parameters/MemoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Restored to prior active or archived state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+  /memos/{memoId}/purge:
+    post:
+      tags: [Deletion]
+      operationId: purgeMemoNow
+      summary: Purge memo now
+      parameters:
+        - { $ref: '#/components/parameters/MemoId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision, confirmation]
+              properties:
+                expectedRevision: { $ref: '#/components/schemas/Revision' }
+                confirmation: { const: PURGE_MONEY_MEMO }
+      responses:
+        '202': { description: Irreversible purge accepted; live purge due within 24 hours. }
+        '401': { $ref: '#/components/responses/ReauthRequired' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+  /recently-deleted:
+    get:
+      tags: [Deletion]
+      operationId: listRecentlyDeleted
+      summary: List recently deleted
+      parameters:
+        - name: cursor
+          in: query
+          description: Opaque authenticated continuation bound to result-set version and recovery-list state.
+          schema: { type: string, maxLength: 512 }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Dedicated recovery list only.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecentlyDeletedPage' }
+        '409': { $ref: '#/components/responses/ResultsChanged' }
+
+  /drafts:
+    post:
+      tags: [Drafts]
+      operationId: createDraft
+      summary: Create draft
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftCreateRequest' }
+      responses:
+        '201':
+          description: Non-authoritative recoverable draft.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '422': { $ref: '#/components/responses/PrivacyBoundaryBlocked' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    get:
+      tags: [Drafts]
+      operationId: listDrafts
+      summary: List drafts
+      responses:
+        '200':
+          description: Recoverable non-authoritative drafts only.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Draft' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /drafts/text-extraction:
+    post:
+      tags: [Drafts]
+      operationId: createTextExtraction
+      summary: Create text extraction
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text, captureStartedAt, captureTimezone, consent]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 4000 }
+                captureStartedAt: { $ref: '#/components/schemas/Instant' }
+                captureTimezone: { $ref: '#/components/schemas/Timezone' }
+                consent: { const: SEND_THIS_TEXT_FOR_AI_EXTRACTION }
+      responses:
+        '202':
+          description: Non-authoritative extraction queued or completed; poll draft.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '422': { $ref: '#/components/responses/PrivacyBoundaryBlocked' }
+        '503': { $ref: '#/components/responses/CapabilityUnavailable' }
+  /drafts/{draftId}:
+    parameters:
+      - { $ref: '#/components/parameters/DraftId' }
+    get:
+      tags: [Drafts]
+      operationId: getDraft
+      summary: Get draft
+      responses:
+        '200':
+          description: Non-authoritative draft.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Drafts]
+      operationId: updateDraft
+      summary: Update draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftUpdateRequest' }
+      responses:
+        '200':
+          description: Updated non-authoritative draft.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '409': { $ref: '#/components/responses/DraftRevisionConflict' }
+        '422': { $ref: '#/components/responses/PrivacyBoundaryBlocked' }
+    delete:
+      tags: [Drafts]
+      operationId: discardDraft
+      summary: Discard draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '202': { description: Draft inaccessible immediately; cleanup due within 24 hours. }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+  /drafts/{draftId}/extract:
+    post:
+      tags: [Drafts]
+      operationId: extractEditedDraftText
+      summary: Extract edited draft text
+      parameters:
+        - { $ref: '#/components/parameters/DraftId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision, consent]
+              properties:
+                expectedRevision: { $ref: '#/components/schemas/Revision' }
+                consent: { const: SEND_THIS_TEXT_FOR_AI_EXTRACTION }
+      responses:
+        '202':
+          description: Extraction started; existing text remains recoverable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/PrivacyBoundaryBlocked' }
+        '503': { $ref: '#/components/responses/CapabilityUnavailable' }
+  /drafts/{draftId}/confirm:
+    post:
+      tags: [Drafts, Memos]
+      operationId: confirmDraft
+      summary: Confirm draft
+      parameters:
+        - { $ref: '#/components/parameters/DraftId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision, confirmation, fields]
+              properties:
+                expectedRevision: { $ref: '#/components/schemas/Revision' }
+                confirmation: { const: CONFIRM_MONEY_MEMO }
+                fields: { $ref: '#/components/schemas/MoneyMemoInput' }
+      responses:
+        '201':
+          description: One authoritative memo created; AI/STT fields were revalidated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneyMemo' }
+        '409': { $ref: '#/components/responses/StateRevisionOrIdempotencyConflict' }
+
+  /voice-captures:
+    post:
+      tags: [Voice]
+      operationId: startVoiceCapture
+      summary: Start voice capture
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [captureStartedAt, captureTimezone, sttConsent, aiConsent]
+              properties:
+                captureStartedAt: { $ref: '#/components/schemas/Instant' }
+                captureTimezone: { $ref: '#/components/schemas/Timezone' }
+                sttConsent: { const: SEND_THIS_RECORDING_FOR_TRANSCRIPTION }
+                aiConsent: { const: SEND_THE_TRANSCRIPT_FOR_AI_EXTRACTION }
+      responses:
+        '201':
+          description: Voice capture state; contains no audio URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoiceCapture' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/CapabilityUnavailable' }
+  /voice-captures/{captureId}:
+    parameters:
+      - { $ref: '#/components/parameters/CaptureId' }
+    get:
+      tags: [Voice]
+      operationId: getVoiceCapture
+      summary: Get voice capture
+      responses:
+        '200':
+          description: Provider-neutral processing state and draft reference.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoiceCapture' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Voice]
+      operationId: cancelVoiceCapture
+      summary: Cancel voice capture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '202': { description: Capture canceled; raw-audio deletion takes priority. }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+  /voice-captures/{captureId}/audio:
+    put:
+      tags: [Voice]
+      operationId: uploadVoiceAudio
+      summary: Upload voice audio
+      parameters:
+        - { $ref: '#/components/parameters/CaptureId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          audio/webm: { schema: { type: string, format: binary, maxLength: 10485760 } }
+          audio/ogg: { schema: { type: string, format: binary, maxLength: 10485760 } }
+          audio/mp4: { schema: { type: string, format: binary, maxLength: 10485760 } }
+          audio/wav: { schema: { type: string, format: binary, maxLength: 10485760 } }
+          audio/mpeg: { schema: { type: string, format: binary, maxLength: 10485760 } }
+      responses:
+        '202':
+          description: Accepted only after server type/size/duration checks; max 60 seconds.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoiceCapture' }
+        '400': { $ref: '#/components/responses/AudioInvalid' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '503': { $ref: '#/components/responses/CapabilityUnavailable' }
+
+  /categories:
+    get:
+      tags: [Labels]
+      operationId: listCategories
+      summary: List categories
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/LabelStatus' } }
+        - { name: kind, in: query, schema: { $ref: '#/components/schemas/Direction' } }
+      responses:
+        '200':
+          description: Owned categories.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Category' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Labels]
+      operationId: createCategory
+      summary: Create category
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [kind, name]
+              properties:
+                kind: { $ref: '#/components/schemas/Direction' }
+                name: { $ref: '#/components/schemas/LabelName' }
+      responses:
+        '201':
+          description: Category created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '409': { $ref: '#/components/responses/LabelConflict' }
+        '422': { $ref: '#/components/responses/PrivacyBoundaryBlocked' }
+  /categories/{categoryId}:
+    patch:
+      tags: [Labels]
+      operationId: updateCategory
+      summary: Update category
+      parameters:
+        - { $ref: '#/components/parameters/CategoryId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LabelUpdate' }
+      responses:
+        '200':
+          description: Renamed/deactivated/restored category.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+  /money-spaces:
+    get:
+      tags: [Labels]
+      operationId: listMoneySpaces
+      summary: List money spaces
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/LabelStatus' } }
+      responses:
+        '200':
+          description: Owned organizational labels; never accounts/balances.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MoneySpace' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Labels]
+      operationId: createMoneySpace
+      summary: Create money space
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { $ref: '#/components/schemas/LabelName' }
+      responses:
+        '201':
+          description: Money Space created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneySpace' }
+        '409': { $ref: '#/components/responses/LabelConflict' }
+        '422': { $ref: '#/components/responses/PrivacyBoundaryBlocked' }
+  /money-spaces/{moneySpaceId}:
+    patch:
+      tags: [Labels]
+      operationId: updateMoneySpace
+      summary: Update money space
+      parameters:
+        - { $ref: '#/components/parameters/MoneySpaceId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LabelUpdate' }
+      responses:
+        '200':
+          description: Renamed/deactivated/restored Money Space.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoneySpace' }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+
+  /overview/current-month:
+    get:
+      tags: [Reporting]
+      operationId: getCurrentMonthOverview
+      summary: Get current month overview
+      responses:
+        '200':
+          description: Deterministic currency-partitioned overview in current reporting timezone.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Overview' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/CalculationUnavailable' }
+  /reviews/monthly/{month}:
+    get:
+      tags: [Reporting]
+      operationId: getMonthlyReview
+      summary: Get monthly review
+      parameters:
+        - name: month
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+      responses:
+        '200':
+          description: Deterministic currency-partitioned selected/prior-month comparison.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonthlyReview' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/CalculationUnavailable' }
+
+  /exports:
+    post:
+      tags: [Exports]
+      operationId: requestExport
+      summary: Request export
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [schemaVersion, includeRecoverableDrafts]
+              properties:
+                schemaVersion: { const: '1.0' }
+                includeRecoverableDrafts: { type: boolean }
+      responses:
+        '202':
+          description: Idempotent export job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJob' }
+        '401': { $ref: '#/components/responses/ReauthRequired' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    get:
+      tags: [Exports]
+      operationId: listExports
+      summary: List exports
+      responses:
+        '200':
+          description: Current account export jobs.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ExportJob' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /exports/{exportId}:
+    get:
+      tags: [Exports]
+      operationId: getExport
+      summary: Get export
+      parameters:
+        - { $ref: '#/components/parameters/ExportId' }
+      responses:
+        '200':
+          description: Export generation/deletion state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJob' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Exports]
+      operationId: cancelExport
+      summary: Cancel export
+      parameters:
+        - { $ref: '#/components/parameters/ExportId' }
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '202': { description: Export canceled/inaccessible; package deletion queued. }
+        '409': { $ref: '#/components/responses/StateOrRevisionConflict' }
+  /exports/{exportId}/download:
+    post:
+      tags: [Exports]
+      operationId: downloadExport
+      summary: Download export
+      parameters:
+        - { $ref: '#/components/parameters/ExportId' }
+        - { $ref: '#/components/parameters/ReauthGrant' }
+      responses:
+        '200':
+          description: Same-origin authenticated stream; internal S3 URL is never exposed.
+          headers:
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="cashmemo-export-2026-08-09.zip"' }
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/ReauthRequired' }
+        '409': { $ref: '#/components/responses/ExportNotReady' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-cashmemo_session
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Caller-generated UUID; same key/content replays one result, different content conflicts.
+      schema: { type: string, format: uuid }
+    ReauthGrant:
+      name: X-Reauth-Grant
+      in: header
+      required: true
+      description: Session-bound short-lived grant; never placed in URL or logs.
+      schema: { type: string, minLength: 32, maxLength: 512 }
+    MemoId: { name: memoId, in: path, required: true, schema: { type: string, format: uuid } }
+    DraftId: { name: draftId, in: path, required: true, schema: { type: string, format: uuid } }
+    CaptureId: { name: captureId, in: path, required: true, schema: { type: string, format: uuid } }
+    CategoryId: { name: categoryId, in: path, required: true, schema: { type: string, format: uuid } }
+    MoneySpaceId: { name: moneySpaceId, in: path, required: true, schema: { type: string, format: uuid } }
+    ExportId: { name: exportId, in: path, required: true, schema: { type: string, format: uuid } }
+
+  schemas:
+    Instant: { type: string, format: date-time }
+    LocalDateTime: { type: string, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,3})?$' }
+    Timezone: { type: string, minLength: 1, maxLength: 64, description: Canonical IANA time-zone identifier. }
+    Revision: { type: string, pattern: '^[1-9][0-9]*$', description: Monotonic positive integer serialized as a string. }
+    CurrencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+    MinorUnits: { type: string, pattern: '^[1-9][0-9]*$', maxLength: 19 }
+    DecimalAmount:
+      type: string
+      pattern: '^(0\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\.[0-9]+)?)$'
+      maxLength: 20
+      description: Positive canonical decimal after currency validation; JSON numbers forbidden.
+    Direction: { type: string, enum: [income, expense] }
+    Purpose: { type: [string, 'null'], enum: [personal, work, mixed, null] }
+    PlanningStatus: { type: [string, 'null'], enum: [planned, unplanned, null] }
+    MemoLifecycle: { type: string, enum: [active, archived] }
+    HistoryLifecycle: { type: string, enum: [active, archived, all_non_deleted] }
+    LabelStatus: { type: string, enum: [active, inactive] }
+    ReauthScope: { type: string, enum: [export, purge, account_delete, sessions, preferences] }
+    Money:
+      type: object
+      additionalProperties: false
+      required: [amount, amountMinor, currency, currencyExponent, currencyRegistryVersion]
+      properties:
+        amount: { $ref: '#/components/schemas/DecimalAmount' }
+        amountMinor: { $ref: '#/components/schemas/MinorUnits' }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        currencyExponent: { type: integer, minimum: 0, maximum: 3 }
+        currencyRegistryVersion: { type: string, minLength: 1, maxLength: 40 }
+    MoneyInput:
+      type: object
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount: { $ref: '#/components/schemas/DecimalAmount' }
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+    Occurrence:
+      type: object
+      additionalProperties: false
+      required: [occurredAt, occurredLocal, occurredTimezone, occurredOffsetMinutes, timezoneDatabaseVersion]
+      properties:
+        occurredAt: { $ref: '#/components/schemas/Instant' }
+        occurredLocal: { $ref: '#/components/schemas/LocalDateTime' }
+        occurredTimezone: { $ref: '#/components/schemas/Timezone' }
+        occurredOffsetMinutes: { type: integer, minimum: -840, maximum: 840 }
+        timezoneDatabaseVersion: { type: string, minLength: 1, maxLength: 40 }
+    OccurrenceInput:
+      type: object
+      additionalProperties: false
+      required: [occurredAt, occurredLocal, occurredTimezone, occurredOffsetMinutes]
+      properties:
+        occurredAt: { $ref: '#/components/schemas/Instant' }
+        occurredLocal: { $ref: '#/components/schemas/LocalDateTime' }
+        occurredTimezone: { $ref: '#/components/schemas/Timezone' }
+        occurredOffsetMinutes: { type: integer, minimum: -840, maximum: 840 }
+    SignUpRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, idempotencyKey]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 128 }
+        idempotencyKey: { type: string, format: uuid }
+    EmailRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 128 }
+    GenericAuthAccepted:
+      type: object
+      additionalProperties: false
+      required: [status, messageCode]
+      properties:
+        status: { const: accepted }
+        messageCode: { const: CHECK_EMAIL_IF_ELIGIBLE }
+    SessionView:
+      type: object
+      additionalProperties: false
+      required: [sessionId, userId, createdAt, idleExpiresAt, absoluteExpiresAt]
+      properties:
+        sessionId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        createdAt: { $ref: '#/components/schemas/Instant' }
+        idleExpiresAt: { $ref: '#/components/schemas/Instant' }
+        absoluteExpiresAt: { $ref: '#/components/schemas/Instant' }
+    PreferenceInput:
+      type: object
+      required: [defaultCurrency, reportingTimezone, locale]
+      properties:
+        defaultCurrency: { $ref: '#/components/schemas/CurrencyCode' }
+        reportingTimezone: { $ref: '#/components/schemas/Timezone' }
+        locale: { type: string, minLength: 2, maxLength: 35 }
+    OnboardingRequest:
+      allOf:
+        - { $ref: '#/components/schemas/PreferenceInput' }
+        - type: object
+          required: [privacyNoticeVersion]
+          properties:
+            privacyNoticeVersion: { type: string, pattern: '^[0-9]+\.[0-9]+$' }
+      unevaluatedProperties: false
+    PreferencesView:
+      allOf:
+        - { $ref: '#/components/schemas/PreferenceInput' }
+        - type: object
+          required: [revision, timezoneBoundaryWarningRequired]
+          properties:
+            revision: { $ref: '#/components/schemas/Revision' }
+            timezoneBoundaryWarningRequired: { type: boolean }
+      unevaluatedProperties: false
+    MeView:
+      type: object
+      additionalProperties: false
+      required: [userId, emailVerified, accountStatus, onboardingState, profileRevision, preferences]
+      properties:
+        userId: { type: string, format: uuid }
+        emailVerified: { type: boolean }
+        accountStatus: { type: string, enum: [pending_verification, active, deletion_grace, purging, locked] }
+        onboardingState: { type: string, enum: [not_started, in_progress, complete] }
+        profileRevision: { $ref: '#/components/schemas/Revision' }
+        preferences:
+          oneOf:
+            - { $ref: '#/components/schemas/PreferencesView' }
+            - { type: 'null' }
+    MoneyMemoInputBase:
+      type: object
+      required: [direction, money, occurrence, categoryId, moneySpaceId, purpose, planningStatus, note]
+      properties:
+        direction: { $ref: '#/components/schemas/Direction' }
+        money: { $ref: '#/components/schemas/MoneyInput' }
+        occurrence: { $ref: '#/components/schemas/OccurrenceInput' }
+        categoryId: { type: [string, 'null'], format: uuid }
+        moneySpaceId: { type: [string, 'null'], format: uuid }
+        purpose: { $ref: '#/components/schemas/Purpose' }
+        planningStatus: { $ref: '#/components/schemas/PlanningStatus' }
+        note: { type: [string, 'null'], maxLength: 4000 }
+    MoneyMemoInput:
+      allOf:
+        - { $ref: '#/components/schemas/MoneyMemoInputBase' }
+      unevaluatedProperties: false
+    ManualMemoConfirmRequest:
+      allOf:
+        - { $ref: '#/components/schemas/MoneyMemoInputBase' }
+        - type: object
+          required: [confirmation]
+          properties:
+            confirmation: { const: CONFIRM_MONEY_MEMO }
+      unevaluatedProperties: false
+    MoneyMemoUpdate:
+      allOf:
+        - { $ref: '#/components/schemas/MoneyMemoInputBase' }
+        - type: object
+          required: [expectedRevision]
+          properties:
+            expectedRevision: { $ref: '#/components/schemas/Revision' }
+      unevaluatedProperties: false
+    MoneyMemoBase:
+      type: object
+      required: [authoritative, id, direction, money, occurrence, categoryId, moneySpaceId, purpose, planningStatus, note, origin, revision, createdAt, updatedAt]
+      properties:
+        authoritative: { const: true }
+        id: { type: string, format: uuid }
+        direction: { $ref: '#/components/schemas/Direction' }
+        money: { $ref: '#/components/schemas/Money' }
+        occurrence: { $ref: '#/components/schemas/Occurrence' }
+        categoryId: { type: [string, 'null'], format: uuid }
+        moneySpaceId: { type: [string, 'null'], format: uuid }
+        purpose: { $ref: '#/components/schemas/Purpose' }
+        planningStatus: { $ref: '#/components/schemas/PlanningStatus' }
+        note: { type: [string, 'null'], maxLength: 4000 }
+        origin: { type: string, enum: [manual, natural_language, voice] }
+        revision: { $ref: '#/components/schemas/Revision' }
+        createdAt: { $ref: '#/components/schemas/Instant' }
+        updatedAt: { $ref: '#/components/schemas/Instant' }
+    MoneyMemo:
+      allOf:
+        - { $ref: '#/components/schemas/MoneyMemoBase' }
+        - type: object
+          required: [lifecycle]
+          properties:
+            lifecycle: { $ref: '#/components/schemas/MemoLifecycle' }
+      unevaluatedProperties: false
+    RecentlyDeletedMemo:
+      allOf:
+        - { $ref: '#/components/schemas/MoneyMemoBase' }
+        - type: object
+          required: [lifecycle, priorLifecycle, deletedAt, purgeAfter]
+          properties:
+            lifecycle: { const: recently_deleted }
+            priorLifecycle: { type: string, enum: [active, archived] }
+            deletedAt: { $ref: '#/components/schemas/Instant' }
+            purgeAfter: { $ref: '#/components/schemas/Instant' }
+      unevaluatedProperties: false
+    MemoSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [query, filters, cursor, limit]
+      properties:
+        query: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        filters:
+          type: object
+          additionalProperties: false
+          required: [from, to, directions, categoryIds, moneySpaceIds, purposes, planningStatuses, currencies, lifecycles]
+          properties:
+            from: { type: [string, 'null'], format: date-time }
+            to: { type: [string, 'null'], format: date-time }
+            directions: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Direction' } }
+            categoryIds: { type: array, uniqueItems: true, items: { type: string, format: uuid } }
+            moneySpaceIds: { type: array, uniqueItems: true, items: { type: string, format: uuid } }
+            purposes: { type: array, uniqueItems: true, items: { type: string, enum: [personal, work, mixed, unspecified] } }
+            planningStatuses: { type: array, uniqueItems: true, items: { type: string, enum: [planned, unplanned, unspecified] } }
+            currencies: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/CurrencyCode' } }
+            lifecycles: { type: array, uniqueItems: true, items: { type: string, enum: [active, archived] } }
+        cursor:
+          type: [string, 'null']
+          maxLength: 512
+          description: Opaque authenticated continuation; server rejects query/filter or result-set-version mismatch.
+        limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    MemoPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, resultSetVersion]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MoneyMemo' } }
+        nextCursor: { type: [string, 'null'] }
+        resultSetVersion: { $ref: '#/components/schemas/Revision' }
+    RecentlyDeletedPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, resultSetVersion]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/RecentlyDeletedMemo' } }
+        nextCursor: { type: [string, 'null'] }
+        resultSetVersion: { $ref: '#/components/schemas/Revision' }
+    DraftCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [origin, sourceText, sourceCompleteness, fields, captureStartedAt, captureTimezone]
+      properties:
+        origin: { type: string, enum: [manual, natural_language, voice] }
+        sourceText: { type: [string, 'null'], maxLength: 4000 }
+        sourceCompleteness: { type: string, enum: [complete, incomplete, not_applicable] }
+        fields: { $ref: '#/components/schemas/MoneyMemoDraftFields' }
+        captureStartedAt: { $ref: '#/components/schemas/Instant' }
+        captureTimezone: { $ref: '#/components/schemas/Timezone' }
+    DraftUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, sourceText, sourceCompleteness, fields]
+      properties:
+        expectedRevision: { $ref: '#/components/schemas/Revision' }
+        sourceText: { type: [string, 'null'], maxLength: 4000 }
+        sourceCompleteness: { type: string, enum: [complete, incomplete, not_applicable] }
+        fields: { $ref: '#/components/schemas/MoneyMemoDraftFields' }
+    MoneyMemoDraftFields:
+      type: object
+      additionalProperties: false
+      required: [direction, amount, currency, occurredLocal, occurredTimezone, occurredOffsetMinutes, categoryId, moneySpaceId, purpose, planningStatus, note]
+      properties:
+        direction: { type: [string, 'null'], enum: [income, expense, null] }
+        amount: { type: [string, 'null'], pattern: '^(0|[1-9][0-9]*)(\.[0-9]+)?$' }
+        currency: { type: [string, 'null'], pattern: '^[A-Z]{3}$' }
+        occurredLocal: { type: [string, 'null'] }
+        occurredTimezone: { type: [string, 'null'] }
+        occurredOffsetMinutes: { type: [integer, 'null'], minimum: -840, maximum: 840 }
+        categoryId: { type: [string, 'null'], format: uuid }
+        moneySpaceId: { type: [string, 'null'], format: uuid }
+        purpose: { $ref: '#/components/schemas/Purpose' }
+        planningStatus: { $ref: '#/components/schemas/PlanningStatus' }
+        note: { type: [string, 'null'], maxLength: 4000 }
+    FieldAssessment:
+      type: object
+      additionalProperties: false
+      required: [field, source, status, reasonCode]
+      properties:
+        field: { type: string, enum: [direction, amount, currency, occurredLocal, occurredTimezone, categoryId, moneySpaceId, purpose, planningStatus, note] }
+        source: { type: string, enum: [user, parser, stt, ai] }
+        status: { type: string, enum: [provided, inferred, uncertain, missing, contradictory, invalid] }
+        reasonCode: { type: [string, 'null'], enum: [AMBIGUOUS_AMOUNT, AMBIGUOUS_DATE, AMBIGUOUS_DIRECTION, UNSUPPORTED_CURRENCY, UNKNOWN_LABEL, CONTRADICTORY_TEXT, PROVIDER_OMISSION, null] }
+    Draft:
+      type: object
+      additionalProperties: false
+      required: [authoritative, id, origin, sourceText, sourceCompleteness, fields, assessments, status, captureStartedAt, captureTimezone, lastActivityAt, expiresAt, revision]
+      properties:
+        authoritative: { const: false }
+        id: { type: string, format: uuid }
+        origin: { type: string, enum: [manual, natural_language, voice] }
+        sourceText: { type: [string, 'null'], maxLength: 4000 }
+        sourceCompleteness: { type: string, enum: [complete, incomplete, not_applicable] }
+        fields: { $ref: '#/components/schemas/MoneyMemoDraftFields' }
+        assessments: { type: array, items: { $ref: '#/components/schemas/FieldAssessment' } }
+        status: { type: string, enum: [editing, processing, reviewable, blocked, failed_recoverable] }
+        captureStartedAt: { $ref: '#/components/schemas/Instant' }
+        captureTimezone: { $ref: '#/components/schemas/Timezone' }
+        lastActivityAt: { $ref: '#/components/schemas/Instant' }
+        expiresAt: { $ref: '#/components/schemas/Instant' }
+        revision: { $ref: '#/components/schemas/Revision' }
+    VoiceCapture:
+      type: object
+      additionalProperties: false
+      required: [authoritative, id, state, draftId, capability, revision, createdAt, audioExpiresAt]
+      properties:
+        authoritative: { const: false }
+        id: { type: string, format: uuid }
+        state: { type: string, enum: [recording, audio_ready, transcribing, transcript_review, extracting, draft_review, correction_required, failed_recoverable, canceled] }
+        draftId: { type: [string, 'null'], format: uuid }
+        capability:
+          type: object
+          additionalProperties: false
+          required: [stt, ai]
+          properties:
+            stt: { type: string, enum: [available, degraded, unavailable] }
+            ai: { type: string, enum: [available, degraded, unavailable] }
+        errorCode: { type: [string, 'null'], enum: [STT_UNAVAILABLE, STT_TIMEOUT, AUDIO_INVALID, NETWORK_INTERRUPTED, AI_UNAVAILABLE, AI_INVALID_OUTPUT, PRIVACY_BOUNDARY_BLOCKED, null] }
+        revision: { $ref: '#/components/schemas/Revision' }
+        createdAt: { $ref: '#/components/schemas/Instant' }
+        audioExpiresAt: { type: [string, 'null'], format: date-time }
+    LabelName: { type: string, minLength: 1, maxLength: 80 }
+    Category:
+      type: object
+      additionalProperties: false
+      required: [id, kind, name, status, revision]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/Direction' }
+        name: { $ref: '#/components/schemas/LabelName' }
+        status: { $ref: '#/components/schemas/LabelStatus' }
+        revision: { $ref: '#/components/schemas/Revision' }
+    MoneySpace:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, revision]
+      properties:
+        id: { type: string, format: uuid }
+        name: { $ref: '#/components/schemas/LabelName' }
+        status: { $ref: '#/components/schemas/LabelStatus' }
+        revision: { $ref: '#/components/schemas/Revision' }
+    LabelUpdate:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: { $ref: '#/components/schemas/Revision' }
+        name: { $ref: '#/components/schemas/LabelName' }
+        status: { $ref: '#/components/schemas/LabelStatus' }
+    RevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: { $ref: '#/components/schemas/Revision' }
+    CurrencyTotals:
+      type: object
+      required: [currency, currencyExponent, incomeMinor, expenseMinor, netMinor]
+      properties:
+        currency: { $ref: '#/components/schemas/CurrencyCode' }
+        currencyExponent: { type: integer, minimum: 0, maximum: 3 }
+        incomeMinor: { type: string, pattern: '^[0-9]+$' }
+        expenseMinor: { type: string, pattern: '^[0-9]+$' }
+        netMinor: { type: string, pattern: '^-?[0-9]+$' }
+    BreakdownBucket:
+      type: object
+      additionalProperties: false
+      required: [key, label, amountMinor]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 100 }
+        label: { type: string, minLength: 1, maxLength: 100 }
+        amountMinor: { type: string, pattern: '^[0-9]+$' }
+    CurrencyOverview:
+      allOf:
+        - { $ref: '#/components/schemas/CurrencyTotals' }
+        - type: object
+          required: [categoryBreakdown, planningBreakdown, purposeBreakdown]
+          properties:
+            categoryBreakdown: { type: array, items: { $ref: '#/components/schemas/BreakdownBucket' } }
+            planningBreakdown: { type: array, items: { $ref: '#/components/schemas/BreakdownBucket' } }
+            purposeBreakdown: { type: array, items: { $ref: '#/components/schemas/BreakdownBucket' } }
+      unevaluatedProperties: false
+    Overview:
+      type: object
+      additionalProperties: false
+      required: [period, reportingTimezone, currencies, recentMemos, calculatedAt]
+      properties:
+        period: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+        reportingTimezone: { $ref: '#/components/schemas/Timezone' }
+        currencies: { type: array, items: { $ref: '#/components/schemas/CurrencyOverview' } }
+        recentMemos: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/MoneyMemo' } }
+        calculatedAt: { $ref: '#/components/schemas/Instant' }
+    MonthlyCurrencyReview:
+      allOf:
+        - { $ref: '#/components/schemas/CurrencyTotals' }
+        - type: object
+          required: [largestExpenseCategories, unplannedExpenseMinor, priorMonth]
+          properties:
+            largestExpenseCategories: { type: array, items: { $ref: '#/components/schemas/BreakdownBucket' } }
+            unplannedExpenseMinor: { type: string, pattern: '^[0-9]+$' }
+            priorMonth:
+              type: object
+              additionalProperties: false
+              required: [expenseMinor, absoluteChangeMinor, percentageChange, percentageUnavailableReason]
+              properties:
+                expenseMinor: { type: string, pattern: '^[0-9]+$' }
+                absoluteChangeMinor: { type: string, pattern: '^-?[0-9]+$' }
+                percentageChange: { type: [string, 'null'], pattern: '^-?[0-9]+(\.[0-9]+)?$' }
+                percentageUnavailableReason: { type: [string, 'null'], enum: [PRIOR_VALUE_ZERO, null] }
+      unevaluatedProperties: false
+    MonthlyReview:
+      type: object
+      additionalProperties: false
+      required: [month, priorMonth, reportingTimezone, currencies, calculatedAt]
+      properties:
+        month: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+        priorMonth: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+        reportingTimezone: { $ref: '#/components/schemas/Timezone' }
+        currencies: { type: array, items: { $ref: '#/components/schemas/MonthlyCurrencyReview' } }
+        calculatedAt: { $ref: '#/components/schemas/Instant' }
+    ExportJob:
+      type: object
+      additionalProperties: false
+      required: [id, schemaVersion, state, requestedAt, readyAt, expiresAt, deletedAt, revision]
+      properties:
+        id: { type: string, format: uuid }
+        schemaVersion: { const: '1.0' }
+        state: { type: string, enum: [queued, running, ready, failed, canceled, expired, deleting, deleted] }
+        requestedAt: { $ref: '#/components/schemas/Instant' }
+        readyAt: { type: [string, 'null'], format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        deletedAt: { type: [string, 'null'], format: date-time }
+        failureCode: { type: [string, 'null'], enum: [GENERATION_FAILED, STORAGE_UNAVAILABLE, DELETION_PENDING, null] }
+        revision: { $ref: '#/components/schemas/Revision' }
+    AccountDeletionView:
+      type: object
+      additionalProperties: false
+      required: [id, state, requestedAt, graceEndsAt, livePurgeDueAt, livePurgedAt, providerState, revision]
+      properties:
+        id: { type: string, format: uuid }
+        state: { type: string, enum: [grace, canceled, purging, live_purged, provider_pending, complete, failed] }
+        requestedAt: { $ref: '#/components/schemas/Instant' }
+        graceEndsAt: { $ref: '#/components/schemas/Instant' }
+        livePurgeDueAt: { type: [string, 'null'], format: date-time }
+        livePurgedAt: { type: [string, 'null'], format: date-time }
+        providerState: { type: string, enum: [not_started, not_required, pending, confirmed, escalated] }
+        revision: { $ref: '#/components/schemas/Revision' }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, messageCode, correlationId, retryable, fieldErrors]
+      properties:
+        code:
+          type: string
+          enum: [VALIDATION_FAILED, UNAUTHENTICATED, AUTH_FAILED, EMAIL_NOT_VERIFIED, AUTH_ACTION_INVALID, REAUTH_REQUIRED, FORBIDDEN, NOT_FOUND, REVISION_CONFLICT, RESULTS_CHANGED, IDEMPOTENCY_CONFLICT, STATE_CONFLICT, LABEL_CONFLICT, PRIVACY_BOUNDARY_BLOCKED, AUDIO_INVALID, CAPABILITY_UNAVAILABLE, CALCULATION_UNAVAILABLE, EXPORT_NOT_READY, RATE_LIMITED, OPERATION_IN_PROGRESS]
+        messageCode: { type: string, pattern: '^[A-Z0-9_]+$' }
+        correlationId: { type: string, format: uuid }
+        retryable: { type: boolean }
+        retryAfterSeconds: { type: [integer, 'null'], minimum: 0 }
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [field, reason]
+            properties:
+              field: { type: string, pattern: '^[A-Za-z0-9_.]+$' }
+              reason: { type: string, pattern: '^[A-Z0-9_]+$' }
+        currentRevision: { oneOf: [{ $ref: '#/components/schemas/Revision' }, { type: 'null' }] }
+        currentResultSetVersion: { oneOf: [{ $ref: '#/components/schemas/Revision' }, { type: 'null' }] }
+        restartRequired: { type: [boolean, 'null'] }
+      description: Never contains request content, provider payload, detector value, prompt, transcript, or another user's data.
+    ResultsChangedError:
+      allOf:
+        - { $ref: '#/components/schemas/Error' }
+        - type: object
+          required: [currentResultSetVersion, restartRequired]
+          properties:
+            code: { const: RESULTS_CHANGED }
+            messageCode: { const: RESULTS_CHANGED_REFRESH_REQUIRED }
+            retryable: { const: false }
+            currentResultSetVersion: { $ref: '#/components/schemas/Revision' }
+            restartRequired: { const: true }
+
+  responses:
+    ValidationError:
+      description: Schema/domain validation failed; invalid values are not echoed.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    AuthFailed:
+      description: Generic credentials failure.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    EmailNotVerified:
+      description: Verification required; no journal session exists.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    AuthActionInvalid:
+      description: Token expired, used, or invalid; same public shape.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthenticated:
+      description: Missing, expired, revoked, or invalid session.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ReauthRequired:
+      description: Recent session-bound authentication required.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Missing or not owned; identical public response.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RevisionConflict:
+      description: Stale revision; no write. Reload required.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ResultsChanged:
+      description: >-
+        Cursor result-set version or canonical query/filter binding is obsolete. No page is
+        returned; restartRequired is true. Purged/inaccessible data is never replayed.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ResultsChangedError' } } }
+    DraftRevisionConflict:
+      description: Stale draft; no server overwrite. Client must retain conflicting local input for explicit resolution.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    IdempotencyConflict:
+      description: Same key used with different canonical content; no write.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    StateConflict:
+      description: Invalid lifecycle transition; no write.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    StateOrRevisionConflict:
+      description: Invalid state or stale revision; no write.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    StateRevisionOrIdempotencyConflict:
+      description: State, revision, or retry identity conflict; no authoritative write.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    LabelConflict:
+      description: Active normalized label name already exists.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    PrivacyBoundaryBlocked:
+      description: Supported detector found a candidate; value is not echoed, persisted, transmitted, or logged.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    AudioInvalid:
+      description: Unsupported type, invalid bytes, over 60 seconds, or over 10 MiB; content not echoed.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    CapabilityUnavailable:
+      description: Named STT or AI capability unavailable; manual structured entry remains available.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    CalculationUnavailable:
+      description: Named deterministic section unavailable; no stale/partial values presented as current.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ExportNotReady:
+      description: Export is not ready, is expired/canceled, or deletion is pending.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Account/IP scoped abuse control; response reveals no other user activity.
+      headers:
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

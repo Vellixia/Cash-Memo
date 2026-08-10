@@ -17,6 +17,7 @@ const ignores = [
   ".specify/**",
   "archive/**",
   "specs/**",
+  "playwright.config.ts",
 ];
 
 export default tseslint.config(
@@ -50,6 +51,17 @@ export default tseslint.config(
     files: ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
     languageOptions: {
       globals: globals.browser,
+    },
+    rules: {
+      "@typescript-eslint/no-confusing-void-expression": "off",
+    },
+  },
+  {
+    files: ["apps/web/tests/**/*.ts", "apps/web/tests/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/await-thenable": "off",
+      "@typescript-eslint/unbound-method": "off",
     },
   },
   {

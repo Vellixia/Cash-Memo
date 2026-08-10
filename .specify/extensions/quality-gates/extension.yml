@@ -1,0 +1,93 @@
+schema_version: "1.0"
+
+extension:
+  id: quality-gates
+  name: "Cashmemo Quality Gates"
+  version: "1.0.0"
+  description: "Read-only, fail-closed quality gates for Spec Kit feature artifacts and evidence"
+  author: cashmemo
+  license: MIT
+  effect: read-only
+
+requires:
+  speckit_version: ">=0.13.0"
+
+provides:
+  commands:
+    - name: speckit.quality-gates.spec
+      file: commands/speckit.quality-gates.spec.md
+      description: "Verify specification quality, clarification completeness, and constitution compatibility"
+    - name: speckit.quality-gates.artifacts
+      file: commands/speckit.quality-gates.artifacts.md
+      description: "Verify cross-artifact consistency, task coverage, ordering, ownership, and cycles"
+    - name: speckit.quality-gates.implementation
+      file: commands/speckit.quality-gates.implementation.md
+      description: "Verify implemented scope, checked-task evidence, acceptance gates, and convergence"
+
+hooks:
+  after_constitution:
+    command: speckit.quality-gates.spec
+    optional: false
+    priority: 10
+    description: "Require active specifications to remain compatible with the amended constitution"
+  after_specify:
+    command: speckit.quality-gates.spec
+    optional: false
+    priority: 10
+    description: "Block structurally invalid, contradictory, or constitution-incompatible specifications"
+  after_clarify:
+    command: speckit.quality-gates.spec
+    optional: false
+    priority: 10
+    description: "Require clarification decisions to be incorporated without contradictions"
+  after_checklist:
+    command: speckit.quality-gates.spec
+    optional: false
+    priority: 10
+    description: "Recheck specification quality after requirements-checklist work"
+  before_plan:
+    command: speckit.quality-gates.spec
+    optional: false
+    priority: 10
+    description: "Require stable, clarified, constitution-compatible specification before planning"
+  after_plan:
+    command: speckit.quality-gates.artifacts
+    optional: false
+    priority: 10
+    description: "Require spec-plan consistency and constitution-compatible scoped architecture"
+  before_tasks:
+    command: speckit.quality-gates.artifacts
+    optional: false
+    priority: 10
+    description: "Require stable specification and plan before task generation"
+  after_tasks:
+    command: speckit.quality-gates.artifacts
+    optional: false
+    priority: 10
+    description: "Require requirement coverage, valid ordering, real parallelism, paths, and ownership"
+  before_implement:
+    command: speckit.quality-gates.artifacts
+    optional: false
+    priority: 10
+    description: "Block implementation when artifact analysis has critical/high findings or task cycles"
+  after_implement:
+    command: speckit.quality-gates.implementation
+    optional: false
+    priority: 10
+    description: "Require actual implementation and evidence for checked tasks within selected scope"
+  before_converge:
+    command: speckit.quality-gates.implementation
+    optional: false
+    priority: 10
+    description: "Require evidence-aware implementation assessment before convergence"
+  after_converge:
+    command: speckit.quality-gates.implementation
+    optional: false
+    priority: 10
+    description: "Block feature completion while unbuilt work or acceptance/evidence gaps remain"
+
+tags:
+  - quality
+  - verification
+  - governance
+  - read-only

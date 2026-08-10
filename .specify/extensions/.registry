@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "quality-gates": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:337c7371dd45e4bc4c5ab25d8c12afdbf91f6b6d21d92b37bf6a11ef62a6ea88",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.quality-gates.spec",
+          "speckit.quality-gates.artifacts",
+          "speckit.quality-gates.implementation"
+        ],
+        "codex": [
+          "speckit.quality-gates.spec",
+          "speckit.quality-gates.artifacts",
+          "speckit.quality-gates.implementation"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-08-09T05:56:14.025850+00:00"
+    }
+  }
+}

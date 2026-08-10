@@ -84,7 +84,21 @@ const requiredColumnsByTable = {
     "result",
     "expires_at",
   ],
-  credential_accounts: ["id", "user_id", "provider", "password_hash", "password_changed_at"],
+  credential_accounts: [
+    "id",
+    "account_id",
+    "user_id",
+    "provider",
+    "password_hash",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "access_token_expires_at",
+    "refresh_token_expires_at",
+    "scope",
+    "created_at",
+    "updated_at",
+  ],
   currency_registry_entries: ["registry_version", "code", "exponent", "enabled"],
   currency_registry_versions: ["version", "source_cldr_version", "source_sha256", "status"],
   export_jobs: ["id", "user_id", "schema_version", "state", "snapshot_cutoff", "revision"],
@@ -123,13 +137,25 @@ const requiredColumnsByTable = {
     "expires_at",
     "revision",
   ],
-  users: ["id", "email", "email_verified_at", "status", "revision"],
-  verification_tokens: ["id", "purpose", "subject_hmac", "token_hash", "expires_at", "used_at"],
+  users: [
+    "id",
+    "name",
+    "email",
+    "email_verified",
+    "image",
+    "status",
+    "created_at",
+    "updated_at",
+    "revision",
+  ],
+  verification_tokens: ["id", "identifier", "value", "expires_at", "created_at", "updated_at"],
 } as const;
 
 interface InspectedColumn {
   dataType: string;
+  hasDefault: boolean;
   name: string;
+  notNull: boolean;
 }
 
 function inspectColumns(table: AnyPgTable): readonly InspectedColumn[] {
@@ -142,11 +168,25 @@ function inspectColumns(table: AnyPgTable): readonly InspectedColumn[] {
       throw new Error("INVALID_DRIZZLE_COLUMN");
     }
     const column = candidate as Record<string, unknown>;
-    if (typeof column["name"] !== "string" || typeof column["dataType"] !== "string") {
+    if (
+      typeof column["name"] !== "string" ||
+      typeof column["dataType"] !== "string" ||
+      typeof column["hasDefault"] !== "boolean" ||
+      typeof column["notNull"] !== "boolean"
+    ) {
       throw new Error("INVALID_DRIZZLE_COLUMN_SHAPE");
     }
-    return { dataType: column["dataType"], name: column["name"] };
+    return {
+      dataType: column["dataType"],
+      hasDefault: column["hasDefault"],
+      name: column["name"],
+      notNull: column["notNull"],
+    };
   });
+}
+
+function columnsByName(table: AnyPgTable): ReadonlyMap<string, InspectedColumn> {
+  return new Map(inspectColumns(table).map((column) => [column.name, column]));
 }
 
 describe("PostgreSQL schema matches all 24 persistent model contracts", () => {
@@ -201,6 +241,56 @@ describe("PostgreSQL schema matches all 24 persistent model contracts", () => {
           "government_id",
         ]),
       );
+    }
+  });
+
+  it("matches Better Auth 1.6.26 core identity shape without duplicate auth truth", () => {
+    for (const coreTable of [users, sessions, credentialAccounts, verificationTokens]) {
+      expect(columnsByName(coreTable).get("id")).toMatchObject({
+        dataType: "string",
+        hasDefault: true,
+        notNull: true,
+      });
+    }
+    const userColumns = columnsByName(users);
+    expect(userColumns.get("email_verified")).toMatchObject({
+      dataType: "boolean",
+      hasDefault: true,
+      notNull: true,
+    });
+    expect(userColumns.get("name")).toMatchObject({ dataType: "string", notNull: true });
+    expect(userColumns.get("image")).toMatchObject({ dataType: "string", notNull: false });
+    expect(userColumns.has("email_verified_at")).toBe(false);
+
+    const accountColumns = columnsByName(credentialAccounts);
+    expect(accountColumns.get("account_id")).toMatchObject({
+      dataType: "string",
+      notNull: true,
+    });
+    expect(accountColumns.get("password_hash")).toMatchObject({
+      dataType: "string",
+      notNull: false,
+    });
+    for (const oauthOnlyColumn of [
+      "access_token",
+      "refresh_token",
+      "id_token",
+      "access_token_expires_at",
+      "refresh_token_expires_at",
+      "scope",
+    ]) {
+      expect(accountColumns.get(oauthOnlyColumn), oauthOnlyColumn).toMatchObject({
+        notNull: false,
+      });
+    }
+    expect(accountColumns.has("password_changed_at")).toBe(false);
+
+    const verificationColumns = columnsByName(verificationTokens);
+    for (const coreColumn of ["identifier", "value", "expires_at", "created_at", "updated_at"]) {
+      expect(verificationColumns.get(coreColumn), coreColumn).toMatchObject({ notNull: true });
+    }
+    for (const legacyColumn of ["purpose", "subject_hmac", "token_hash", "used_at"]) {
+      expect(verificationColumns.has(legacyColumn), legacyColumn).toBe(false);
     }
   });
 

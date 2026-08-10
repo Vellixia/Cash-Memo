@@ -6,9 +6,10 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "lib": ["ES2024", "DOM", "DOM.Iterable", "WebWorker"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": ["vite/client", "vitest/globals"],
     "noEmit": true,
+    "skipLibCheck": true,
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/web.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "vite.config.ts"],
