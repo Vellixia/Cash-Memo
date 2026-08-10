@@ -4,11 +4,26 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import Fastify from "fastify";
 
+import { canonicalRequestHmac } from "@cashmemo/domain";
+
 import { parseEnvironment } from "./environment.schema.js";
 import { createBetterAuthAdapter } from "../modules/identity/better-auth.adapter.js";
 import { IdentityService } from "../modules/identity/identity.service.js";
 import { SessionService } from "../modules/identity/session.service.js";
 import { OnboardingService } from "../modules/onboarding/onboarding.service.js";
+import {
+  createMoneyMemo,
+  updateMoneyMemo,
+  getMoneyMemo,
+  archiveMoneyMemo,
+  restoreArchivedMoneyMemo,
+  moveToRecentlyDeleted,
+  restoreRecentlyDeleted,
+  initiatePurge,
+  MoneyMemoServiceError,
+} from "../modules/memo/money-memo.service.js";
+import { MoneyValidationError } from "@cashmemo/domain";
+import { withAccountTransaction } from "../adapters/postgres/transaction-context.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -36,13 +51,12 @@ async function main() {
       destination: string;
       oneTimeUrl: string;
     }) => {
-      const mailpitUrl = "http://127.0.0.1:8025";
-      await fetch(`${mailpitUrl}/api/v1/send`, {
+      await fetch("http://127.0.0.1:8025/api/v1/send", {
         body: JSON.stringify({
-          From: env.SES_FROM_ADDRESS,
+          From: { Email: env.SES_FROM_ADDRESS, Name: "Cashmemo" },
           Subject: "Reset your Cashmemo password",
           Text: `Use this link to reset your password:\n\n${oneTimeUrl}\n\nThis link expires in 1 hour.`,
-          To: [destination],
+          To: [{ Email: destination, Name: "" }],
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -55,13 +69,12 @@ async function main() {
       destination: string;
       oneTimeUrl: string;
     }) => {
-      const mailpitUrl = "http://127.0.0.1:8025";
-      await fetch(`${mailpitUrl}/api/v1/send`, {
+      await fetch("http://127.0.0.1:8025/api/v1/send", {
         body: JSON.stringify({
-          From: env.SES_FROM_ADDRESS,
+          From: { Email: env.SES_FROM_ADDRESS, Name: "Cashmemo" },
           Subject: "Verify your Cashmemo email address",
           Text: `Use this link to verify your email address:\n\n${oneTimeUrl}\n\nThis link expires in 24 hours.`,
-          To: [destination],
+          To: [{ Email: destination, Name: "" }],
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -89,10 +102,24 @@ async function main() {
 
   const app = Fastify({ logger: false });
 
-  // CORS for development
+  // Allow body parsing for DELETE requests (needed for revision checks)
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    try {
+      const json = JSON.parse(body as string) as unknown;
+      done(null, json);
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
+  // CORS — production uses APP_ORIGIN only; local dev also allows HTTP/HTTPS localhost
+  const allowedOrigins =
+    env.APP_ENV === "local"
+      ? [env.APP_ORIGIN, "http://localhost:5173", "https://localhost:5173"]
+      : [env.APP_ORIGIN];
   await app.register(import("@fastify/cors"), {
     credentials: true,
-    origin: [env.APP_ORIGIN, "http://localhost:5173", "https://localhost:5173"],
+    origin: allowedOrigins,
   });
 
   // ─── Custom auth endpoints that use the identity service ───
@@ -328,6 +355,337 @@ async function main() {
       revision: prefs.revision,
       timezoneBoundaryWarningRequired: false,
     });
+  });
+
+  // ─── Money Memo endpoints ───
+
+  app.post("/api/v1/memos", async (request, reply) => {
+    try {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(request.headers)) {
+        if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+      }
+      const ctx = await sessions.authenticate(headers);
+      if (ctx === null) {
+        reply.code(401).send();
+        return;
+      }
+      const idempotencyKey = request.headers["x-idempotency-key"] as string;
+      if (!idempotencyKey) {
+        reply.code(400).send({ messageCode: "VALIDATION_ERROR" });
+        return;
+      }
+      const body = request.body as {
+        confirmation: string;
+        direction: "income" | "expense";
+        money: { amount: string; currency: string };
+        occurrence: {
+          occurredAt: string;
+          occurredLocal: string;
+          occurredTimezone: string;
+          occurredOffsetMinutes: number;
+          timezoneDatabaseVersion: string;
+        };
+        categoryId: string | null;
+        moneySpaceId: string | null;
+        purpose: "personal" | "work" | "mixed" | null;
+        planningStatus: "planned" | "unplanned" | null;
+        note: string | null;
+      };
+      if (body.confirmation !== "CONFIRM_MONEY_MEMO") {
+        reply.code(400).send({ messageCode: "VALIDATION_ERROR" });
+        return;
+      }
+      const requestHmac = canonicalRequestHmac({
+        hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+        operation: "memo_create",
+        payload: body,
+        schemaVersion: "memo-create-v1",
+      });
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return createMoneyMemo(
+          tx,
+          {
+            categoryId: body.categoryId,
+            direction: body.direction,
+            money: body.money,
+            moneySpaceId: body.moneySpaceId,
+            note: body.note,
+            occurrence: body.occurrence,
+            planningStatus: body.planningStatus,
+            purpose: body.purpose,
+          },
+          idempotencyKey,
+          Buffer.from(requestHmac, "hex"),
+        );
+      });
+      reply.code(201).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyValidationError) {
+        reply.code(400).send({ messageCode: "VALIDATION_ERROR" });
+      } else if (error instanceof MoneyMemoServiceError) {
+        if (error.code === "OPERATION_IN_PROGRESS") {
+          reply.code(409).send({ messageCode: "OPERATION_IN_PROGRESS" });
+        } else {
+          reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+        }
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.get("/api/v1/memos", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const query = request.query as { limit?: string; lifecycle?: string };
+    const limit = Math.min(Number(query.limit ?? 50), 100);
+    const lifecycle = query.lifecycle ?? "active";
+    try {
+      const result = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        const lifecycleFilter =
+          lifecycle === "all_non_deleted" ? `IN ('active', 'archived')` : `= '${lifecycle}'`;
+        const versionResult = await tx.query<{ version: string }>(
+          `SELECT version::text FROM history_list_states WHERE user_id = $1`,
+          [ctx.accountId],
+        );
+        const resultSetVersion = versionResult.rows[0]?.version ?? "1";
+        const result = await tx.query(
+          `SELECT * FROM money_memos WHERE user_id = $1 AND lifecycle_state ${lifecycleFilter}
+           ORDER BY occurred_at DESC, id DESC LIMIT $2`,
+          [ctx.accountId, limit + 1],
+        );
+        return {
+          items: result.rows.slice(0, limit),
+          resultSetVersion,
+          nextCursor: result.rows.length > limit ? "more" : null,
+        };
+      });
+      reply.code(200).send(result);
+    } catch {
+      reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+    }
+  });
+
+  app.get("/api/v1/memos/:memoId", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return getMoneyMemo(tx, memoId);
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError && error.code === "MEMO_NOT_FOUND") {
+        reply.code(404).send();
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.patch("/api/v1/memos/:memoId", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    const body = request.body as {
+      expectedRevision: string;
+      direction: "income" | "expense";
+      money: { amount: string; currency: string };
+      occurrence: {
+        occurredAt: string;
+        occurredLocal: string;
+        occurredTimezone: string;
+        occurredOffsetMinutes: number;
+        timezoneDatabaseVersion: string;
+      };
+      categoryId: string | null;
+      moneySpaceId: string | null;
+      purpose: "personal" | "work" | "mixed" | null;
+      planningStatus: "planned" | "unplanned" | null;
+      note: string | null;
+    };
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return updateMoneyMemo(
+          tx,
+          memoId,
+          {
+            categoryId: body.categoryId,
+            direction: body.direction,
+            money: body.money,
+            moneySpaceId: body.moneySpaceId,
+            note: body.note,
+            occurrence: body.occurrence,
+            planningStatus: body.planningStatus,
+            purpose: body.purpose,
+          },
+          body.expectedRevision,
+        );
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError) {
+        if (error.code === "REVISION_CONFLICT")
+          reply.code(409).send({ messageCode: "REVISION_CONFLICT" });
+        else if (error.code === "MEMO_NOT_FOUND") reply.code(404).send();
+        else reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.post("/api/v1/memos/:memoId/archive", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    const body = request.body as { expectedRevision: string };
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return archiveMoneyMemo(tx, memoId, body.expectedRevision);
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError && error.code === "REVISION_CONFLICT") {
+        reply.code(409).send({ messageCode: "REVISION_CONFLICT" });
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.delete("/api/v1/memos/:memoId/archive", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    const body = request.body as { expectedRevision: string };
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return restoreArchivedMoneyMemo(tx, memoId, body.expectedRevision);
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError && error.code === "REVISION_CONFLICT") {
+        reply.code(409).send({ messageCode: "REVISION_CONFLICT" });
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.post("/api/v1/memos/:memoId/recently-deleted", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    const body = request.body as { expectedRevision: string };
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return moveToRecentlyDeleted(tx, memoId, body.expectedRevision);
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError && error.code === "REVISION_CONFLICT") {
+        reply.code(409).send({ messageCode: "REVISION_CONFLICT" });
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.delete("/api/v1/memos/:memoId/recently-deleted", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    const body = request.body as { expectedRevision: string };
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return restoreRecentlyDeleted(tx, memoId, body.expectedRevision);
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError && error.code === "REVISION_CONFLICT") {
+        reply.code(409).send({ messageCode: "REVISION_CONFLICT" });
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  app.post("/api/v1/memos/:memoId/purge", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await sessions.authenticate(headers);
+    if (ctx === null) {
+      reply.code(401).send();
+      return;
+    }
+    const memoId = (request.params as { memoId: string }).memoId;
+    const body = request.body as { expectedRevision: string };
+    try {
+      const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
+        return initiatePurge(tx, memoId, body.expectedRevision);
+      });
+      reply.code(200).send(memo);
+    } catch (error) {
+      if (error instanceof MoneyMemoServiceError && error.code === "REVISION_CONFLICT") {
+        reply.code(409).send({ messageCode: "REVISION_CONFLICT" });
+      } else {
+        reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
   });
 
   // Health

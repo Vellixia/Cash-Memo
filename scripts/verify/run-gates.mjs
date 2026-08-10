@@ -297,6 +297,10 @@ async function initializeLocalEnvironment() {
     ["PROCESS_ROLE", "all"],
     ["PORT", "3000"],
     ["DATABASE_URL", "postgresql://cashmemo:cashmemo-local-only@127.0.0.1:5432/cashmemo"],
+    [
+      "AUTH_DATABASE_URL",
+      "postgresql://cashmemo_identity_login:cashmemo-identity-local-only@127.0.0.1:5432/cashmemo",
+    ],
     ["AUTH_SESSION_SECRET", localSecret()],
     ["AUTH_TOKEN_HMAC_KEY", localSecret()],
     ["PASSWORD_PEPPER", localSecret()],

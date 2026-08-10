@@ -89,6 +89,9 @@ importers:
       '@cashmemo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cashmemo/currency-registry':
+        specifier: workspace:*
+        version: link:../../packages/currency-registry
       '@cashmemo/domain':
         specifier: workspace:*
         version: link:../../packages/domain

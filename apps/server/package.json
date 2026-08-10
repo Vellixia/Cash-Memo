@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cashmemo/contracts": "workspace:*",
+    "@cashmemo/currency-registry": "workspace:*",
     "@cashmemo/domain": "workspace:*",
     "@cashmemo/test-support": "workspace:*",
     "@fastify/cors": "^11.3.0",

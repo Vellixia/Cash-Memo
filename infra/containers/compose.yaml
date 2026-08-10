@@ -17,6 +17,7 @@ services:
       retries: 30
     volumes:
       - postgres18-data:/var/lib/postgresql
+      - ./init-identity-role.sql:/docker-entrypoint-initdb.d/01-init-identity-role.sql:ro
 
   mailpit:
     image: axllent/mailpit:v1.30.7

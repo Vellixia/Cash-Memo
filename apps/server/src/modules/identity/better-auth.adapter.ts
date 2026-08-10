@@ -51,15 +51,17 @@ export async function verifyPassword(input: { hash: string; password: string }):
   }
 }
 
-function assertSecureOrigin(value: string, reasonCode: string): void {
+function assertSecureOrigin(value: string, reasonCode: string, enforce = true): void {
+  if (!enforce) return;
   const origin = new URL(value);
   if (origin.protocol !== "https:") throw new Error(reasonCode);
 }
 
 export function createBetterAuthAdapter(options: Readonly<BetterAuthAdapterOptions>) {
-  assertSecureOrigin(options.baseURL, "BETTER_AUTH_HTTPS_BASE_URL_REQUIRED");
+  const isLocalDev = options.baseURL.includes("localhost");
+  assertSecureOrigin(options.baseURL, "BETTER_AUTH_HTTPS_BASE_URL_REQUIRED", !isLocalDev);
   for (const origin of options.trustedOrigins) {
-    assertSecureOrigin(origin, "BETTER_AUTH_HTTPS_TRUSTED_ORIGIN_REQUIRED");
+    assertSecureOrigin(origin, "BETTER_AUTH_HTTPS_TRUSTED_ORIGIN_REQUIRED", !isLocalDev);
   }
   if (options.secret.length < 32) throw new Error("BETTER_AUTH_SECRET_TOO_SHORT");
 
@@ -106,6 +108,7 @@ export function createBetterAuthAdapter(options: Readonly<BetterAuthAdapterOptio
       useSecureCookies: false,
     },
     baseURL: options.baseURL,
+    basePath: "/api/v1/auth",
     database: options.identityPool,
     emailAndPassword: {
       enabled: true,

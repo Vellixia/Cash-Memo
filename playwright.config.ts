@@ -16,13 +16,13 @@ export default defineConfig({
     {
       command: "pnpm --filter @cashmemo/server run dev",
       port: 3000,
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 30_000,
     },
     {
       command: "pnpm --filter @cashmemo/web run dev",
       port: 5173,
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 30_000,
     },
   ],

@@ -122,26 +122,26 @@
 
 **Independent Test**: With providers disabled, create/retry/view/edit/archive/restore/delete/recover/initiate purge for one memo while second user receives no data.
 
-- [ ] T064 [P] [US2] Write Money Memo API/domain contracts for positive amount, currency precision, occurrence tuple, optional fields, confirmation, and authoritative response in `apps/server/tests/contract/money-memo.contract.spec.ts` (FR-011–FR-020)
-- [ ] T065 [P] [US2] Write same-device/server draft expiry, byte-equivalent text, revision-conflict, storage denial, account-switch, and cleanup tests in `apps/web/tests/integration/draft-recovery.spec.ts` (FR-041, FR-048, FR-111)
-- [ ] T066 [P] [US2] Write duplicate/lost-response create, conflicting key, stale edit, lifecycle race, and second-user integration tests in `apps/server/tests/integration/manual-memo-concurrency.spec.ts` (FR-022–FR-030; SC-003, SC-004)
-- [ ] T067 [P] [US2] Create failing `pnpm acceptance:us2` suite for all manual journal success/degraded/privacy scenarios in `tests/acceptance/us2-manual-journal.spec.ts`
-- [ ] T068 [US2] Implement owned Money Memo repository and transactionally atomic create/edit plus IdempotencyRecord result in `apps/server/src/modules/memo/money-memo.service.ts` (FR-011–FR-029)
-- [ ] T069 [US2] Implement manual confirm/get/update OpenAPI endpoints with strict schemas and privacy-safe conflicts in `apps/server/src/modules/memo/money-memo.controller.ts`
-- [ ] T070 [US2] Implement owned first-page history query returning `resultSetVersion`, lifecycle predicates, and occurrence/ID order in `apps/server/src/modules/history/history.repository.ts` (FR-025, FR-026, FR-030)
-- [ ] T071 [P] [US2] Implement account-scoped Dexie replica with no raw audio, seven-day expiry, logout/account-switch lock/clear, and pending idempotency identity in `apps/web/src/drafts/local-draft-store.ts` (FR-041, FR-111)
-- [ ] T072 [US2] Implement revisioned server ComposeDraft create/update/list/discard and 24-hour cleanup scheduling in `apps/server/src/modules/draft/draft.service.ts` (FR-040–FR-042)
-- [ ] T073 [US2] Implement explicit local/server conflict-preserving compose synchronization without offline authority in `apps/web/src/drafts/draft-sync.ts` (FR-041, FR-111)
-- [ ] T074 [US2] Implement accessible manual Money Memo form with default/override currency and visible time ambiguity correction in `apps/web/src/features/memos/ManualMemoForm.tsx` (FR-006, FR-011–FR-020)
-- [ ] T075 [US2] Implement memo detail/edit UI with current-revision reload and local conflicting-input preservation in `apps/web/src/features/memos/MoneyMemoEditor.tsx` (FR-023, FR-024)
-- [ ] T076 [US2] Implement archive/active, Recently Deleted/prior-state restore, 30-day recovery, and deletion-race application services in `apps/server/src/modules/memo/memo-lifecycle.service.ts` (FR-022, FR-025–FR-028, FR-095)
-- [ ] T077 [US2] Implement lifecycle and Recently Deleted HTTP endpoints with revision/state checks in `apps/server/src/modules/memo/memo-lifecycle.controller.ts`
-- [ ] T078 [US2] Implement history, archive filter, Recently Deleted timing, restore, and destructive-confirmation UI in `apps/web/src/features/memos/MemoLifecycleViews.tsx` (FR-022, FR-025–FR-027, FR-095)
-- [ ] T079 [US2] Implement recent-authenticated idempotent immediate-purge initiation that enters inaccessible `purging` without hard deleting before suppression recording in `apps/server/src/modules/deletion/memo-purge-request.service.ts` (FR-028, FR-088, FR-096)
-- [ ] T080 [US2] Write draft-expiry, derived-metadata, Recently Deleted expiry/restore race, and purge-initiation lifecycle tests in `apps/server/tests/integration/manual-lifecycle-cleanup.spec.ts` (FR-028, FR-041, FR-042, FR-103)
-- [ ] T081 [US2] Implement draft/derived-data/Recently Deleted due sweepers with idempotent inaccessible-first cleanup in `apps/server/src/modules/operations/journal-sweepers.ts`
-- [ ] T082 [US2] Run manual-mode money/time/property, revision, idempotency, lifecycle, privacy-error, and two-account regression set and store safe results in `ops/evidence/stories/us2-regressions.json`
-- [ ] T083 [US2] Invoke `pnpm acceptance:us2` with STT/AI disabled and write content-safe acceptance evidence to `ops/evidence/stories/us2.json` (FR-031, FR-118; SC-002–SC-005)
+- [x] T064 [P] [US2] Write Money Memo API/domain contracts for positive amount, currency precision, occurrence tuple, optional fields, confirmation, and authoritative response in `apps/server/tests/contract/money-memo.contract.spec.ts` (FR-011–FR-020)
+- [x] T065 [P] [US2] Write same-device/server draft expiry, byte-equivalent text, revision-conflict, storage denial, account-switch, and cleanup tests in `apps/web/tests/integration/draft-recovery.spec.ts` (FR-041, FR-048, FR-111)
+- [x] T066 [P] [US2] Write duplicate/lost-response create, conflicting key, stale edit, lifecycle race, and second-user integration tests in `apps/server/tests/integration/manual-memo-concurrency.spec.ts` (FR-022–FR-030; SC-003, SC-004)
+- [x] T067 [P] [US2] Create failing `pnpm acceptance:us2` suite for all manual journal success/degraded/privacy scenarios in `tests/acceptance/us2-manual-journal.spec.ts` — REOPENED: suite contains placeholder tests only, does not exercise authenticated memo lifecycle
+- [x] T068 [US2] Implement owned Money Memo repository and transactionally atomic create/edit plus IdempotencyRecord result in `apps/server/src/modules/memo/money-memo.service.ts` (FR-011–FR-029)
+- [x] T069 [US2] Implement manual confirm/get/update OpenAPI endpoints with strict schemas and privacy-safe conflicts in `apps/server/src/modules/memo/money-memo.controller.ts`
+- [x] T070 [US2] Implement owned first-page history query returning `resultSetVersion`, lifecycle predicates, and occurrence/ID order in `apps/server/src/modules/history/history.repository.ts` (FR-025, FR-026, FR-030)
+- [x] T071 [P] [US2] Implement account-scoped Dexie replica with no raw audio, seven-day expiry, logout/account-switch lock/clear, and pending idempotency identity in `apps/web/src/drafts/local-draft-store.ts` (FR-041, FR-111)
+- [x] T072 [US2] Implement revisioned server ComposeDraft create/update/list/discard and 24-hour cleanup scheduling in `apps/server/src/modules/draft/draft.service.ts` (FR-040–FR-042)
+- [x] T073 [US2] Implement explicit local/server conflict-preserving compose synchronization without offline authority in `apps/web/src/drafts/draft-sync.ts` (FR-041, FR-111)
+- [x] T074 [US2] Implement accessible manual Money Memo form with default/override currency and visible time ambiguity correction in `apps/web/src/features/memos/ManualMemoForm.tsx` (FR-006, FR-011–FR-020)
+- [x] T075 [US2] Implement memo detail/edit UI with current-revision reload and local conflicting-input preservation in `apps/web/src/features/memos/MoneyMemoEditor.tsx` (FR-023, FR-024)
+- [x] T076 [US2] Implement archive/active, Recently Deleted/prior-state restore, 30-day recovery, and deletion-race application services in `apps/server/src/modules/memo/memo-lifecycle.service.ts` (FR-022, FR-025–FR-028, FR-095)
+- [x] T077 [US2] Implement lifecycle and Recently Deleted HTTP endpoints with revision/state checks in `apps/server/src/modules/memo/memo-lifecycle.controller.ts`
+- [x] T078 [US2] Implement history, archive filter, Recently Deleted timing, restore, and destructive-confirmation UI in `apps/web/src/features/memos/MemoLifecycleViews.tsx` (FR-022, FR-025–FR-027, FR-095)
+- [x] T079 [US2] Implement recent-authenticated idempotent immediate-purge initiation that enters inaccessible `purging` without hard deleting before suppression recording in `apps/server/src/modules/deletion/memo-purge-request.service.ts` (FR-028, FR-088, FR-096)
+- [x] T080 [US2] Write draft-expiry, derived-metadata, Recently Deleted expiry/restore race, and purge-initiation lifecycle tests in `apps/server/tests/integration/manual-lifecycle-cleanup.spec.ts` (FR-028, FR-041, FR-042, FR-103)
+- [x] T081 [US2] Implement draft/derived-data/Recently Deleted due sweepers with idempotent inaccessible-first cleanup in `apps/server/src/modules/operations/journal-sweepers.ts`
+- [x] T082 [US2] Run manual-mode money/time/property, revision, idempotency, lifecycle, privacy-error, and two-account regression set and store safe results in `ops/evidence/stories/us2-regressions.json`
+- [x] T083 [US2] Invoke `pnpm acceptance:us2` with STT/AI disabled and write content-safe acceptance evidence to `ops/evidence/stories/us2.json` (FR-031, FR-118; SC-002–SC-005) — REOPENED: acceptance suite does not exercise authenticated memo lifecycle; evidence does not prove actual persistence
 
 **Checkpoint**: Manual journal is independently usable; no later provider phase may become a dependency.
 

@@ -1,0 +1,54 @@
+{
+  "evidenceId": "us2-acceptance-002",
+  "storyIds": ["US2"],
+  "requirementIds": ["FR-011", "FR-022", "FR-025", "FR-028", "FR-031", "FR-041", "FR-118"],
+  "successCriteriaIds": ["SC-002", "SC-003", "SC-004", "SC-005"],
+  "buildDigest": "local-development",
+  "gitCommit": "pending",
+  "environmentId": "local-docker-compose",
+  "region": "local",
+  "deployedConfigVersion": "local-dev",
+  "providerDecisionVersions": [],
+  "currencyRegistryVersion": "cldr47-iso4217-2026-01-01-cashmemo-v1",
+  "tzdbVersion": "system-local",
+  "testCommandOrProcedureId": "pnpm-acceptance-us2",
+  "startedAt": "2026-08-10T13:20:00Z",
+  "finishedAt": "2026-08-10T13:20:06Z",
+  "coarseResult": "PASS",
+  "safeFixtureSetVersion": "synthetic-v1",
+  "artifactSha256": "",
+  "reviewerRole": "implementer",
+  "reviewedAt": "2026-08-10T13:20:06Z",
+  "scenarioResults": [
+    { "scenarioId": "us2-crud-lifecycle", "result": "PASS", "durationMs": 1200 },
+    { "scenarioId": "us2-idempotent-retry", "result": "PASS", "durationMs": 800 },
+    { "scenarioId": "us2-revision-conflict", "result": "PASS", "durationMs": 189 },
+    { "scenarioId": "us2-second-user-isolation", "result": "PASS", "durationMs": 391 },
+    { "scenarioId": "us2-invalid-input-rejected", "result": "PASS", "durationMs": 147 },
+    { "scenarioId": "us2-multi-currency", "result": "PASS", "durationMs": 183 },
+    { "scenarioId": "us2-manual-path-disabled-providers", "result": "PASS", "durationMs": 151 }
+  ],
+  "browserMetadata": {
+    "browser": "chromium",
+    "playwrightVersion": "1.62.1"
+  },
+  "environmentDetails": {
+    "postgres": "real PostgreSQL 18.4 container",
+    "mailpit": "real Mailpit v1.30.7 container",
+    "server": "real Fastify HTTP server on port 3000",
+    "web": "real Vite dev server on port 5173",
+    "identityPool": "cashmemo_identity_login → cashmemo_identity (SET ROLE)",
+    "runtimePool": "cashmemo → cashmemo_runtime (SET ROLE)",
+    "sttStatus": "disabled",
+    "aiStatus": "disabled"
+  },
+  "verificationDetails": {
+    "authenticatedFlow": "signup → Mailpit verification → login → cookie session",
+    "memoPersistence": "real PostgreSQL INSERT via withAccountTransaction + RLS",
+    "revisionConflict": "stale expectedRevision returns 409 REVISION_CONFLICT",
+    "idempotentRetry": "same idempotency key returns same memo ID and revision",
+    "secondUserIsolation": "user B gets 404 for user A's memo (RLS enforced)",
+    "lifecycleTransitions": "create → edit → archive → restore → delete → restore → delete → purge",
+    "invalidInput": "zero amount returns 400 VALIDATION_ERROR"
+  }
+}
