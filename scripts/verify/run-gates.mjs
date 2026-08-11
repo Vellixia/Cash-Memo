@@ -174,7 +174,10 @@ async function runAcceptance(story) {
     });
   }
   await run("pnpm", ["exec", "playwright", "test", target], {
-    env: story === "us3" ? { ...process.env, ASSISTED_CAPTURE_MODE: "fake" } : process.env,
+    env:
+      story === "us3" || story === "us5"
+        ? { ...process.env, ASSISTED_CAPTURE_MODE: "fake" }
+        : process.env,
     label: `acceptance:${story}`,
   });
 }

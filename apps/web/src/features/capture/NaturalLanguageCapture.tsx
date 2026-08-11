@@ -1,18 +1,41 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { detectTextV1 } from "@cashmemo/privacy-rules";
 
 import type { AssistedCaptureApiPort, AssistedDraftView } from "../../app/journal-api.js";
 import { AssistedDraftReview } from "./AssistedDraftReview.js";
+import { CapabilityStatus } from "../degraded/CapabilityStatus.js";
+import { IndexedDbDraftStorage, RecoverableDraftStore } from "../degraded/recoverable-draft.js";
 import { ProviderConsent, TEXT_CONSENT } from "../privacy/ProviderConsent.js";
 
-export function NaturalLanguageCapture({ api }: { readonly api: AssistedCaptureApiPort }) {
+export function NaturalLanguageCapture({
+  api,
+  recoveryScope = "component-fixture",
+}: {
+  readonly api: AssistedCaptureApiPort;
+  readonly recoveryScope?: string;
+}) {
+  const store = useMemo(
+    () => new RecoverableDraftStore(new IndexedDbDraftStorage(), recoveryScope),
+    [recoveryScope],
+  );
+  const retryIdentity = useRef(crypto.randomUUID());
   const [text, setText] = useState("");
   const [consent, setConsent] = useState(false);
   const [draft, setDraft] = useState<AssistedDraftView | null>(null);
   const [state, setState] = useState<"idle" | "checking" | "sending" | "blocked" | "unavailable">(
     "idle",
   );
+
+  useEffect(() => {
+    let active = true;
+    void store.load().then((recovered) => {
+      if (active && recovered !== null) setText((current) => current || recovered.sourceText);
+    });
+    return () => {
+      active = false;
+    };
+  }, [store]);
 
   async function extract() {
     setState("checking");
@@ -29,6 +52,7 @@ export function NaturalLanguageCapture({ api }: { readonly api: AssistedCaptureA
         consent: TEXT_CONSENT,
         text,
       });
+      await store.clear();
       setDraft(response.draft);
       setState("idle");
     } catch (error) {
@@ -51,7 +75,15 @@ export function NaturalLanguageCapture({ api }: { readonly api: AssistedCaptureA
       <textarea
         id="assisted-text"
         maxLength={4000}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          const value = event.target.value;
+          setText(value);
+          void store.save({
+            idempotencyKey: retryIdentity.current,
+            sourceText: value,
+            status: "editing",
+          });
+        }}
         value={text}
       />
       <ProviderConsent checked={consent} mode="text" onChange={setConsent} />
@@ -70,11 +102,7 @@ export function NaturalLanguageCapture({ api }: { readonly api: AssistedCaptureA
           editable.
         </p>
       ) : null}
-      {state === "unavailable" ? (
-        <p role="alert">
-          AI extraction unavailable. Your text remains editable for retry or manual entry.
-        </p>
-      ) : null}
+      {state === "unavailable" ? <CapabilityStatus kind="assisted_capture_unavailable" /> : null}
       {draft === null ? null : <AssistedDraftReview api={api} initialDraft={draft} />}
     </section>
   );

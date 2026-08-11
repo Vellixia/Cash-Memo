@@ -274,18 +274,18 @@
 
 **Independent Test**: Disable/fault every accelerator and interrupt request/response/commit points; manual operation remains safe where core services exist and never becomes local authority when core services fail.
 
-- [ ] T152 [P] [US5] Define executable failure matrix for STT, AI, network, DB, auth, SES, S3, KMS, telemetry, worker, and calculation fault points in `tests/failure/failure-matrix.ts` (FR-031, FR-111)
-- [ ] T153 [US5] Implement deterministic timeout/reset/lost-response/rate-limit/invalid-body/connection-kill scenarios in `packages/test-support/src/harness/fault-proxy-scenarios.ts`
-- [ ] T154 [P] [US5] Write browser offline-before-save, upload interruption, lost-confirm-response, app-close/reopen, and update-with-draft tests in `apps/web/tests/integration/network-recovery.spec.ts` (FR-041, FR-046, FR-111; SC-011)
-- [ ] T155 [P] [US5] Write DB before/after-commit response-loss and duplicate-job tests proving one authoritative result in `apps/server/tests/integration/commit-point-retry.spec.ts` (FR-029, FR-047, FR-111; SC-003)
-- [ ] T156 [US5] Make `dev:manual` and production provider-disabled startup first-class with no STT/AI/telemetry dependency in `apps/server/src/bootstrap/capability-mode.ts` (FR-031; SC-010)
-- [ ] T157 [US5] Implement explicit capability-health states and safe user messages in `apps/web/src/features/degraded/CapabilityStatus.tsx` (FR-049)
-- [ ] T158 [US5] Implement non-blocking bounded/drop-safe telemetry exporter with content-free health counters and no user-payload fallback queue in `apps/server/src/adapters/telemetry/resilient-exporter.ts`
-- [ ] T159 [US5] Enforce explicit fail-closed auth/persistence outage responses and forbid authoritative local writes in `apps/server/src/bootstrap/core-readiness.guard.ts`
-- [ ] T160 [US5] Implement partial STT/AI failure recovery and declared transcript/draft retention without partial confirmation in `apps/server/src/modules/assisted-capture/recovery-policy.ts` (FR-037, FR-038, FR-046)
-- [ ] T161 [US5] Run failure-injection assertions that confirmed rows/revisions/totals remain unchanged and every partial state is visible in `tests/failure/confirmed-record-invariants.spec.ts`
-- [ ] T162 [US5] Create `pnpm acceptance:us5` suite covering every US5 fault, manual-mode, privacy, retry, and draft-recovery scenario in `tests/acceptance/us5-degraded-operation.spec.ts`
-- [ ] T163 [US5] Invoke `pnpm acceptance:us5` with provider/telemetry/network fault injection and write evidence to `ops/evidence/stories/us5.json` (FR-118; SC-010, SC-011)
+- [x] T152 [P] [US5] Define executable failure matrix for STT, AI, network, DB, auth, SES, S3, KMS, telemetry, worker, and calculation fault points in `tests/failure/failure-matrix.ts` (FR-031, FR-111)
+- [x] T153 [US5] Implement deterministic timeout/reset/lost-response/rate-limit/invalid-body/connection-kill scenarios in `packages/test-support/src/harness/fault-proxy-scenarios.ts`
+- [x] T154 [P] [US5] Write browser offline-before-save, upload interruption, lost-confirm-response, app-close/reopen, and update-with-draft tests in `apps/web/tests/integration/network-recovery.spec.ts` (FR-041, FR-046, FR-111; SC-011)
+- [x] T155 [P] [US5] Write DB before/after-commit response-loss and duplicate-job tests proving one authoritative result in `apps/server/tests/integration/commit-point-retry.spec.ts` (FR-029, FR-047, FR-111; SC-003)
+- [x] T156 [US5] Make `dev:manual` and production provider-disabled startup first-class with no STT/AI/telemetry dependency in `apps/server/src/bootstrap/capability-mode.ts` (FR-031; SC-010)
+- [x] T157 [US5] Implement explicit capability-health states and safe user messages in `apps/web/src/features/degraded/CapabilityStatus.tsx` (FR-049)
+- [x] T158 [US5] Implement non-blocking bounded/drop-safe telemetry exporter with content-free health counters and no user-payload fallback queue in `apps/server/src/adapters/telemetry/resilient-exporter.ts`
+- [x] T159 [US5] Enforce explicit fail-closed auth/persistence outage responses and forbid authoritative local writes in `apps/server/src/bootstrap/core-readiness.guard.ts`
+- [x] T160 [US5] Implement partial STT/AI failure recovery and declared transcript/draft retention without partial confirmation in `apps/server/src/modules/assisted-capture/recovery-policy.ts` (FR-037, FR-038, FR-046)
+- [x] T161 [US5] Run failure-injection assertions that confirmed rows/revisions/totals remain unchanged and every partial state is visible in `tests/failure/confirmed-record-invariants.spec.ts`
+- [x] T162 [US5] Create `pnpm acceptance:us5` suite covering every US5 fault, manual-mode, privacy, retry, and draft-recovery scenario in `tests/acceptance/us5-degraded-operation.spec.ts`
+- [x] T163 [US5] Invoke `pnpm acceptance:us5` with provider/telemetry/network fault injection and write evidence to `ops/evidence/stories/us5.json` (FR-118; SC-010, SC-011)
 
 **Checkpoint**: Accelerator failures never block manual journal or mutate confirmed truth; core outage never creates unsafe local authority.
 

@@ -8,6 +8,7 @@ import { canonicalRequestHmac } from "@cashmemo/domain";
 import { FinitePrivacyBoundary } from "@cashmemo/privacy-rules";
 
 import { parseEnvironment } from "./environment.schema.js";
+import { resolveCapabilityMode } from "./capability-mode.js";
 import { createBetterAuthAdapter } from "../modules/identity/better-auth.adapter.js";
 import { IdentityService } from "../modules/identity/identity.service.js";
 import { SessionService } from "../modules/identity/session.service.js";
@@ -68,6 +69,11 @@ async function main() {
     max: 10,
     options: "-c role=cashmemo_runtime",
   });
+
+  // Idle client failures during a database outage are handled at request boundaries.
+  // Register content-free listeners so pg does not turn an expected outage into a process crash.
+  identityPool.on("error", () => undefined);
+  runtimePool.on("error", () => undefined);
 
   const deliveryCallbacks = {
     sendPasswordReset: async ({
@@ -135,52 +141,74 @@ async function main() {
   const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
   const currentMonth = new CurrentMonthService({ pool: runtimePool });
   const monthlyReview = new MonthlyReviewService({ pool: runtimePool });
-  const fakeMode = env.ASSISTED_CAPTURE_MODE === "fake";
-  // The real-provider adapters are intentionally unavailable until their protected
-  // integration gate is run with approved credentials; production never falls back to fakes.
-  const extraction = fakeMode
-    ? new ContractScenarioExtractionAdapter()
-    : new DeterministicExtractionAdapter({ mode: "failure" });
-  const stt = fakeMode
-    ? new ContractScenarioSttAdapter()
-    : new DeterministicSttAdapter({ mode: "failure" });
-  const textExtraction = new TextExtractionService({ extraction, pool: runtimePool, privacy });
-  const transcript = new TranscriptService({ extraction, pool: runtimePool, privacy });
-  const audio = new TemporaryAudioService({
-    inspector: {
-      inspect: (_bytes, declaredMediaType): Promise<AudioInspection> =>
-        Promise.resolve({
-          codec:
-            declaredMediaType === "audio/wav"
-              ? "pcm"
-              : declaredMediaType === "audio/mpeg"
-                ? "mp3"
-                : declaredMediaType === "audio/mp4"
-                  ? "aac"
-                  : "opus",
-          detectedMediaType: declaredMediaType,
-          measuredDurationMs: 1_000,
-        }),
-    },
-    ownerHmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
-    pool: runtimePool,
-    store: new MemoryEphemeralAudioStore(),
+  const capabilityMode = resolveCapabilityMode({
+    assistedCaptureMode: env.ASSISTED_CAPTURE_MODE,
+    providerConfigurationValid: env.ASSISTED_CAPTURE_MODE !== "openai",
+    telemetryConfigured: env.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined,
   });
-  const voice = new VoiceCaptureService({ audio, pool: runtimePool, stt, transcript });
-  const audioSweeper = new AudioSweeper({ audio });
-  await audioSweeper.startupCleanup();
-  audioSweeper.start();
-  const removeAudioTerminationHooks = audioSweeper.installTerminationHook();
-  const confirmation = new ConfirmDraftService({
-    hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
-    pool: runtimePool,
-    privacy,
-  });
+  let assisted:
+    | {
+        readonly confirmation: ConfirmDraftService;
+        readonly text: TextExtractionService;
+        readonly voice: VoiceCaptureService;
+      }
+    | undefined;
+  let closeAssisted = (): Promise<void> => Promise.resolve();
+
+  if (capabilityMode.shouldInitializeProviders) {
+    const fakeMode = env.ASSISTED_CAPTURE_MODE === "fake";
+    // Contract fakes are explicit test mode only. Production never silently falls back to them.
+    const extraction = fakeMode
+      ? new ContractScenarioExtractionAdapter()
+      : new DeterministicExtractionAdapter({ mode: "failure" });
+    const stt = fakeMode
+      ? new ContractScenarioSttAdapter()
+      : new DeterministicSttAdapter({ mode: "failure" });
+    const text = new TextExtractionService({ extraction, pool: runtimePool, privacy });
+    const transcript = new TranscriptService({ extraction, pool: runtimePool, privacy });
+    const audio = new TemporaryAudioService({
+      inspector: {
+        inspect: (_bytes, declaredMediaType): Promise<AudioInspection> =>
+          Promise.resolve({
+            codec:
+              declaredMediaType === "audio/wav"
+                ? "pcm"
+                : declaredMediaType === "audio/mpeg"
+                  ? "mp3"
+                  : declaredMediaType === "audio/mp4"
+                    ? "aac"
+                    : "opus",
+            detectedMediaType: declaredMediaType,
+            measuredDurationMs: 1_000,
+          }),
+      },
+      ownerHmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+      pool: runtimePool,
+      store: new MemoryEphemeralAudioStore(),
+    });
+    const voice = new VoiceCaptureService({ audio, pool: runtimePool, stt, transcript });
+    const audioSweeper = new AudioSweeper({ audio });
+    await audioSweeper.startupCleanup();
+    audioSweeper.start();
+    const removeAudioTerminationHooks = audioSweeper.installTerminationHook();
+    closeAssisted = async () => {
+      removeAudioTerminationHooks();
+      await audioSweeper.terminate();
+    };
+    assisted = {
+      confirmation: new ConfirmDraftService({
+        hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+        pool: runtimePool,
+        privacy,
+      }),
+      text,
+      voice,
+    };
+  }
 
   const app = Fastify({ logger: false });
   app.addHook("onClose", async () => {
-    removeAudioTerminationHooks();
-    await audioSweeper.terminate();
+    await closeAssisted();
   });
 
   for (const mediaType of ["audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/webm"]) {
@@ -223,12 +251,18 @@ async function main() {
   });
   registerCurrentMonthRoutes(app, { currentMonth, sessions });
   registerMonthlyReviewRoutes(app, { monthlyReview, sessions });
-  registerAssistedCaptureRoutes(app, {
-    confirmation,
-    pool: runtimePool,
-    sessions,
-    text: textExtraction,
-    voice,
+  if (assisted !== undefined) {
+    registerAssistedCaptureRoutes(app, {
+      confirmation: assisted.confirmation,
+      pool: runtimePool,
+      sessions,
+      text: assisted.text,
+      voice: assisted.voice,
+    });
+  }
+
+  app.get("/api/v1/capabilities", async (_request, reply) => {
+    reply.header("Cache-Control", "no-store").code(200).send(capabilityMode);
   });
 
   // ─── Custom auth endpoints that use the identity service ───

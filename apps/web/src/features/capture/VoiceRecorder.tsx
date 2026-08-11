@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import type { AssistedCaptureApiPort, VoiceCaptureView } from "../../app/journal-api.js";
+import { CapabilityStatus } from "../degraded/CapabilityStatus.js";
 import { ProviderConsent, STT_CONSENT, TRANSCRIPT_CONSENT } from "../privacy/ProviderConsent.js";
 
 export function VoiceRecorder({ api }: { readonly api: AssistedCaptureApiPort }) {
@@ -143,14 +144,13 @@ export function VoiceRecorder({ api }: { readonly api: AssistedCaptureApiPort })
       ) : null}
       {state === "uploading" ? <p>Transcribing and preparing a draft…</p> : null}
       {state === "error" ? (
-        <p role="alert">
-          {capture?.errorCode?.startsWith("STT") === true
-            ? "Transcription unavailable."
-            : capture?.errorCode?.startsWith("AI") === true
-              ? "AI extraction unavailable."
-              : "Voice assistance unavailable."}{" "}
-          Retry this recording or use manual capture.
-        </p>
+        <CapabilityStatus
+          kind={
+            capture?.errorCode?.startsWith("AI") === true
+              ? "assisted_capture_unavailable"
+              : "voice_unavailable"
+          }
+        />
       ) : null}
       {capture?.draftId === null || capture === null ? null : (
         <p>Draft ready for review. It is not yet a Money Memo.</p>

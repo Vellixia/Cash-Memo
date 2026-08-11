@@ -9,6 +9,7 @@ import { SearchAndFilters } from "../history/SearchAndFilters.js";
 import { LabelManager } from "../labels/LabelManager.js";
 import { CurrentMonthOverview } from "../reporting/CurrentMonthOverview.js";
 import { MonthlyReview } from "../reporting/MonthlyReview.js";
+import { IndexedDbDraftStorage, RecoverableDraftStore } from "../degraded/recoverable-draft.js";
 
 interface AuthRoutesProps {
   api: ApiPort;
@@ -43,6 +44,7 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
   const [resetError, setResetError] = useState(false);
   const [onboardingRetryable, setOnboardingRetryable] = useState(false);
   const [showTimezoneWarning, setShowTimezoneWarning] = useState(false);
+  const [accountScope, setAccountScope] = useState<string | null>(null);
   const assistedApi = hasAssistedCapture(journalApi) ? journalApi : null;
 
   useEffect(() => {
@@ -52,8 +54,10 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
         setScreen("unauthenticated");
         return;
       }
+      setAccountScope(s.userId);
       try {
         const m = await api.getMe();
+        setAccountScope(m.userId);
         if (m.onboardingState !== "complete") {
           setScreen("onboarding");
           if (m.preferences?.timezoneBoundaryWarningRequired === true) setShowTimezoneWarning(true);
@@ -91,6 +95,7 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
       try {
         await api.login({ email, password });
         const m = await api.getMe();
+        setAccountScope(m.userId);
         if (m.onboardingState !== "complete") {
           setScreen("onboarding");
           if (m.preferences?.timezoneBoundaryWarningRequired === true) setShowTimezoneWarning(true);
@@ -116,8 +121,12 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
 
   const handleLogout = useCallback(async () => {
     await api.logout();
+    if (accountScope !== null) {
+      await new RecoverableDraftStore(new IndexedDbDraftStorage(), accountScope).clear();
+    }
+    setAccountScope(null);
     setScreen("unauthenticated");
-  }, [api]);
+  }, [accountScope, api]);
 
   const handleResetRequest = useCallback(
     async (email: string) => {
@@ -237,7 +246,10 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
             <SearchAndFilters api={journalApi} />
             {assistedApi === null ? null : (
               <>
-                <NaturalLanguageCapture api={assistedApi} />
+                <NaturalLanguageCapture
+                  api={assistedApi}
+                  recoveryScope={accountScope ?? "unresolved-session"}
+                />
                 <VoiceRecorder api={assistedApi} />
               </>
             )}
