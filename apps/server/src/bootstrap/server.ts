@@ -31,6 +31,8 @@ import { SearchRepository } from "../modules/history/search.repository.js";
 import { registerHistorySearchRoute } from "../modules/history/history.controller.js";
 import { CurrentMonthService } from "../modules/reporting/current-month.service.js";
 import { registerCurrentMonthRoutes } from "../modules/reporting/current-month.controller.js";
+import { MonthlyReviewService } from "../modules/reporting/monthly-review.service.js";
+import { registerMonthlyReviewRoutes } from "../modules/reporting/monthly-review.controller.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -115,6 +117,7 @@ async function main() {
   const cursorCodec = { hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8") };
   const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
   const currentMonth = new CurrentMonthService({ pool: runtimePool });
+  const monthlyReview = new MonthlyReviewService({ pool: runtimePool });
 
   const app = Fastify({ logger: false });
 
@@ -147,6 +150,7 @@ async function main() {
     traversalOptions: { cursorCodec, pool: runtimePool },
   });
   registerCurrentMonthRoutes(app, { currentMonth, sessions });
+  registerMonthlyReviewRoutes(app, { monthlyReview, sessions });
 
   // ─── Custom auth endpoints that use the identity service ───
 

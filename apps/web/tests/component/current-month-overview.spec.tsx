@@ -53,6 +53,7 @@ function api(getCurrentMonth: JournalApiPort["getCurrentMonth"]): JournalApiPort
     createCategory: unsupported,
     createMoneySpace: unsupported,
     getCurrentMonth,
+    getMonthlyReview: unsupported,
     listCategories: unsupported,
     listMoneySpaces: unsupported,
     search: unsupported,

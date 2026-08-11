@@ -49,6 +49,13 @@ function api(overrides: Partial<JournalApiPort> = {}): JournalApiPort {
       recentMemos: [],
       reportingTimezone: "UTC",
     })),
+    getMonthlyReview: vi.fn(async () => ({
+      calculatedAt: "2026-08-11T00:00:00Z",
+      currencies: [],
+      month: "2026-08",
+      priorMonth: "2026-07",
+      reportingTimezone: "UTC",
+    })),
     listCategories: vi.fn(async () => [category]),
     listMoneySpaces: vi.fn(async () => [space]),
     search: vi.fn(async () => emptyPage),

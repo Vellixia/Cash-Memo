@@ -50,12 +50,24 @@ function reportingMonthForInstant(input: {
   }
 }
 
+function previousReportingMonth(month: string): string {
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/u.test(month)) {
+    throw new ReportingPeriodValidationError();
+  }
+  try {
+    return Temporal.PlainYearMonth.from(month).subtract({ months: 1 }).toString();
+  } catch {
+    throw new ReportingPeriodValidationError();
+  }
+}
+
 function formatBoundary(value: Temporal.Instant): string {
   return value.toString({ smallestUnit: "millisecond" }).replace(/\.000Z$/u, "Z");
 }
 
 export {
   ReportingPeriodValidationError,
+  previousReportingMonth,
   reportingMonthBounds,
   reportingMonthForInstant,
   type ReportingMonthBounds,

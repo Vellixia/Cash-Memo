@@ -94,6 +94,30 @@ export interface CurrentMonthOverviewView {
   readonly reportingTimezone: string;
 }
 
+export interface MonthlyReviewCurrency {
+  readonly currency: string;
+  readonly currencyExponent: number;
+  readonly expenseMinor: string;
+  readonly incomeMinor: string;
+  readonly largestExpenseCategories: readonly OverviewBucket[];
+  readonly netMinor: string;
+  readonly priorMonth: {
+    readonly absoluteChangeMinor: string;
+    readonly expenseMinor: string;
+    readonly percentageChange: string | null;
+    readonly percentageUnavailableReason: "PRIOR_VALUE_ZERO" | null;
+  };
+  readonly unplannedExpenseMinor: string;
+}
+
+export interface MonthlyReviewView {
+  readonly calculatedAt: string;
+  readonly currencies: readonly MonthlyReviewCurrency[];
+  readonly month: string;
+  readonly priorMonth: string;
+  readonly reportingTimezone: string;
+}
+
 export type JournalErrorCode =
   | "CURRENT_MONTH_CALCULATION_UNAVAILABLE"
   | "IDEMPOTENCY_CONFLICT"
@@ -103,6 +127,8 @@ export type JournalErrorCode =
   | "LABEL_KIND_MISMATCH"
   | "LABEL_NOT_FOUND"
   | "NETWORK_ERROR"
+  | "MONTHLY_REVIEW_CALCULATION_UNAVAILABLE"
+  | "INVALID_REPORTING_MONTH"
   | "PRIVACY_BOUNDARY_BLOCKED"
   | "RESULTS_CHANGED"
   | "REVISION_CONFLICT"
@@ -122,6 +148,7 @@ export interface JournalApiPort {
   createCategory(input: { kind: "expense" | "income"; name: string }): Promise<CategoryView>;
   createMoneySpace(input: { name: string }): Promise<MoneySpaceView>;
   getCurrentMonth(): Promise<CurrentMonthOverviewView>;
+  getMonthlyReview(month: string): Promise<MonthlyReviewView>;
   listCategories(): Promise<readonly CategoryView[]>;
   listMoneySpaces(): Promise<readonly MoneySpaceView[]>;
   search(input: Readonly<SearchInput>): Promise<SearchPage>;
@@ -178,6 +205,14 @@ export function createJournalApi(): JournalApiPort {
       return request<CurrentMonthOverviewView>(`${API_BASE}/overview/current-month`, {
         cache: "no-store",
       });
+    },
+    async getMonthlyReview(month) {
+      return request<MonthlyReviewView>(
+        `${API_BASE}/reviews/monthly/${encodeURIComponent(month)}`,
+        {
+          cache: "no-store",
+        },
+      );
     },
     async listCategories() {
       return request<readonly CategoryView[]>(`${API_BASE}/categories`);

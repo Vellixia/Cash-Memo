@@ -216,15 +216,15 @@
 
 **Independent Test**: Two adjacent multi-currency months reproduce totals/rankings/comparisons from export fixtures, including ties and prior zero.
 
-- [ ] T116 [P] [US7] Write selected/prior-month, ranking-tie, prior-zero, negative-net, empty-currency, and currency-partition property tests in `packages/domain/tests/monthly-review.property.spec.ts` (FR-066–FR-070; SC-012)
-- [ ] T117 [P] [US7] Create independent two-month PostgreSQL/export golden fixtures and integration oracle in `apps/server/tests/fixtures/reporting/monthly-review-golden.ts` and `apps/server/tests/integration/monthly-review.spec.ts` (FR-072)
-- [ ] T118 [US7] Implement deterministic expense ranking, unplanned totals, absolute/percentage comparison, and currency-section eligibility in `packages/domain/src/reporting/monthly-review.ts` (FR-066–FR-070)
-- [ ] T119 [US7] Implement reporting-zone selected/prior-month query/service with confirmed-only eligibility in `apps/server/src/modules/reporting/monthly-review.service.ts` (FR-066–FR-071)
-- [ ] T120 [US7] Implement `/reviews/monthly/{month}` controller with strict period and unavailable-result handling in `apps/server/src/modules/reporting/monthly-review.controller.ts`
-- [ ] T121 [US7] Implement responsive per-currency monthly review, deterministic ranking, no-percentage explanation, and empty states in `apps/web/src/features/reporting/MonthlyReview.tsx`
-- [ ] T122 [US7] Add API/UI/export static/property scan proving no AI narrative, exchange-rate, base-currency, or cross-currency scalar path in `tests/security/monthly-review-scope.spec.ts` (FR-017, FR-070; SC-006)
-- [ ] T123 [US7] Create `pnpm acceptance:us7` suite covering all US7 success/degraded/privacy scenarios in `tests/acceptance/us7-monthly-review.spec.ts`
-- [ ] T124 [US7] Invoke `pnpm acceptance:us7` and write content-safe golden evidence to `ops/evidence/stories/us7.json` (FR-118)
+- [x] T116 [P] [US7] Write selected/prior-month, ranking-tie, prior-zero, negative-net, empty-currency, and currency-partition property tests in `packages/domain/tests/monthly-review.property.spec.ts` (FR-066–FR-070; SC-012)
+- [x] T117 [P] [US7] Create independent two-month PostgreSQL/export golden fixtures and integration oracle in `apps/server/tests/fixtures/reporting/monthly-review-golden.ts` and `apps/server/tests/integration/monthly-review.spec.ts` (FR-072)
+- [x] T118 [US7] Implement deterministic expense ranking, unplanned totals, absolute/percentage comparison, and currency-section eligibility in `packages/domain/src/reporting/monthly-review.ts` (FR-066–FR-070)
+- [x] T119 [US7] Implement reporting-zone selected/prior-month query/service with confirmed-only eligibility in `apps/server/src/modules/reporting/monthly-review.service.ts` (FR-066–FR-071)
+- [x] T120 [US7] Implement `/reviews/monthly/{month}` controller with strict period and unavailable-result handling in `apps/server/src/modules/reporting/monthly-review.controller.ts`
+- [x] T121 [US7] Implement responsive per-currency monthly review, deterministic ranking, no-percentage explanation, and empty states in `apps/web/src/features/reporting/MonthlyReview.tsx`
+- [x] T122 [US7] Add API/UI/export static/property scan proving no AI narrative, exchange-rate, base-currency, or cross-currency scalar path in `tests/security/monthly-review-scope.spec.ts` (FR-017, FR-070; SC-006)
+- [x] T123 [US7] Create `pnpm acceptance:us7` suite covering all US7 success/degraded/privacy scenarios in `tests/acceptance/us7-monthly-review.spec.ts`
+- [x] T124 [US7] Invoke `pnpm acceptance:us7` and write content-safe golden evidence to `ops/evidence/stories/us7.json` (FR-118)
 
 **Checkpoint**: Monthly financial results remain deterministic and user-confirmed-record-only.
 
