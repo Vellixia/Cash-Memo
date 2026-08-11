@@ -66,6 +66,15 @@ async function signupVerifyAndLogin(
   return loginAndGetCookie(request, email, password);
 }
 
+async function reauthenticateForPurge(request: APIRequestContext, cookie: string): Promise<string> {
+  const response = await request.post(`${API}/api/v1/auth/reauth`, {
+    data: { password: SYNTHETIC_PASSWORD, scope: ["purge"] },
+    headers: { Cookie: cookie },
+  });
+  expect(response.status()).toBe(200);
+  return ((await response.json()) as { grantId: string }).grantId;
+}
+
 async function createMemo(
   request: APIRequestContext,
   cookie: string,
@@ -226,9 +235,10 @@ test.describe("US2 — Manual Money Journal (STT/AI disabled)", () => {
     expect(delete2Res.status()).toBe(200);
     const deleted2 = (await delete2Res.json()) as Record<string, unknown>;
 
+    const purgeGrant = await reauthenticateForPurge(request, cookie);
     const purgeRes = await request.post(`${API}/api/v1/memos/${created.id}/purge`, {
       data: { expectedRevision: deleted2["revision"] as string },
-      headers: { Cookie: cookie },
+      headers: { Cookie: cookie, "x-reauth-grant": purgeGrant },
       failOnStatusCode: false,
     });
     expect(purgeRes.status()).toBe(200);

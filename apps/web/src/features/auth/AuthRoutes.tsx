@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from "react";
 
 import type { ApiPort } from "../../app/api-port.js";
 import { AuthError } from "../../app/api-port.js";
@@ -10,6 +10,9 @@ import { LabelManager } from "../labels/LabelManager.js";
 import { CurrentMonthOverview } from "../reporting/CurrentMonthOverview.js";
 import { MonthlyReview } from "../reporting/MonthlyReview.js";
 import { IndexedDbDraftStorage, RecoverableDraftStore } from "../degraded/recoverable-draft.js";
+import { ExportCenter } from "../export/ExportCenter.js";
+import { AccountDeletionFlow } from "../deletion/AccountDeletionFlow.js";
+import { createDataOwnershipApi } from "../../app/data-ownership-api.js";
 
 interface AuthRoutesProps {
   api: ApiPort;
@@ -46,6 +49,7 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
   const [showTimezoneWarning, setShowTimezoneWarning] = useState(false);
   const [accountScope, setAccountScope] = useState<string | null>(null);
   const assistedApi = hasAssistedCapture(journalApi) ? journalApi : null;
+  const dataOwnershipApi = useMemo(() => createDataOwnershipApi(), []);
 
   useEffect(() => {
     void (async () => {
@@ -244,6 +248,8 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
             <MonthlyReview api={journalApi} />
             <LabelManager api={journalApi} />
             <SearchAndFilters api={journalApi} />
+            <ExportCenter api={dataOwnershipApi} />
+            <AccountDeletionFlow api={dataOwnershipApi} />
             {assistedApi === null ? null : (
               <>
                 <NaturalLanguageCapture

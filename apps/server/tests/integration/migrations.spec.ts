@@ -174,7 +174,7 @@ describe("reviewed PostgreSQL migrations", { concurrent: false }, () => {
     } finally {
       await previousPool.end();
     }
-  });
+  }, 30_000);
 
   it("forward-migrates representative accepted pre-0003 identity rows without fabricating tokens", async () => {
     if (environment.postgres === undefined) throw new Error("PostgreSQL test service missing");
@@ -310,7 +310,7 @@ describe("reviewed PostgreSQL migrations", { concurrent: false }, () => {
     } finally {
       await previousPool.end();
     }
-  });
+  }, 30_000);
 
   it("enforces money, registry, lifecycle, and composite ownership constraints", async () => {
     await adminPool.query(

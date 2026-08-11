@@ -195,6 +195,30 @@ export class BackgroundJobRepository {
     return result.rows[0] ?? null;
   }
 
+  async leaseByDedupeKey(
+    jobType: BackgroundJobType,
+    dedupeKey: string,
+    workerId: string,
+    now: Date,
+  ): Promise<BackgroundJob | null> {
+    assertWorkerId(workerId);
+    if (!backgroundJobTypes.includes(jobType)) throw new Error("INVALID_BACKGROUND_JOB_TYPE");
+    if (!CONTENT_FREE_DEDUPE_KEY.test(dedupeKey)) {
+      throw new Error("INVALID_CONTENT_FREE_DEDUPE_KEY");
+    }
+    const leasedUntil = new Date(now.getTime() + this.options.leaseMilliseconds);
+    const result = await this.pool.query<BackgroundJobRow>(
+      `UPDATE background_jobs
+       SET state = 'leased', leased_until = $4, lease_owner = $3,
+           attempts = attempts + 1, updated_at = $5
+       WHERE job_type = $1 AND dedupe_key = $2
+         AND state IN ('ready', 'retry_wait') AND available_at <= $5
+       RETURNING ${JOB_COLUMNS}`,
+      [jobType, dedupeKey, workerId, leasedUntil, now],
+    );
+    return result.rows[0] ?? null;
+  }
+
   async reclaimExpiredLeases(now: Date): Promise<number> {
     const result = await this.pool.query(
       `UPDATE background_jobs

@@ -51,6 +51,16 @@ import { VoiceCaptureService } from "../modules/assisted-capture/voice-capture.s
 import { registerAssistedCaptureRoutes } from "../modules/assisted-capture/voice-capture.controller.js";
 import { ConfirmDraftService } from "../modules/assisted-capture/confirm-draft.service.js";
 import { AudioSweeper } from "../modules/operations/audio-sweeper.js";
+import { BackgroundJobRepository } from "../modules/operations/background-jobs.js";
+import { ContractExportObjectStore } from "../adapters/aws/export-object-store.adapter.js";
+import { ExportJobService } from "../modules/export/export-job.service.js";
+import { registerExportRoutes } from "../modules/export/export.controller.js";
+import { ContractDeletionSuppressionPort } from "../modules/deletion/deletion-suppression.port.js";
+import { MemoPurgeWorker } from "../modules/deletion/memo-purge.worker.js";
+import { AccountPurgeWorker } from "../modules/deletion/account-purge.worker.js";
+import { AccountDeletionService } from "../modules/deletion/account-deletion.service.js";
+import { registerAccountDeletionRoutes } from "../modules/deletion/account-deletion.controller.js";
+import { ProviderDeletionService } from "../modules/deletion/provider-deletion.service.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -70,10 +80,17 @@ async function main() {
     options: "-c role=cashmemo_runtime",
   });
 
+  const workerPool = new Pool({
+    connectionString: env.DATABASE_URL,
+    max: 5,
+    options: "-c role=cashmemo_worker",
+  });
+
   // Idle client failures during a database outage are handled at request boundaries.
   // Register content-free listeners so pg does not turn an expected outage into a process crash.
   identityPool.on("error", () => undefined);
   runtimePool.on("error", () => undefined);
+  workerPool.on("error", () => undefined);
 
   const deliveryCallbacks = {
     sendPasswordReset: async ({
@@ -141,6 +158,40 @@ async function main() {
   const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
   const currentMonth = new CurrentMonthService({ pool: runtimePool });
   const monthlyReview = new MonthlyReviewService({ pool: runtimePool });
+  const objectStore = new ContractExportObjectStore();
+  const backgroundJobs = new BackgroundJobRepository(workerPool, {
+    backoffBaseMilliseconds: 1_000,
+    backoffMaximumMilliseconds: 60_000,
+    leaseMilliseconds: 30_000,
+  });
+  const exports = new ExportJobService({
+    backgroundJobs,
+    hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+    objectReferenceKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+    objectStore,
+    pool: runtimePool,
+  });
+  const suppression = new ContractDeletionSuppressionPort();
+  const deletionWorkerOptions = {
+    auditHmacKey: Buffer.from(env.EVIDENCE_HMAC_KEY, "utf8"),
+    policyVersion: "phase12-v1",
+    pool: runtimePool,
+    suppressionKey: Buffer.from(env.DELETION_SUPPRESSION_HMAC_KEY, "utf8"),
+    suppressionKeyVersion: "v1",
+    suppressionPort: suppression,
+  } as const;
+  const memoPurgeWorker = new MemoPurgeWorker(deletionWorkerOptions);
+  const accountPurgeWorker = new AccountPurgeWorker({
+    ...deletionWorkerOptions,
+    deleteExports: (accountId) => exports.deleteAllForAccount(accountId),
+    identityPool,
+  });
+  const accountDeletion = new AccountDeletionService({
+    cancelExports: (accountId) => exports.deleteAllForAccount(accountId),
+    hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+    pool: runtimePool,
+  });
+  const providerDeletion = new ProviderDeletionService({ pool: runtimePool });
   const capabilityMode = resolveCapabilityMode({
     assistedCaptureMode: env.ASSISTED_CAPTURE_MODE,
     providerConfigurationValid: env.ASSISTED_CAPTURE_MODE !== "openai",
@@ -209,6 +260,9 @@ async function main() {
   const app = Fastify({ logger: false });
   app.addHook("onClose", async () => {
     await closeAssisted();
+    await workerPool.end();
+    await runtimePool.end();
+    await identityPool.end();
   });
 
   for (const mediaType of ["audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/webm"]) {
@@ -241,6 +295,35 @@ async function main() {
     origin: allowedOrigins,
   });
 
+  const suspendedJournalPrefixes = [
+    "/api/v1/categories",
+    "/api/v1/drafts",
+    "/api/v1/exports",
+    "/api/v1/history",
+    "/api/v1/memos",
+    "/api/v1/money-spaces",
+    "/api/v1/overview",
+    "/api/v1/reviews",
+    "/api/v1/voice-captures",
+  ];
+  app.addHook("preHandler", async (request, reply) => {
+    if (!suspendedJournalPrefixes.some((prefix) => request.url.startsWith(prefix))) return;
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const session = await sessions.authenticate(headers);
+    if (
+      session !== null &&
+      (await accountDeletion.journalAccessState(session.accountId)) === "suspended"
+    ) {
+      await reply
+        .headers({ "Cache-Control": "private, no-store", Vary: "Cookie" })
+        .code(409)
+        .send({ messageCode: "ACCOUNT_DELETION_GRACE" });
+    }
+  });
+
   registerLabelRoutes(app, { labels, sessions });
   registerHistorySearchRoute(app, {
     cursorCodec,
@@ -251,6 +334,136 @@ async function main() {
   });
   registerCurrentMonthRoutes(app, { currentMonth, sessions });
   registerMonthlyReviewRoutes(app, { monthlyReview, sessions });
+  registerExportRoutes(app, { exports, sessions });
+  registerAccountDeletionRoutes(app, { deletions: accountDeletion, sessions });
+  if (env.APP_ENV === "local") {
+    app.post("/api/v1/test-support/deletion-faults", async (request, reply) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(request.headers)) {
+        if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+      }
+      if ((await sessions.authenticate(headers)) === null) {
+        await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });
+        return;
+      }
+      const body = request.body as {
+        exportWriteFailure?: boolean;
+        suppressionWriteFailure?: boolean;
+      };
+      suppression.setWriteFailureForTest(body.suppressionWriteFailure === true);
+      objectStore.setWriteFailureForTest(body.exportWriteFailure === true);
+      await reply.code(204).send();
+    });
+
+    app.post("/api/v1/test-support/exports/expire", async (request, reply) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(request.headers)) {
+        if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+      }
+      const session = await sessions.authenticate(headers);
+      if (session === null) {
+        await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });
+        return;
+      }
+      const body = request.body as { now?: string };
+      const now = typeof body.now === "string" ? new Date(body.now) : new Date();
+      if (Number.isNaN(now.getTime())) {
+        await reply.code(400).send({ messageCode: "VALIDATION_FAILED" });
+        return;
+      }
+      await reply.code(200).send({ expired: await exports.expireDue(session.accountId, now) });
+    });
+
+    app.post("/api/v1/test-support/exports/:exportId/retry", async (request, reply) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(request.headers)) {
+        if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+      }
+      const session = await sessions.authenticate(headers);
+      if (session === null) {
+        await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });
+        return;
+      }
+      const exportId = (request.params as { exportId: string }).exportId;
+      const body = request.body as { includeRecoverableDrafts?: boolean };
+      try {
+        await reply
+          .code(200)
+          .send(
+            await exports.process(
+              session.accountId,
+              exportId,
+              body.includeRecoverableDrafts === true,
+              crypto.randomUUID(),
+            ),
+          );
+      } catch {
+        await reply.code(503).send({ messageCode: "EXPORT_UNAVAILABLE" });
+      }
+    });
+
+    app.post("/api/v1/test-support/memos/:memoId/purge-retry", async (request, reply) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(request.headers)) {
+        if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+      }
+      const session = await sessions.authenticate(headers);
+      if (session === null) {
+        await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });
+        return;
+      }
+      const memoId = (request.params as { memoId: string }).memoId;
+      await reply.code(200).send(await memoPurgeWorker.purge(session.accountId, memoId));
+    });
+
+    app.post("/api/v1/test-support/account-deletion/advance", async (request, reply) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(request.headers)) {
+        if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+      }
+      const session = await sessions.authenticate(headers);
+      if (session === null) {
+        await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });
+        return;
+      }
+      const body = request.body as { now?: string; providerFailure?: boolean };
+      const now = typeof body.now === "string" ? new Date(body.now) : new Date();
+      if (Number.isNaN(now.getTime())) {
+        await reply.code(400).send({ messageCode: "VALIDATION_FAILED" });
+        return;
+      }
+      let irreversible = await accountDeletion.status(session.accountId);
+      if (irreversible.state === "grace") {
+        irreversible = await accountDeletion.beginIrreversible(session.accountId, now);
+      } else if (irreversible.state === "failed") {
+        irreversible = await accountDeletion.retryFailed(session.accountId);
+      }
+      if (irreversible.state !== "purging") {
+        await reply.code(409).send({ messageCode: "STATE_CONFLICT" });
+        return;
+      }
+      await providerDeletion.initialize(session.accountId, irreversible.id, {
+        ai: { decisionVersion: env.PROVIDER_DECISION_VERSION, required: false },
+        email: {
+          decisionVersion: env.PROVIDER_DECISION_VERSION,
+          required: body.providerFailure === true,
+        },
+        storage: { decisionVersion: env.PROVIDER_DECISION_VERSION, required: false },
+        stt: { decisionVersion: env.PROVIDER_DECISION_VERSION, required: false },
+      });
+      const purge = await accountPurgeWorker.purge(session.accountId, irreversible.id);
+      if (purge.state === "live_purged") {
+        if (body.providerFailure === true) {
+          await providerDeletion.markFailed(session.accountId, irreversible.id, "email", true);
+        }
+        await providerDeletion.reconcileAccountState(session.accountId, irreversible.id);
+      }
+      await reply.code(200).send({
+        deletion: await accountDeletion.status(session.accountId),
+        purge,
+      });
+    });
+  }
   if (assisted !== undefined) {
     registerAssistedCaptureRoutes(app, {
       confirmation: assisted.confirmation,
@@ -325,6 +538,40 @@ async function main() {
     }
     await identity.logout(headers);
     reply.code(204).send();
+  });
+
+  app.post("/api/v1/auth/reauth", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const session = await sessions.authenticate(headers);
+    const body = request.body as { password?: string; scope?: string[] };
+    const allowed = new Set(["account_delete", "export", "purge"]);
+    if (
+      session === null ||
+      typeof body.password !== "string" ||
+      !Array.isArray(body.scope) ||
+      body.scope.length === 0 ||
+      body.scope.some((scope) => !allowed.has(scope)) ||
+      !(await identity.verifyPasswordForAccount(session.accountId, body.password))
+    ) {
+      await reply
+        .headers({ "Cache-Control": "private, no-store", Vary: "Cookie" })
+        .code(401)
+        .send({ messageCode: "REAUTH_REQUIRED" });
+      return;
+    }
+    const grant = await sessions.createReauthGrant(
+      session.accountId,
+      session.sessionId,
+      body.scope,
+    );
+    await reply.headers({ "Cache-Control": "private, no-store", Vary: "Cookie" }).code(200).send({
+      expiresAt: grant.expiresAt.toISOString(),
+      grantId: grant.grantId,
+      scope: grant.scope,
+    });
   });
 
   app.get("/api/v1/auth/session", async (request, reply) => {
@@ -826,6 +1073,14 @@ async function main() {
       reply.code(401).send();
       return;
     }
+    const grant = request.headers["x-reauth-grant"];
+    if (
+      typeof grant !== "string" ||
+      !(await sessions.consumeReauthGrant(grant, ctx.accountId, ctx.sessionId, "purge"))
+    ) {
+      reply.code(401).send({ messageCode: "REAUTH_REQUIRED" });
+      return;
+    }
     const memoId = (request.params as { memoId: string }).memoId;
     const body = request.body as { expectedRevision: string };
     try {
@@ -833,6 +1088,9 @@ async function main() {
         return initiatePurge(tx, memoId, body.expectedRevision);
       });
       reply.code(200).send(memo);
+      queueMicrotask(() => {
+        void memoPurgeWorker.purge(ctx.accountId, memoId).catch(() => undefined);
+      });
     } catch (error) {
       if (error instanceof MoneyMemoServiceError && error.code === "REVISION_CONFLICT") {
         reply.code(409).send({ messageCode: "REVISION_CONFLICT" });

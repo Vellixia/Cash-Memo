@@ -14,13 +14,13 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "pnpm --filter @cashmemo/server run dev",
+      command: "corepack pnpm --filter @cashmemo/server run dev",
       port: 3000,
       reuseExistingServer: false,
       timeout: 30_000,
     },
     {
-      command: "pnpm --filter @cashmemo/web run dev",
+      command: "corepack pnpm --filter @cashmemo/web run dev",
       port: 5173,
       reuseExistingServer: false,
       timeout: 30_000,

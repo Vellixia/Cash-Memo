@@ -32,6 +32,7 @@ export async function withAccountTransaction<Result>(
   pool: Pool,
   authenticatedAccountId: string,
   operation: (transaction: AccountTransaction) => Promise<Result>,
+  options: Readonly<{ isolationLevel?: "repeatable read" }> = {},
 ): Promise<Result> {
   assertAuthenticatedAccountId(authenticatedAccountId);
   const client = await pool.connect();
@@ -40,6 +41,9 @@ export async function withAccountTransaction<Result>(
   try {
     await client.query("BEGIN");
     transactionOpen = true;
+    if (options.isolationLevel === "repeatable read") {
+      await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    }
     const context = await client.query<{ account_id: string | null }>(
       "SELECT set_config('app.current_user_id', $1, true) AS account_id",
       [authenticatedAccountId],

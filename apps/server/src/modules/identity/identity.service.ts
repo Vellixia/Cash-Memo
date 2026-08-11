@@ -256,6 +256,29 @@ export class IdentityService {
     }
   }
 
+  async verifyPasswordForAccount(accountId: string, password: string): Promise<boolean> {
+    if (!UUID_PATTERN.test(accountId) || password.length === 0) return false;
+    try {
+      const account = await this.identityPool.query<{ email: string }>(
+        "SELECT email FROM users WHERE id = $1",
+        [accountId],
+      );
+      const email = account.rows[0]?.email;
+      if (email === undefined) return false;
+      const result = await this.auth.api.signInEmail({
+        body: { email, password },
+        returnHeaders: true,
+      });
+      const cookie = cookiePair(result.headers);
+      const temporaryHeaders = new Headers({ cookie });
+      const verified = await this.auth.api.getSession({ headers: temporaryHeaders });
+      await this.auth.api.signOut({ headers: temporaryHeaders }).catch(() => undefined);
+      return verified?.user.id === accountId;
+    } catch {
+      return false;
+    }
+  }
+
   async logout(requestHeaders: Headers): Promise<LogoutResult> {
     try {
       const result = await this.auth.api.signOut({ headers: requestHeaders, returnHeaders: true });

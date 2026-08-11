@@ -297,27 +297,27 @@
 
 **Independent Test**: Export/verify/cancel; recover/purge records; request/cancel/complete account deletion through contract-backed suppression port with explicit pending/failure states.
 
-- [ ] T164 [P] [US8] Write export v1 JSON/CSV/manifest ordering, checksum, formula-injection, schema-version, snapshot, draft-label, and no-conversion golden tests in `apps/server/tests/contract/export-v1.contract.spec.ts` (FR-091–FR-094; SC-019)
-- [ ] T165 [US8] Implement deterministic export v1 serializers and independent aggregate reproduction rules in `apps/server/src/modules/export/export-v1.serializer.ts` (FR-091, FR-092, FR-072)
-- [ ] T166 [US8] Implement idempotent leased export snapshot/build/state worker with integrity verification in `apps/server/src/modules/export/export-job.service.ts` (FR-093)
-- [ ] T167 [P] [US8] Implement project-owned object storage adapter for private KMS export objects, opaque keys, same-origin streams, version deletion, and contract fake in `apps/server/src/adapters/aws/export-object-store.adapter.ts` (FR-094)
-- [ ] T168 [US8] Implement export request/list/status/download/cancel endpoints with recent auth, ownership, five-minute delivery, and 24-hour expiry in `apps/server/src/modules/export/export.controller.ts` (FR-093, FR-094)
-- [ ] T169 [US8] Implement export request/progress/download/cancel UI with schema/draft disclosures and no raw object URL in `apps/web/src/features/export/ExportCenter.tsx` (FR-091–FR-094)
-- [ ] T170 [US8] Test controlled-clock cancel/expiry/inaccessibility and every S3 object version deletion within 24 hours in `tests/operations/export-lifecycle.spec.ts` (FR-094, FR-103; SC-020)
-- [ ] T171 [P] [US8] Write account grace/cancel/irreversibility, export/session race, idempotency, live/provider-completion, and failed-purge state tests in `apps/server/tests/integration/account-deletion.spec.ts` (FR-097–FR-102)
-- [ ] T172 [US8] Implement seven-day account deletion grace, suspended journal access, cancellation, irreversible transition, and incomplete-stage semantics in `apps/server/src/modules/deletion/account-deletion.service.ts` (FR-097–FR-102)
-- [ ] T173 [US8] Implement account-deletion request/status/cancel OpenAPI endpoints with reauthentication and destructive confirmation in `apps/server/src/modules/deletion/account-deletion.controller.ts` (FR-088, FR-097)
-- [ ] T174 [US8] Implement deletion grace/provider/backup disclosure and cancellation UI without misleading completion in `apps/web/src/features/deletion/AccountDeletionFlow.tsx` (FR-097, FR-101, FR-102)
-- [ ] T175 [P] [US8] Write exact HMAC-SHA-256 entity-type/canonical-UUID token, no-raw-identity ledger shape, write-failure, and idempotency tests in `apps/server/tests/contract/deletion-suppression-port.contract.spec.ts` (FR-096, FR-100)
-- [ ] T176 [US8] Define project-owned deletion-suppression port, token derivation, key-version contract, and deterministic fake with no TTL removal API in `apps/server/src/modules/deletion/deletion-suppression.port.ts` (FR-100)
-- [ ] T177 [US8] Implement memo purge worker that verifies durable `money_memo` suppression record before deleting content/search/draft/provider state in `apps/server/src/modules/deletion/memo-purge.worker.ts` (FR-028, FR-096, FR-099, FR-100)
-- [ ] T178 [US8] Implement account purge worker that verifies durable `account` suppression record before deleting every live data class/session/export/identity in `apps/server/src/modules/deletion/account-purge.worker.ts` (FR-098–FR-102)
-- [ ] T179 [US8] Implement provider deletion/not-required/pending-escalation tracking without claiming live failure complete in `apps/server/src/modules/deletion/provider-deletion.service.ts` (FR-098, FR-102)
-- [ ] T180 [US8] Execute two-account export/object/purge/recovery/account-deletion authorization and irreversible-state matrix in `tests/security/us8-data-ownership-isolation.spec.ts` (FR-082; SC-015)
-- [ ] T181 [US8] Implement Recently Deleted, immediate purge, account grace, provider-pending, backup-aging, and legal-record limitation copy in `apps/web/src/features/deletion/DeletionDisclosures.tsx` (FR-095, FR-101)
-- [ ] T182 [US8] Test deleted financial content absence across purge logs, evidence, errors, and support adapters in `apps/server/tests/privacy/deletion-evidence.spec.ts` (FR-104)
-- [ ] T183 [US8] Create `pnpm acceptance:us8` suite covering export, record recovery/purge, account grace/cancel/purge, pending/failure, privacy, and retry scenarios in `tests/acceptance/us8-data-ownership.spec.ts`
-- [ ] T184 [US8] Invoke `pnpm acceptance:us8` against contract-backed storage/suppression adapters and write integration evidence to `ops/evidence/stories/us8-integration.json`; keep real restore/provider closure open (FR-105, FR-118)
+- [x] T164 [P] [US8] Write export v1 JSON/CSV/manifest ordering, checksum, formula-injection, schema-version, snapshot, draft-label, and no-conversion golden tests in `apps/server/tests/contract/export-v1.contract.spec.ts` (FR-091–FR-094; SC-019)
+- [x] T165 [US8] Implement deterministic export v1 serializers and independent aggregate reproduction rules in `apps/server/src/modules/export/export-v1.serializer.ts` (FR-091, FR-092, FR-072)
+- [x] T166 [US8] Implement idempotent leased export snapshot/build/state worker with integrity verification in `apps/server/src/modules/export/export-job.service.ts` (FR-093)
+- [x] T167 [P] [US8] Implement project-owned object storage adapter for private KMS export objects, opaque keys, same-origin streams, version deletion, and contract fake in `apps/server/src/adapters/aws/export-object-store.adapter.ts` (FR-094)
+- [x] T168 [US8] Implement export request/list/status/download/cancel endpoints with recent auth, ownership, five-minute delivery, and 24-hour expiry in `apps/server/src/modules/export/export.controller.ts` (FR-093, FR-094)
+- [x] T169 [US8] Implement export request/progress/download/cancel UI with schema/draft disclosures and no raw object URL in `apps/web/src/features/export/ExportCenter.tsx` (FR-091–FR-094)
+- [x] T170 [US8] Test controlled-clock cancel/expiry/inaccessibility and every S3 object version deletion within 24 hours in `tests/operations/export-lifecycle.spec.ts` (FR-094, FR-103; SC-020)
+- [x] T171 [P] [US8] Write account grace/cancel/irreversibility, export/session race, idempotency, live/provider-completion, and failed-purge state tests in `apps/server/tests/integration/account-deletion.spec.ts` (FR-097–FR-102)
+- [x] T172 [US8] Implement seven-day account deletion grace, suspended journal access, cancellation, irreversible transition, and incomplete-stage semantics in `apps/server/src/modules/deletion/account-deletion.service.ts` (FR-097–FR-102)
+- [x] T173 [US8] Implement account-deletion request/status/cancel OpenAPI endpoints with reauthentication and destructive confirmation in `apps/server/src/modules/deletion/account-deletion.controller.ts` (FR-088, FR-097)
+- [x] T174 [US8] Implement deletion grace/provider/backup disclosure and cancellation UI without misleading completion in `apps/web/src/features/deletion/AccountDeletionFlow.tsx` (FR-097, FR-101, FR-102)
+- [x] T175 [P] [US8] Write exact HMAC-SHA-256 entity-type/canonical-UUID token, no-raw-identity ledger shape, write-failure, and idempotency tests in `apps/server/tests/contract/deletion-suppression-port.contract.spec.ts` (FR-096, FR-100)
+- [x] T176 [US8] Define project-owned deletion-suppression port, token derivation, key-version contract, and deterministic fake with no TTL removal API in `apps/server/src/modules/deletion/deletion-suppression.port.ts` (FR-100)
+- [x] T177 [US8] Implement memo purge worker that verifies durable `money_memo` suppression record before deleting content/search/draft/provider state in `apps/server/src/modules/deletion/memo-purge.worker.ts` (FR-028, FR-096, FR-099, FR-100)
+- [x] T178 [US8] Implement account purge worker that verifies durable `account` suppression record before deleting every live data class/session/export/identity in `apps/server/src/modules/deletion/account-purge.worker.ts` (FR-098–FR-102)
+- [x] T179 [US8] Implement provider deletion/not-required/pending-escalation tracking without claiming live failure complete in `apps/server/src/modules/deletion/provider-deletion.service.ts` (FR-098, FR-102)
+- [x] T180 [US8] Execute two-account export/object/purge/recovery/account-deletion authorization and irreversible-state matrix in `tests/security/us8-data-ownership-isolation.spec.ts` (FR-082; SC-015)
+- [x] T181 [US8] Implement Recently Deleted, immediate purge, account grace, provider-pending, backup-aging, and legal-record limitation copy in `apps/web/src/features/deletion/DeletionDisclosures.tsx` (FR-095, FR-101)
+- [x] T182 [US8] Test deleted financial content absence across purge logs, evidence, errors, and support adapters in `apps/server/tests/privacy/deletion-evidence.spec.ts` (FR-104)
+- [x] T183 [US8] Create `pnpm acceptance:us8` suite covering export, record recovery/purge, account grace/cancel/purge, pending/failure, privacy, and retry scenarios in `tests/acceptance/us8-data-ownership.spec.ts`
+- [x] T184 [US8] Invoke `pnpm acceptance:us8` against contract-backed storage/suppression adapters and write integration evidence to `ops/evidence/stories/us8-integration.json`; keep real restore/provider closure open (FR-105, FR-118)
 
 **Checkpoint**: Product lifecycle works against verified ports; irreversible production deletion still depends on Phase 13 and real Phase 17 evidence.
 

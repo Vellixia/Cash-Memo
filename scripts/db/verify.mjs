@@ -14,8 +14,9 @@ async function run(command, arguments_, environment = process.env) {
 
 try {
   await run(
-    "pnpm",
+    "corepack",
     [
+      "pnpm",
       "--filter",
       "@cashmemo/server",
       "exec",
@@ -25,7 +26,12 @@ try {
     ],
     { ...process.env, CASHMEMO_DATABASE_VERIFICATION: "1" },
   );
-  await run("pnpm", ["exec", "tsx", "apps/server/tests/integration/write-database-evidence.ts"]);
+  await run("corepack", [
+    "pnpm",
+    "exec",
+    "tsx",
+    "apps/server/tests/integration/write-database-evidence.ts",
+  ]);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "DATABASE_VERIFICATION_FAILED");
   process.exitCode = 1;

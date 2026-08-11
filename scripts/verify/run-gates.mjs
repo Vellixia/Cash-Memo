@@ -132,7 +132,7 @@ async function runVitestSuite(suite) {
   if (predicate === undefined) throw new GateFailure("UNKNOWN_TEST_SUITE", [suite]);
   const files = await discoverTestFiles(predicate);
   if (files.length === 0) throw new GateFailure("GATE_UNAVAILABLE", [`test:${suite}`]);
-  await run("pnpm", ["exec", "vitest", "run", ...files.map(relative)], {
+  await run("corepack", ["pnpm", "exec", "vitest", "run", ...files.map(relative)], {
     label: `test:${suite}`,
   });
 }
@@ -173,7 +173,7 @@ async function runAcceptance(story) {
       names: ["PRODUCTION_BASE_URL"],
     });
   }
-  await run("pnpm", ["exec", "playwright", "test", target], {
+  await run("corepack", ["pnpm", "exec", "playwright", "test", target], {
     env:
       story === "us3" || story === "us5"
         ? { ...process.env, ASSISTED_CAPTURE_MODE: "fake" }
@@ -203,7 +203,7 @@ async function runTypecheck() {
       console.log(`TYPECHECK_EMPTY=${configuration}`);
       continue;
     }
-    await run("pnpm", ["exec", "tsc", "--noEmit", "-p", configuration], {
+    await run("corepack", ["pnpm", "exec", "tsc", "--noEmit", "-p", configuration], {
       label: `typecheck:${configuration}`,
     });
   }
@@ -211,15 +211,19 @@ async function runTypecheck() {
 
 async function runArchitectureCheck() {
   await run(
-    "pnpm",
-    ["exec", "depcruise", "--config", "dependency-cruiser.config.mjs", "apps", "packages"],
+    "corepack",
+    ["pnpm", "exec", "depcruise", "--config", "dependency-cruiser.config.mjs", "apps", "packages"],
     {
       label: "architecture:dependencies",
     },
   );
-  await run("pnpm", ["exec", "vitest", "run", "tests/architecture/module-boundaries.spec.ts"], {
-    label: "architecture:topology",
-  });
+  await run(
+    "corepack",
+    ["pnpm", "exec", "vitest", "run", "tests/architecture/module-boundaries.spec.ts"],
+    {
+      label: "architecture:topology",
+    },
+  );
 }
 
 async function runArtifactScript(target, label) {
@@ -242,7 +246,7 @@ async function runWorkspaceScript(script, environment = process.env) {
     if (typeof value.scripts?.[script] === "string") ownerCount += 1;
   }
   if (ownerCount === 0) throw new GateFailure("GATE_UNAVAILABLE", [`workspace:${script}`]);
-  await run("pnpm", ["-r", "--if-present", "run", script], {
+  await run("corepack", ["pnpm", "-r", "--if-present", "run", script], {
     env: environment,
     label: `workspace:${script}`,
   });
@@ -395,7 +399,7 @@ async function runProtectedSuite(suite) {
     if (!(await exists(path.join(repositoryRoot, target)))) {
       throw new GateFailure("GATE_UNAVAILABLE", ["test:operations", target]);
     }
-    await run("pnpm", ["exec", "tsx", target], { label: "test:operations" });
+    await run("corepack", ["pnpm", "exec", "tsx", target], { label: "test:operations" });
   }
   if (suite === "performance") {
     for (const target of [
@@ -408,16 +412,20 @@ async function runProtectedSuite(suite) {
         throw new GateFailure("GATE_UNAVAILABLE", ["test:performance", target]);
       }
     }
-    await run("pnpm", ["exec", "vitest", "run", "tests/performance/query-plans.spec.ts"], {
-      label: "test:performance:query-plans",
-    });
+    await run(
+      "corepack",
+      ["pnpm", "exec", "vitest", "run", "tests/performance/query-plans.spec.ts"],
+      {
+        label: "test:performance:query-plans",
+      },
+    );
     await run("k6", ["run", "tests/performance/core-load.js"], {
       label: "test:performance:core-load",
     });
     await run("k6", ["run", "tests/performance/audio-concurrency.js"], {
       label: "test:performance:audio-concurrency",
     });
-    await run("pnpm", ["exec", "tsx", "tests/performance/slo-probes.ts"], {
+    await run("corepack", ["pnpm", "exec", "tsx", "tests/performance/slo-probes.ts"], {
       label: "test:performance:slo-probes",
     });
   }
@@ -427,8 +435,8 @@ async function runGate(gate) {
   const gates = {
     acceptance: async () => runAllStoryAcceptance(),
     "format-lint": async () => {
-      await run("pnpm", ["format:check"], { label: "format:check" });
-      await run("pnpm", ["lint"], { label: "lint" });
+      await run("corepack", ["pnpm", "format:check"], { label: "format:check" });
+      await run("corepack", ["pnpm", "lint"], { label: "lint" });
     },
     "integration-contract": async () => {
       await runVitestSuite("contract");
