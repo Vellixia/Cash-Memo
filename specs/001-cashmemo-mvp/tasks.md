@@ -327,23 +327,23 @@
 
 **Purpose**: Exact memo/account suppression, verified cleanup floor, prohibited-copy policy, restore-before-release tooling, and operational drill harness.
 
-- [ ] T185 [P] Write AWS deletion-ledger contract tests for durable conditional writes, encryption, no raw identity/content, no lifecycle TTL, and privileged removal in `tests/providers/aws-deletion-ledger.contract.spec.ts` (FR-100)
-- [ ] T186 Implement KMS-encrypted S3 deletion-suppression adapter with content-free keys/body/version checks in `apps/server/src/adapters/aws/deletion-suppression.adapter.ts` (FR-100)
-- [ ] T187 Verify both memo/account purge workers never hard-delete before ledger durability and retain inaccessible retry state on ledger failure in `apps/server/tests/integration/write-before-purge.spec.ts` (FR-096, FR-098, FR-100; SC-020)
-- [ ] T188 Implement suppression HMAC key-version creation/rotation/retention with no retirement while records remain in `apps/server/src/modules/deletion/suppression-key-manager.ts` (FR-100)
-- [ ] T189 [P] Write full-lineage inventory contract tests for automated windows, retained backups, manual/final/copied/shared snapshots, AWS Backup, replication, and restore copies in `tests/providers/aws-backup-inventory.contract.spec.ts` (FR-100)
-- [ ] T190 Implement authoritative RDS/AWS Backup/snapshot/replica/restore-copy inventory adapter with unavailable/stale result states in `apps/server/src/adapters/aws/backup-lineage-inventory.adapter.ts` (FR-100)
-- [ ] T191 [P] Write `removal_not_before_at`, capable/unverifiable artifact, alert/retry, key-retention, and no-time-only-success tests in `tests/operations/suppression-cleanup.spec.ts` (FR-100; SC-021)
-- [ ] T192 Implement verifier-controlled suppression cleanup that retains/alerts/retries on every failed or unavailable proof in `apps/server/src/modules/deletion/suppression-cleanup.service.ts` (FR-100)
-- [ ] T193 Add policy-as-code denying untracked manual/final/copied/shared snapshots, retained automated backups, AWS Backup recovery points, and cross-region replication in `infra/opentofu/modules/data-safety/no-resurrection-copies.tf` (FR-100)
-- [ ] T194 [P] Write isolated restore tests for account-first then memo-token matching across key versions, expired sweepers, session revocation, neighboring-data survival, and release denial in `tests/operations/restore-reconciliation.spec.ts` (FR-028, FR-100, FR-115; SC-021)
-- [ ] T195 Implement isolated pre-network restore reconciliation command with exact account/memo suppression and mandatory verification checklist in `scripts/operations/restore-reconcile.mjs` (FR-100, FR-115)
-- [ ] T196 Implement tagged restore-copy registration, lineage inventory, network-isolation guard, and verified destruction command in `scripts/operations/restore-copy-lifecycle.mjs` (FR-100)
-- [ ] T197 Create production-safe PITR restore/release runbook with owners, approvals, RPO/RTO, and content-safe evidence in `ops/runbooks/backup-restore.md` (FR-114, FR-115)
-- [ ] T198 Create suppression cleanup/key rotation/policy-drift runbook with blocker retention and escalation in `ops/runbooks/deletion-suppression-cleanup.md` (FR-100)
-- [ ] T199 Build `pnpm test:operations` backup/restore/purge/cleanup orchestration using synthetic identities only in `tests/operations/operations-suite.ts` (FR-103, FR-114, FR-115)
-- [ ] T200 Define quarterly isolated restore and cleanup drill automation, evidence schema, and pass/fail checks in `ops/drills/quarterly-restore.ts` and `ops/drills/suppression-cleanup.ts` (FR-114, FR-115; SC-021)
-- [ ] T201 Validate Phase 13 harness locally/contractually and store non-production readiness evidence—not SC-021 closure—in `ops/evidence/operations/deletion-restore-readiness.json`
+- [x] T185 [P] Write AWS deletion-ledger contract tests for durable conditional writes, encryption, no raw identity/content, no lifecycle TTL, and privileged removal in `tests/providers/aws-deletion-ledger.contract.spec.ts` (FR-100)
+- [x] T186 Implement KMS-encrypted S3 deletion-suppression adapter with content-free keys/body/version checks in `apps/server/src/adapters/aws/deletion-suppression.adapter.ts` (FR-100)
+- [x] T187 Verify both memo/account purge workers never hard-delete before ledger durability and retain inaccessible retry state on ledger failure in `apps/server/tests/integration/write-before-purge.spec.ts` (FR-096, FR-098, FR-100; SC-020)
+- [x] T188 Implement suppression HMAC key-version creation/rotation/retention with no retirement while records remain in `apps/server/src/modules/deletion/suppression-key-manager.ts` (FR-100)
+- [x] T189 [P] Write full-lineage inventory contract tests for automated windows, retained backups, manual/final/copied/shared snapshots, AWS Backup, replication, and restore copies in `tests/providers/aws-backup-inventory.contract.spec.ts` (FR-100)
+- [x] T190 Implement authoritative RDS/AWS Backup/snapshot/replica/restore-copy inventory adapter with unavailable/stale result states in `apps/server/src/adapters/aws/backup-lineage-inventory.adapter.ts` (FR-100)
+- [x] T191 [P] Write `removal_not_before_at`, capable/unverifiable artifact, alert/retry, key-retention, and no-time-only-success tests in `tests/operations/suppression-cleanup.spec.ts` (FR-100; SC-021)
+- [x] T192 Implement verifier-controlled suppression cleanup that retains/alerts/retries on every failed or unavailable proof in `apps/server/src/modules/deletion/suppression-cleanup.service.ts` (FR-100)
+- [x] T193 Add policy-as-code denying untracked manual/final/copied/shared snapshots, retained automated backups, AWS Backup recovery points, and cross-region replication in `infra/opentofu/modules/data-safety/no-resurrection-copies.tf` (FR-100)
+- [x] T194 [P] Write isolated restore tests for account-first then memo-token matching across key versions, expired sweepers, session revocation, neighboring-data survival, and release denial in `tests/operations/restore-reconciliation.spec.ts` (FR-028, FR-100, FR-115; SC-021)
+- [x] T195 Implement isolated pre-network restore reconciliation command with exact account/memo suppression and mandatory verification checklist in `scripts/operations/restore-reconcile.mjs` (FR-100, FR-115)
+- [x] T196 Implement tagged restore-copy registration, lineage inventory, network-isolation guard, and verified destruction command in `scripts/operations/restore-copy-lifecycle.mjs` (FR-100)
+- [x] T197 Create production-safe PITR restore/release runbook with owners, approvals, RPO/RTO, and content-safe evidence in `ops/runbooks/backup-restore.md` (FR-114, FR-115)
+- [x] T198 Create suppression cleanup/key rotation/policy-drift runbook with blocker retention and escalation in `ops/runbooks/deletion-suppression-cleanup.md` (FR-100)
+- [x] T199 Build `pnpm test:operations` backup/restore/purge/cleanup orchestration using synthetic identities only in `tests/operations/operations-suite.ts` (FR-103, FR-114, FR-115)
+- [x] T200 Define quarterly isolated restore and cleanup drill automation, evidence schema, and pass/fail checks in `ops/drills/quarterly-restore.ts` and `ops/drills/suppression-cleanup.ts` (FR-114, FR-115; SC-021)
+- [x] T201 Validate Phase 13 harness locally/contractually and store non-production readiness evidence—not SC-021 closure—in `ops/evidence/operations/deletion-restore-readiness.json`
 
 **Checkpoint**: Deletion/restore machinery is ready for real infrastructure; SC-021 remains open until T268.
 

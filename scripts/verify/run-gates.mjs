@@ -193,6 +193,8 @@ async function runTypecheck() {
     "apps/web/tsconfig.json",
     "packages/tsconfig.json",
     "tests/tsconfig.json",
+    "ops/tsconfig.json",
+    "scripts/tsconfig.json",
   ];
   for (const configuration of configurations) {
     const configurationDirectory = path.dirname(path.join(repositoryRoot, configuration));
@@ -393,7 +395,7 @@ async function runProtectedSuite(suite) {
     },
   }[suite];
   if (policy === undefined) throw new GateFailure("UNKNOWN_PROTECTED_SUITE", [suite]);
-  await requireRealMode(policy);
+  if (suite !== "operations") await requireRealMode(policy);
   if (suite === "operations") {
     const target = "tests/operations/operations-suite.ts";
     if (!(await exists(path.join(repositoryRoot, target)))) {

@@ -9,6 +9,7 @@ import {
 } from "./deletion-suppression.port.js";
 
 interface AccountPurgeWorkerOptions {
+  readonly afterSuppressionVerified?: () => Promise<void>;
   readonly auditHmacKey: Buffer;
   readonly deleteExports: (accountId: string) => Promise<void>;
   readonly identityPool: Pool;
@@ -21,7 +22,7 @@ interface AccountPurgeWorkerOptions {
 
 interface AccountPurgeResult {
   readonly hardDeletedContent: boolean;
-  readonly state: "live_purged" | "purge_failed" | "suppression_pending";
+  readonly state: "already_purged" | "live_purged" | "purge_failed" | "suppression_pending";
   readonly suppressionDurable: boolean;
 }
 
@@ -44,7 +45,17 @@ class AccountPurgeWorker {
         return result.rows[0] ?? null;
       },
     );
-    if (deletion?.state !== "purging" || deletion.irreversible_at === null) {
+    if (deletion?.state === "live_purged") {
+      return Object.freeze({
+        hardDeletedContent: false,
+        state: "already_purged",
+        suppressionDurable: true,
+      });
+    }
+    if (
+      (deletion?.state !== "purging" && deletion?.state !== "failed") ||
+      deletion.irreversible_at === null
+    ) {
       throw new Error("ACCOUNT_NOT_IN_PURGING_STATE");
     }
     const record = createSuppressionRecord({
@@ -75,6 +86,8 @@ class AccountPurgeWorker {
         suppressionDurable: false,
       });
     }
+
+    await this.options.afterSuppressionVerified?.();
 
     try {
       await this.options.deleteExports(accountId);

@@ -9,6 +9,7 @@ import {
 } from "./deletion-suppression.port.js";
 
 interface MemoPurgeWorkerOptions {
+  readonly afterSuppressionVerified?: () => Promise<void>;
   readonly auditHmacKey: Buffer;
   readonly policyVersion: string;
   readonly pool: Pool;
@@ -76,6 +77,8 @@ class MemoPurgeWorker {
         suppressionDurable: false,
       });
     }
+
+    await this.options.afterSuppressionVerified?.();
 
     const deleted = await withAccountTransaction(
       this.options.pool,
