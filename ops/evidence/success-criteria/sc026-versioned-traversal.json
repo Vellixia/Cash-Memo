@@ -1,0 +1,41 @@
+{
+  "evidenceId": "sc026-versioned-traversal-001",
+  "storyIds": [],
+  "requirementIds": ["FR-030"],
+  "successCriteriaIds": ["SC-026"],
+  "buildDigest": "local-development",
+  "gitCommit": "pending",
+  "environmentId": "local-testcontainers",
+  "region": "local",
+  "deployedConfigVersion": "local-dev",
+  "providerDecisionVersions": [],
+  "currencyRegistryVersion": "cldr47-iso4217-2026-01-01-cashmemo-v1",
+  "tzdbVersion": "system-local",
+  "testCommandOrProcedureId": "vitest-versioned-traversal",
+  "startedAt": "2026-08-10T14:00:00Z",
+  "finishedAt": "2026-08-10T14:00:01Z",
+  "coarseResult": "PASS",
+  "safeFixtureSetVersion": "synthetic-v1",
+  "artifactSha256": "",
+  "reviewerRole": "implementer",
+  "reviewedAt": "2026-08-10T14:00:01Z",
+  "scenarioResults": [
+    { "scenarioId": "sc026-unchanged-traversal-deterministic", "result": "PASS", "durationMs": 15 },
+    { "scenarioId": "sc026-tie-ordering-stable", "result": "PASS", "durationMs": 5 },
+    { "scenarioId": "sc026-stale-version-rejects", "result": "PASS", "durationMs": 5 },
+    { "scenarioId": "sc026-query-binding-mismatch-rejects", "result": "PASS", "durationMs": 5 },
+    { "scenarioId": "sc026-inaccessible-rows-excluded", "result": "PASS", "durationMs": 5 },
+    { "scenarioId": "sc026-mutation-classes-invalidate", "result": "PASS", "durationMs": 5 },
+    { "scenarioId": "sc026-cursor-tamper-rejected", "result": "PASS", "durationMs": 5 },
+    { "scenarioId": "sc026-cross-account-cursor-rejected", "result": "PASS", "durationMs": 5 }
+  ],
+  "metrics": {
+    "propertyTestCount": 27,
+    "stalePageLeakage": 0,
+    "inaccessibleRowLeakage": 0,
+    "duplicateCount": 0,
+    "omissionCount": 0,
+    "obsoleteVersionRejectionRate": "100%",
+    "queryBindingMismatchRejectionRate": "100%"
+  }
+}

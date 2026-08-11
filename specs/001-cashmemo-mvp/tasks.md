@@ -151,16 +151,16 @@
 
 **Purpose**: Honest version-bound pagination for history, search, and recovery lists; no long-lived snapshots.
 
-- [ ] T084 [P] Write property tests for unchanged `(occurred_at DESC, id DESC)` traversal, list-affecting mutations, query binding, and zero stale-page responses in `packages/domain/tests/versioned-traversal.property.spec.ts` (FR-030; SC-026)
-- [ ] T085 Implement opaque authenticated cursor codec carrying version, last key, and no raw query/filter value in `apps/server/src/modules/history/cursor-codec.ts` (FR-030)
-- [ ] T086 Implement deterministic canonical query/filter representation and HMAC fingerprint in `apps/server/src/modules/history/query-fingerprint.ts` (FR-030)
-- [ ] T087 Implement account-scoped monotonic HistoryListState repository with short read-consistent transaction semantics in `apps/server/src/modules/history/history-list-state.repository.ts` (FR-030)
-- [ ] T088 Implement continuation keyset query that rechecks ownership/lifecycle and returns no page on version/query mismatch in `apps/server/src/modules/history/versioned-traversal.service.ts` (FR-030)
-- [ ] T089 Wire transactional version increments into create, occurrence/filterable-field edit, archive, restore, delete, purge, and recovery-list mutations in `apps/server/src/modules/memo/history-invalidation.ts` (FR-030)
-- [ ] T090 Expose stable HTTP 409 `RESULTS_CHANGED` with `restartRequired=true` and no partial continuation body in `apps/server/src/modules/history/history.controller.ts` (FR-030)
-- [ ] T091 Implement refresh-required UX that discards obsolete cursors without replaying inaccessible data in `apps/web/src/features/history/ResultsChangedBoundary.tsx` (FR-030)
-- [ ] T092 Run multi-transaction create/edit/archive/restore/delete/purge races, cursor tampering, query mismatch, and cross-user continuation tests in `apps/server/tests/integration/versioned-traversal.spec.ts` (FR-030; SC-026)
-- [ ] T093 Execute traversal concurrency suite against deployed PostgreSQL and store SC-026 evidence in `ops/evidence/success-criteria/sc026-versioned-traversal.json`
+- [x] T084 [P] Write property tests for unchanged `(occurred_at DESC, id DESC)` traversal, list-affecting mutations, query binding, and zero stale-page responses in `packages/domain/tests/versioned-traversal.property.spec.ts` (FR-030; SC-026)
+- [x] T085 Implement opaque authenticated cursor codec carrying version, last key, and no raw query/filter value in `apps/server/src/modules/history/cursor-codec.ts` (FR-030)
+- [x] T086 Implement deterministic canonical query/filter representation and HMAC fingerprint in `apps/server/src/modules/history/query-fingerprint.ts` (FR-030)
+- [x] T087 Implement account-scoped monotonic HistoryListState repository with short read-consistent transaction semantics in `apps/server/src/modules/history/history-list-state.repository.ts` (FR-030)
+- [x] T088 Implement continuation keyset query that rechecks ownership/lifecycle and returns no page on version/query mismatch in `apps/server/src/modules/history/versioned-traversal.service.ts` (FR-030)
+- [x] T089 Wire transactional version increments into create, occurrence/filterable-field edit, archive, restore, delete, purge, and recovery-list mutations in `apps/server/src/modules/memo/history-invalidation.ts` (FR-030)
+- [x] T090 Expose stable HTTP 409 `RESULTS_CHANGED` with `restartRequired=true` and no partial continuation body in `apps/server/src/modules/history/history.controller.ts` (FR-030)
+- [x] T091 Implement refresh-required UX that discards obsolete cursors without replaying inaccessible data in `apps/web/src/features/history/ResultsChangedBoundary.tsx` (FR-030)
+- [x] T092 Run multi-transaction create/edit/archive/restore/delete/purge races, cursor tampering, query mismatch, and cross-user continuation tests in `apps/server/tests/integration/versioned-traversal.spec.ts` (FR-030; SC-026)
+- [x] T093 Execute traversal concurrency suite against deployed PostgreSQL and store SC-026 evidence in `ops/evidence/success-criteria/sc026-versioned-traversal.json`
 
 **Checkpoint**: Every changed traversal refreshes visibly; unchanged traversal is stable; purged/inaccessible rows never replay.
 

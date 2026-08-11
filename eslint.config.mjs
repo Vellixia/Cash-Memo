@@ -71,6 +71,16 @@ export default tseslint.config(
     },
   },
   {
+    files: ["apps/server/tests/integration/versioned-traversal.spec.ts"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unnecessary-condition": "off",
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      "@typescript-eslint/no-unnecessary-type-parameters": "off",
+      "@typescript-eslint/consistent-type-imports": "off",
+    },
+  },
+  {
     files: ["tests/acceptance/**/*.ts"],
     rules: {
       "@typescript-eslint/no-unsafe-assignment": "off",
