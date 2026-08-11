@@ -31,10 +31,10 @@ export async function createDraft(
     const result = await tx.query<Record<string, unknown>>(
       `INSERT INTO compose_drafts (
         id, user_id, origin, source_text, source_completeness,
-        candidate_fields, capture_started_at, capture_timezone,
+        candidate_fields, field_provenance, capture_started_at, capture_timezone,
         status, last_activity_at, expires_at, revision
       ) VALUES (
-        gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
+        gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::jsonb, $6, $7,
         'editing', now(), now() + interval '7 days', 1
       ) RETURNING *`,
       [

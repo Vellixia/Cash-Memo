@@ -57,7 +57,45 @@ export interface SearchPage {
   readonly resultSetVersion: number;
 }
 
+export interface OverviewBucket {
+  readonly amountMinor: string;
+  readonly key: string;
+  readonly label: string;
+}
+
+export interface CurrentMonthCurrency {
+  readonly categoryBreakdown: readonly OverviewBucket[];
+  readonly currency: string;
+  readonly currencyExponent: number;
+  readonly expenseMinor: string;
+  readonly incomeMinor: string;
+  readonly netMinor: string;
+  readonly planningBreakdown: readonly OverviewBucket[];
+  readonly purposeBreakdown: readonly OverviewBucket[];
+}
+
+export interface CurrentMonthRecentMemo {
+  readonly direction: "expense" | "income";
+  readonly id: string;
+  readonly money: {
+    readonly amountMinor: string;
+    readonly currency: string;
+    readonly currencyExponent: number;
+  };
+  readonly note: string | null;
+  readonly occurrence: { readonly occurredAt: string };
+}
+
+export interface CurrentMonthOverviewView {
+  readonly calculatedAt: string;
+  readonly currencies: readonly CurrentMonthCurrency[];
+  readonly period: string;
+  readonly recentMemos: readonly CurrentMonthRecentMemo[];
+  readonly reportingTimezone: string;
+}
+
 export type JournalErrorCode =
+  | "CURRENT_MONTH_CALCULATION_UNAVAILABLE"
   | "IDEMPOTENCY_CONFLICT"
   | "INTERNAL_ERROR"
   | "INVALID_STATE_TRANSITION"
@@ -83,6 +121,7 @@ export class JournalApiError extends Error {
 export interface JournalApiPort {
   createCategory(input: { kind: "expense" | "income"; name: string }): Promise<CategoryView>;
   createMoneySpace(input: { name: string }): Promise<MoneySpaceView>;
+  getCurrentMonth(): Promise<CurrentMonthOverviewView>;
   listCategories(): Promise<readonly CategoryView[]>;
   listMoneySpaces(): Promise<readonly MoneySpaceView[]>;
   search(input: Readonly<SearchInput>): Promise<SearchPage>;
@@ -133,6 +172,11 @@ export function createJournalApi(): JournalApiPort {
         ...json(input),
         headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         method: "POST",
+      });
+    },
+    async getCurrentMonth() {
+      return request<CurrentMonthOverviewView>(`${API_BASE}/overview/current-month`, {
+        cache: "no-store",
       });
     },
     async listCategories() {

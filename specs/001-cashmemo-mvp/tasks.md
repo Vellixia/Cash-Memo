@@ -196,15 +196,15 @@
 
 **Independent Test**: Golden multi-currency/timezone dataset reproduces every total and bucket without monthly review or AI.
 
-- [ ] T107 [P] [US4] Write income/expense/net, currency partition, archived/deleted/draft eligibility, bucket completion, and DST-boundary property tests in `packages/domain/tests/current-month-overview.property.spec.ts` (FR-061–FR-065; SC-005, SC-006, SC-012)
-- [ ] T108 [P] [US4] Create independent PostgreSQL/export-recomputed current-month golden fixtures in `apps/server/tests/fixtures/reporting/current-month-golden.ts` and tests in `apps/server/tests/integration/current-month-overview.spec.ts` (FR-072)
-- [ ] T109 [US4] Implement exact currency-first aggregation, net, category/planning/purpose buckets, eligibility, and deterministic ordering in `packages/domain/src/reporting/current-month.ts` (FR-061–FR-065)
-- [ ] T110 [US4] Implement account-owned reporting-zone query/service with archived inclusion and deleted/draft exclusion in `apps/server/src/modules/reporting/current-month.service.ts` (FR-061–FR-065)
-- [ ] T111 [US4] Implement `/overview/current-month` controller with no stale/partial-success response in `apps/server/src/modules/reporting/current-month.controller.ts` (FR-071)
-- [ ] T112 [US4] Implement responsive per-currency overview, recent active memos, breakdowns, and zero/empty states in `apps/web/src/features/reporting/CurrentMonthOverview.tsx` (FR-063–FR-065)
-- [ ] T113 [US4] Test protected-cache/telemetry exclusion and named calculation-unavailable behavior while capture/history remain usable in `apps/server/tests/privacy/current-month-privacy.spec.ts` (FR-071, FR-078)
-- [ ] T114 [US4] Create `pnpm acceptance:us4` suite covering all US4 scenarios, calculation failure, timezone, empty, and privacy cases in `tests/acceptance/us4-current-month.spec.ts`
-- [ ] T115 [US4] Invoke `pnpm acceptance:us4` and write content-safe golden evidence to `ops/evidence/stories/us4.json` (FR-118)
+- [x] T107 [P] [US4] Write income/expense/net, currency partition, archived/deleted/draft eligibility, bucket completion, and DST-boundary property tests in `packages/domain/tests/current-month-overview.property.spec.ts` (FR-061–FR-065; SC-005, SC-006, SC-012)
+- [x] T108 [P] [US4] Create independent PostgreSQL/export-recomputed current-month golden fixtures in `apps/server/tests/fixtures/reporting/current-month-golden.ts` and tests in `apps/server/tests/integration/current-month-overview.spec.ts` (FR-072)
+- [x] T109 [US4] Implement exact currency-first aggregation, net, category/planning/purpose buckets, eligibility, and deterministic ordering in `packages/domain/src/reporting/current-month.ts` (FR-061–FR-065)
+- [x] T110 [US4] Implement account-owned reporting-zone query/service with archived inclusion and deleted/draft exclusion in `apps/server/src/modules/reporting/current-month.service.ts` (FR-061–FR-065)
+- [x] T111 [US4] Implement `/overview/current-month` controller with no stale/partial-success response in `apps/server/src/modules/reporting/current-month.controller.ts` (FR-071)
+- [x] T112 [US4] Implement responsive per-currency overview, recent active memos, breakdowns, and zero/empty states in `apps/web/src/features/reporting/CurrentMonthOverview.tsx` (FR-063–FR-065)
+- [x] T113 [US4] Test protected-cache/telemetry exclusion and named calculation-unavailable behavior while capture/history remain usable in `apps/server/tests/privacy/current-month-privacy.spec.ts` (FR-071, FR-078)
+- [x] T114 [US4] Create `pnpm acceptance:us4` suite covering all US4 scenarios, calculation failure, timezone, empty, and privacy cases in `tests/acceptance/us4-current-month.spec.ts`
+- [x] T115 [US4] Invoke `pnpm acceptance:us4` and write content-safe golden evidence to `ops/evidence/stories/us4.json` (FR-118)
 
 **Checkpoint**: Current-month value is exact, deterministic, protected, and never cross-currency.
 

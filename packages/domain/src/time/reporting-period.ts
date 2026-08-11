@@ -35,8 +35,28 @@ function reportingMonthBounds(input: {
   }
 }
 
+function reportingMonthForInstant(input: {
+  readonly instant: string;
+  readonly reportingTimezone: string;
+}): string {
+  try {
+    return Temporal.Instant.from(input.instant)
+      .toZonedDateTimeISO(input.reportingTimezone)
+      .toPlainDate()
+      .toPlainYearMonth()
+      .toString();
+  } catch {
+    throw new ReportingPeriodValidationError();
+  }
+}
+
 function formatBoundary(value: Temporal.Instant): string {
   return value.toString({ smallestUnit: "millisecond" }).replace(/\.000Z$/u, "Z");
 }
 
-export { ReportingPeriodValidationError, reportingMonthBounds, type ReportingMonthBounds };
+export {
+  ReportingPeriodValidationError,
+  reportingMonthBounds,
+  reportingMonthForInstant,
+  type ReportingMonthBounds,
+};

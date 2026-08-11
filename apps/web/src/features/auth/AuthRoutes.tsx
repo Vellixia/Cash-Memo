@@ -5,6 +5,7 @@ import { AuthError } from "../../app/api-port.js";
 import type { JournalApiPort } from "../../app/journal-api.js";
 import { SearchAndFilters } from "../history/SearchAndFilters.js";
 import { LabelManager } from "../labels/LabelManager.js";
+import { CurrentMonthOverview } from "../reporting/CurrentMonthOverview.js";
 
 interface AuthRoutesProps {
   api: ApiPort;
@@ -213,6 +214,7 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
         </button>
         {journalApi === undefined ? null : (
           <>
+            <CurrentMonthOverview api={journalApi} />
             <LabelManager api={journalApi} />
             <SearchAndFilters api={journalApi} />
           </>

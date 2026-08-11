@@ -29,6 +29,8 @@ import { LabelsService } from "../modules/labels/labels.service.js";
 import { registerLabelRoutes } from "../modules/labels/labels.controller.js";
 import { SearchRepository } from "../modules/history/search.repository.js";
 import { registerHistorySearchRoute } from "../modules/history/history.controller.js";
+import { CurrentMonthService } from "../modules/reporting/current-month.service.js";
+import { registerCurrentMonthRoutes } from "../modules/reporting/current-month.controller.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -112,6 +114,7 @@ async function main() {
   });
   const cursorCodec = { hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8") };
   const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
+  const currentMonth = new CurrentMonthService({ pool: runtimePool });
 
   const app = Fastify({ logger: false });
 
@@ -143,6 +146,7 @@ async function main() {
     sessions,
     traversalOptions: { cursorCodec, pool: runtimePool },
   });
+  registerCurrentMonthRoutes(app, { currentMonth, sessions });
 
   // ─── Custom auth endpoints that use the identity service ───
 

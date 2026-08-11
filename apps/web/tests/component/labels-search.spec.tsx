@@ -42,6 +42,13 @@ function api(overrides: Partial<JournalApiPort> = {}): JournalApiPort {
       name: input.name,
       origin: "custom" as const,
     })),
+    getCurrentMonth: vi.fn(async () => ({
+      calculatedAt: "2026-08-11T00:00:00Z",
+      currencies: [],
+      period: "2026-08",
+      recentMemos: [],
+      reportingTimezone: "UTC",
+    })),
     listCategories: vi.fn(async () => [category]),
     listMoneySpaces: vi.fn(async () => [space]),
     search: vi.fn(async () => emptyPage),
