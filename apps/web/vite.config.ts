@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   build: {
@@ -13,6 +14,9 @@ export default defineConfig({
     alias: {
       "@cashmemo/contracts": "/packages/contracts/src/index.ts",
       "@cashmemo/domain": "/packages/domain/src/index.ts",
+      "@cashmemo/privacy-rules": fileURLToPath(
+        new URL("../../packages/privacy-rules/src/index.ts", import.meta.url),
+      ),
     },
   },
   server: {

@@ -118,7 +118,91 @@ export interface MonthlyReviewView {
   readonly reportingTimezone: string;
 }
 
+export interface AssistedDraftView {
+  readonly assessments: readonly {
+    readonly field?: string;
+    readonly reasonCode?: string | null;
+    readonly status?: string;
+  }[];
+  readonly authoritative: false;
+  readonly captureStartedAt: string;
+  readonly captureTimezone: string;
+  readonly expiresAt: string;
+  readonly fields: Record<string, unknown>;
+  readonly id: string;
+  readonly origin: string;
+  readonly revision: string;
+  readonly sourceCompleteness: string;
+  readonly sourceText: string | null;
+  readonly status: string;
+}
+
+export interface VoiceCaptureView {
+  readonly authoritative: false;
+  readonly capability: { readonly ai: string; readonly stt: string };
+  readonly draftId: string | null;
+  readonly errorCode: string | null;
+  readonly id: string;
+  readonly revision: string;
+  readonly state: string;
+}
+
+export interface AssistedCaptureApiPort {
+  cancelVoiceCapture(id: string, expectedRevision: string): Promise<VoiceCaptureView>;
+  confirmDraft(
+    id: string,
+    input: {
+      confirmation: "CONFIRM_MONEY_MEMO";
+      expectedRevision: string;
+      memo: {
+        categoryId: string | null;
+        direction: "expense" | "income";
+        money: { amount: string; currency: string };
+        moneySpaceId: string | null;
+        note: string | null;
+        occurrence: {
+          occurredAt: string;
+          occurredLocal: string;
+          occurredOffsetMinutes: number;
+          occurredTimezone: string;
+          timezoneDatabaseVersion: string;
+        };
+        planningStatus: "planned" | "unplanned" | null;
+        purpose: "mixed" | "personal" | "work" | null;
+      };
+    },
+  ): Promise<{ readonly id: string }>;
+  extractText(input: {
+    captureStartedAt: string;
+    captureTimezone: string;
+    consent: "SEND_THIS_TEXT_FOR_AI_EXTRACTION";
+    text: string;
+  }): Promise<{ captureId: string; draft: AssistedDraftView; state: string }>;
+  getDraft(id: string): Promise<AssistedDraftView>;
+  getVoiceCapture(id: string): Promise<VoiceCaptureView>;
+  startVoiceCapture(input: {
+    aiConsent: "SEND_THE_TRANSCRIPT_FOR_AI_EXTRACTION";
+    captureStartedAt: string;
+    captureTimezone: string;
+    detectorLimitationDisclosed: true;
+    sttConsent: "SEND_THIS_RECORDING_FOR_TRANSCRIPTION";
+  }): Promise<VoiceCaptureView>;
+  updateDraft(
+    id: string,
+    input: {
+      candidateFields: Record<string, unknown>;
+      expectedRevision: string;
+      sourceCompleteness: string;
+      sourceText: string | null;
+    },
+  ): Promise<AssistedDraftView>;
+  uploadVoiceAudio(id: string, audio: Blob, idempotencyKey: string): Promise<VoiceCaptureView>;
+}
+
 export type JournalErrorCode =
+  | "AI_UNAVAILABLE"
+  | "ASSISTED_CAPTURE_UNAVAILABLE"
+  | "AUDIO_INVALID"
   | "CURRENT_MONTH_CALCULATION_UNAVAILABLE"
   | "IDEMPOTENCY_CONFLICT"
   | "INTERNAL_ERROR"
@@ -160,6 +244,14 @@ export interface JournalApiPort {
     id: string,
     input: { expectedRevision: string; name?: string; status?: LabelStatus },
   ): Promise<MoneySpaceView>;
+  readonly cancelVoiceCapture?: AssistedCaptureApiPort["cancelVoiceCapture"];
+  readonly confirmDraft?: AssistedCaptureApiPort["confirmDraft"];
+  readonly extractText?: AssistedCaptureApiPort["extractText"];
+  readonly getDraft?: AssistedCaptureApiPort["getDraft"];
+  readonly getVoiceCapture?: AssistedCaptureApiPort["getVoiceCapture"];
+  readonly startVoiceCapture?: AssistedCaptureApiPort["startVoiceCapture"];
+  readonly updateDraft?: AssistedCaptureApiPort["updateDraft"];
+  readonly uploadVoiceAudio?: AssistedCaptureApiPort["uploadVoiceAudio"];
 }
 
 const API_BASE = "/api/v1";
@@ -201,6 +293,28 @@ export function createJournalApi(): JournalApiPort {
         method: "POST",
       });
     },
+    async cancelVoiceCapture(id, expectedRevision) {
+      return request<VoiceCaptureView>(`${API_BASE}/voice-captures/${id}`, {
+        ...json({ expectedRevision }),
+        method: "DELETE",
+      });
+    },
+    async confirmDraft(id, input) {
+      return request<{ readonly id: string }>(`${API_BASE}/drafts/${id}/confirm`, {
+        ...json(input),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        method: "POST",
+      });
+    },
+    async extractText(input) {
+      return request(`${API_BASE}/drafts/text-extraction`, { ...json(input), method: "POST" });
+    },
+    async getDraft(id) {
+      return request<AssistedDraftView>(`${API_BASE}/drafts/${id}`, { cache: "no-store" });
+    },
+    async getVoiceCapture(id) {
+      return request<VoiceCaptureView>(`${API_BASE}/voice-captures/${id}`, { cache: "no-store" });
+    },
     async getCurrentMonth() {
       return request<CurrentMonthOverviewView>(`${API_BASE}/overview/current-month`, {
         cache: "no-store",
@@ -226,6 +340,19 @@ export function createJournalApi(): JournalApiPort {
         method: "POST",
       });
     },
+    async startVoiceCapture(input) {
+      return request<VoiceCaptureView>(`${API_BASE}/voice-captures`, {
+        ...json(input),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        method: "POST",
+      });
+    },
+    async updateDraft(id, input) {
+      return request<AssistedDraftView>(`${API_BASE}/drafts/${id}`, {
+        ...json(input),
+        method: "PATCH",
+      });
+    },
     async updateCategory(id, input) {
       return request<CategoryView>(`${API_BASE}/categories/${id}`, {
         ...json(input),
@@ -236,6 +363,13 @@ export function createJournalApi(): JournalApiPort {
       return request<MoneySpaceView>(`${API_BASE}/money-spaces/${id}`, {
         ...json(input),
         method: "PATCH",
+      });
+    },
+    async uploadVoiceAudio(id, audio, idempotencyKey) {
+      return request<VoiceCaptureView>(`${API_BASE}/voice-captures/${id}/audio`, {
+        body: audio,
+        headers: { "Content-Type": audio.type, "Idempotency-Key": idempotencyKey },
+        method: "PUT",
       });
     },
   };

@@ -9,9 +9,16 @@ export interface ComposeDraftInput {
   readonly candidateFields: Record<string, unknown>;
   readonly captureStartedAt: string;
   readonly captureTimezone: string;
+  readonly fieldProvenance?: readonly unknown[];
+  readonly status?: "blocked" | "editing" | "failed_recoverable" | "processing" | "reviewable";
 }
 
 export interface ComposeDraftView {
+  readonly assessments: readonly unknown[];
+  readonly authoritative: false;
+  readonly captureStartedAt: string;
+  readonly captureTimezone: string;
+  readonly fields: Record<string, unknown>;
   readonly id: string;
   readonly origin: string;
   readonly sourceText: string | null;
@@ -34,8 +41,8 @@ export async function createDraft(
         candidate_fields, field_provenance, capture_started_at, capture_timezone,
         status, last_activity_at, expires_at, revision
       ) VALUES (
-        gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::jsonb, $6, $7,
-        'editing', now(), now() + interval '7 days', 1
+        gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
+        $9, now(), now() + interval '7 days', 1
       ) RETURNING *`,
       [
         accountId,
@@ -43,8 +50,10 @@ export async function createDraft(
         input.sourceText,
         input.sourceCompleteness,
         JSON.stringify(input.candidateFields),
+        JSON.stringify(input.fieldProvenance ?? []),
         input.captureStartedAt,
         input.captureTimezone,
+        input.status ?? "editing",
       ],
     );
     const row = result.rows[0];
@@ -99,6 +108,22 @@ export async function listDrafts(pool: Pool, accountId: string): Promise<Compose
   });
 }
 
+export async function getDraft(
+  pool: Pool,
+  accountId: string,
+  draftId: string,
+): Promise<ComposeDraftView> {
+  return withAccountTransaction(pool, accountId, async (tx) => {
+    const result = await tx.query<Record<string, unknown>>(
+      `SELECT * FROM compose_drafts WHERE id = $1 AND user_id = $2`,
+      [draftId, accountId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) throw new Error("DRAFT_NOT_FOUND");
+    return mapDraftRow(row);
+  });
+}
+
 export async function discardDraft(pool: Pool, accountId: string, draftId: string): Promise<void> {
   await withAccountTransaction(pool, accountId, async (tx) => {
     await tx.query(
@@ -111,13 +136,23 @@ export async function discardDraft(pool: Pool, accountId: string, draftId: strin
 
 function mapDraftRow(row: Record<string, unknown>): ComposeDraftView {
   return {
+    assessments: row["field_provenance"] as readonly unknown[],
+    authoritative: false,
+    captureStartedAt: instant(row["capture_started_at"]),
+    captureTimezone: row["capture_timezone"] as string,
+    fields: row["candidate_fields"] as Record<string, unknown>,
     id: row["id"] as string,
-    lastActivityAt: row["last_activity_at"] as string,
+    lastActivityAt: instant(row["last_activity_at"]),
     origin: row["origin"] as string,
     revision: String(row["revision"]),
     sourceCompleteness: row["source_completeness"] as string,
     sourceText: row["source_text"] as string | null,
     status: row["status"] as string,
-    expiresAt: row["expires_at"] as string,
+    expiresAt: instant(row["expires_at"]),
   };
+}
+
+function instant(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  return new Date(String(value)).toISOString();
 }

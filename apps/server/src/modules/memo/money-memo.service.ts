@@ -42,7 +42,7 @@ export interface MoneyMemoView {
   readonly purpose: "personal" | "work" | "mixed" | null;
   readonly planningStatus: "planned" | "unplanned" | null;
   readonly note: string | null;
-  readonly origin: "manual";
+  readonly origin: "manual" | "natural_language" | "voice";
   readonly lifecycleState: "active" | "archived";
   readonly revision: string;
   readonly createdAt: string;
@@ -56,7 +56,7 @@ export class MoneyMemoServiceError extends Error {
   }
 }
 
-function mapRow(row: Record<string, unknown>): MoneyMemoView {
+export function mapMoneyMemoRow(row: Record<string, unknown>): MoneyMemoView {
   return {
     categoryId: row["category_id"] as string | null,
     createdAt: row["created_at"] as string,
@@ -86,7 +86,7 @@ function mapRow(row: Record<string, unknown>): MoneyMemoView {
       occurredTimezone: row["occurred_timezone"] as string,
       timezoneDatabaseVersion: row["timezone_database_version"] as string,
     },
-    origin: "manual",
+    origin: row["origin"] as "manual" | "natural_language" | "voice",
     planningStatus: row["planning_status"] as "planned" | "unplanned" | null,
     purpose: row["purpose"] as "personal" | "work" | "mixed" | null,
     revision: String(row["revision"]),
@@ -126,7 +126,7 @@ export async function createMoneyMemo(
       if (memo.rowCount === 0) throw new MoneyMemoServiceError("MEMO_NOT_FOUND");
       const memoRow = memo.rows[0];
       if (memoRow === undefined) throw new MoneyMemoServiceError("MEMO_NOT_FOUND");
-      return mapRow(memoRow);
+      return mapMoneyMemoRow(memoRow);
     }
     if (row.state === "in_progress") {
       throw new MoneyMemoServiceError("OPERATION_IN_PROGRESS");
@@ -173,7 +173,7 @@ export async function createMoneyMemo(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("MEMO_CREATE_FAILED");
   const memoRow = result.rows[0];
   if (memoRow === undefined) throw new MoneyMemoServiceError("MEMO_CREATE_FAILED");
-  const memo = mapRow(memoRow);
+  const memo = mapMoneyMemoRow(memoRow);
 
   await transaction.query(
     `UPDATE idempotency_records
@@ -242,7 +242,7 @@ export async function updateMoneyMemo(
 
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("MEMO_UPDATE_FAILED");
-  const memo = mapRow(row);
+  const memo = mapMoneyMemoRow(row);
 
   await transaction.query(
     `UPDATE history_list_states SET version = version + 1, updated_at = now() WHERE user_id = $1`,
@@ -263,7 +263,7 @@ export async function getMoneyMemo(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("MEMO_NOT_FOUND");
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("MEMO_NOT_FOUND");
-  return mapRow(row);
+  return mapMoneyMemoRow(row);
 }
 
 export async function archiveMoneyMemo(
@@ -280,7 +280,7 @@ export async function archiveMoneyMemo(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("REVISION_CONFLICT");
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("ARCHIVE_FAILED");
-  return mapRow(row);
+  return mapMoneyMemoRow(row);
 }
 
 export async function restoreArchivedMoneyMemo(
@@ -297,7 +297,7 @@ export async function restoreArchivedMoneyMemo(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("REVISION_CONFLICT");
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("RESTORE_FAILED");
-  return mapRow(row);
+  return mapMoneyMemoRow(row);
 }
 
 export async function moveToRecentlyDeleted(
@@ -320,7 +320,7 @@ export async function moveToRecentlyDeleted(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("REVISION_CONFLICT");
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("DELETE_FAILED");
-  return mapRow(row);
+  return mapMoneyMemoRow(row);
 }
 
 export async function restoreRecentlyDeleted(
@@ -343,7 +343,7 @@ export async function restoreRecentlyDeleted(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("REVISION_CONFLICT");
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("RESTORE_FAILED");
-  return mapRow(row);
+  return mapMoneyMemoRow(row);
 }
 
 export async function initiatePurge(
@@ -363,5 +363,5 @@ export async function initiatePurge(
   if (result.rowCount === 0) throw new MoneyMemoServiceError("REVISION_CONFLICT");
   const row = result.rows[0];
   if (row === undefined) throw new MoneyMemoServiceError("PURGE_INITIATION_FAILED");
-  return mapRow(row);
+  return mapMoneyMemoRow(row);
 }

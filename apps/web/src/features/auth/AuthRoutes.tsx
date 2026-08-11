@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
 
 import type { ApiPort } from "../../app/api-port.js";
 import { AuthError } from "../../app/api-port.js";
-import type { JournalApiPort } from "../../app/journal-api.js";
+import type { AssistedCaptureApiPort, JournalApiPort } from "../../app/journal-api.js";
+import { NaturalLanguageCapture } from "../capture/NaturalLanguageCapture.js";
+import { VoiceRecorder } from "../capture/VoiceRecorder.js";
 import { SearchAndFilters } from "../history/SearchAndFilters.js";
 import { LabelManager } from "../labels/LabelManager.js";
 import { CurrentMonthOverview } from "../reporting/CurrentMonthOverview.js";
@@ -23,11 +25,25 @@ type AuthScreen =
   | "onboarding"
   | "empty-journal";
 
+function hasAssistedCapture(
+  api: JournalApiPort | undefined,
+): api is JournalApiPort & AssistedCaptureApiPort {
+  return (
+    api?.extractText !== undefined &&
+    api.updateDraft !== undefined &&
+    api.startVoiceCapture !== undefined &&
+    api.uploadVoiceAudio !== undefined &&
+    api.cancelVoiceCapture !== undefined &&
+    api.confirmDraft !== undefined
+  );
+}
+
 export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
   const [screen, setScreen] = useState<AuthScreen>("loading");
   const [resetError, setResetError] = useState(false);
   const [onboardingRetryable, setOnboardingRetryable] = useState(false);
   const [showTimezoneWarning, setShowTimezoneWarning] = useState(false);
+  const assistedApi = hasAssistedCapture(journalApi) ? journalApi : null;
 
   useEffect(() => {
     void (async () => {
@@ -219,6 +235,12 @@ export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
             <MonthlyReview api={journalApi} />
             <LabelManager api={journalApi} />
             <SearchAndFilters api={journalApi} />
+            {assistedApi === null ? null : (
+              <>
+                <NaturalLanguageCapture api={assistedApi} />
+                <VoiceRecorder api={assistedApi} />
+              </>
+            )}
           </>
         )}
       </div>

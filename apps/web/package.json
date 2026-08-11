@@ -12,6 +12,7 @@
   "dependencies": {
     "@cashmemo/contracts": "workspace:*",
     "@cashmemo/domain": "workspace:*",
+    "@cashmemo/privacy-rules": "workspace:*",
     "@tanstack/react-query": "5.101.4",
     "dexie": "4.4.4",
     "react": "19.2.8",

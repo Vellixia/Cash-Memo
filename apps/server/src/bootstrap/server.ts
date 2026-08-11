@@ -33,6 +33,23 @@ import { CurrentMonthService } from "../modules/reporting/current-month.service.
 import { registerCurrentMonthRoutes } from "../modules/reporting/current-month.controller.js";
 import { MonthlyReviewService } from "../modules/reporting/monthly-review.service.js";
 import { registerMonthlyReviewRoutes } from "../modules/reporting/monthly-review.controller.js";
+import {
+  ContractScenarioExtractionAdapter,
+  ContractScenarioSttAdapter,
+  DeterministicExtractionAdapter,
+  DeterministicSttAdapter,
+} from "../adapters/fakes/assisted-provider.adapters.js";
+import { TextExtractionService } from "../modules/assisted-capture/text-extraction.service.js";
+import { TranscriptService } from "../modules/assisted-capture/transcript.service.js";
+import {
+  MemoryEphemeralAudioStore,
+  TemporaryAudioService,
+  type AudioInspection,
+} from "../modules/assisted-capture/temporary-audio.service.js";
+import { VoiceCaptureService } from "../modules/assisted-capture/voice-capture.service.js";
+import { registerAssistedCaptureRoutes } from "../modules/assisted-capture/voice-capture.controller.js";
+import { ConfirmDraftService } from "../modules/assisted-capture/confirm-draft.service.js";
+import { AudioSweeper } from "../modules/operations/audio-sweeper.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -118,8 +135,63 @@ async function main() {
   const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
   const currentMonth = new CurrentMonthService({ pool: runtimePool });
   const monthlyReview = new MonthlyReviewService({ pool: runtimePool });
+  const fakeMode = env.ASSISTED_CAPTURE_MODE === "fake";
+  // The real-provider adapters are intentionally unavailable until their protected
+  // integration gate is run with approved credentials; production never falls back to fakes.
+  const extraction = fakeMode
+    ? new ContractScenarioExtractionAdapter()
+    : new DeterministicExtractionAdapter({ mode: "failure" });
+  const stt = fakeMode
+    ? new ContractScenarioSttAdapter()
+    : new DeterministicSttAdapter({ mode: "failure" });
+  const textExtraction = new TextExtractionService({ extraction, pool: runtimePool, privacy });
+  const transcript = new TranscriptService({ extraction, pool: runtimePool, privacy });
+  const audio = new TemporaryAudioService({
+    inspector: {
+      inspect: (_bytes, declaredMediaType): Promise<AudioInspection> =>
+        Promise.resolve({
+          codec:
+            declaredMediaType === "audio/wav"
+              ? "pcm"
+              : declaredMediaType === "audio/mpeg"
+                ? "mp3"
+                : declaredMediaType === "audio/mp4"
+                  ? "aac"
+                  : "opus",
+          detectedMediaType: declaredMediaType,
+          measuredDurationMs: 1_000,
+        }),
+    },
+    ownerHmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+    pool: runtimePool,
+    store: new MemoryEphemeralAudioStore(),
+  });
+  const voice = new VoiceCaptureService({ audio, pool: runtimePool, stt, transcript });
+  const audioSweeper = new AudioSweeper({ audio });
+  await audioSweeper.startupCleanup();
+  audioSweeper.start();
+  const removeAudioTerminationHooks = audioSweeper.installTerminationHook();
+  const confirmation = new ConfirmDraftService({
+    hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+    pool: runtimePool,
+    privacy,
+  });
 
   const app = Fastify({ logger: false });
+  app.addHook("onClose", async () => {
+    removeAudioTerminationHooks();
+    await audioSweeper.terminate();
+  });
+
+  for (const mediaType of ["audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/webm"]) {
+    app.addContentTypeParser(
+      mediaType,
+      { parseAs: "buffer", bodyLimit: 10 * 1024 * 1024 },
+      (_request, body, done) => {
+        done(null, body);
+      },
+    );
+  }
 
   // Allow body parsing for DELETE requests (needed for revision checks)
   app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
@@ -151,6 +223,13 @@ async function main() {
   });
   registerCurrentMonthRoutes(app, { currentMonth, sessions });
   registerMonthlyReviewRoutes(app, { monthlyReview, sessions });
+  registerAssistedCaptureRoutes(app, {
+    confirmation,
+    pool: runtimePool,
+    sessions,
+    text: textExtraction,
+    voice,
+  });
 
   // ─── Custom auth endpoints that use the identity service ───
 

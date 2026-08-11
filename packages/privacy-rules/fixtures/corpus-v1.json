@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "cashmemo-privacy-detector-corpus-v1",
+  "syntheticOnly": true,
+  "cases": [
+    {
+      "id": "pan-basic",
+      "text": "test card 4242 4242 4242 4242",
+      "expectedRuleFamily": "PAN_LUHN_V1"
+    },
+    { "id": "pan-hyphen", "text": "4111-1111-1111-1111", "expectedRuleFamily": "PAN_LUHN_V1" },
+    {
+      "id": "pan-fullwidth",
+      "text": "４２４２ ４２４２ ４２４２ ４２４２",
+      "expectedRuleFamily": "PAN_LUHN_V1"
+    },
+    {
+      "id": "pan-adversarial-dot",
+      "text": "5555.5555.5555.4444",
+      "expectedRuleFamily": "PAN_LUHN_V1"
+    },
+    {
+      "id": "iban-de",
+      "text": "DE89 3704 0044 0532 0130 00",
+      "expectedRuleFamily": "IBAN_MOD97_V1"
+    },
+    {
+      "id": "iban-gb",
+      "text": "GB82 WEST 1234 5698 7654 32",
+      "expectedRuleFamily": "IBAN_MOD97_V1"
+    },
+    {
+      "id": "iban-hyphen",
+      "text": "FR14-2004-1010-0505-0001-3M02-606",
+      "expectedRuleFamily": "IBAN_MOD97_V1"
+    },
+    {
+      "id": "iban-lowercase",
+      "text": "es91 2100 0418 4502 0005 1332",
+      "expectedRuleFamily": "IBAN_MOD97_V1"
+    },
+    { "id": "card-secret-cvv", "text": "CVV: 123", "expectedRuleFamily": "CARD_SECRET_LABEL_V1" },
+    {
+      "id": "card-secret-otp-id",
+      "text": "kode OTP = 987654",
+      "expectedRuleFamily": "CARD_SECRET_LABEL_V1"
+    },
+    {
+      "id": "card-secret-pin-space",
+      "text": "PIN 4321",
+      "expectedRuleFamily": "CARD_SECRET_LABEL_V1"
+    },
+    {
+      "id": "card-secret-french",
+      "text": "code secret: A1B2",
+      "expectedRuleFamily": "CARD_SECRET_LABEL_V1"
+    },
+    {
+      "id": "access-password",
+      "text": "password=hunter-test",
+      "expectedRuleFamily": "ACCESS_SECRET_LABEL_V1"
+    },
+    {
+      "id": "access-indonesian",
+      "text": "kata sandi: contoh-rahasia",
+      "expectedRuleFamily": "ACCESS_SECRET_LABEL_V1"
+    },
+    {
+      "id": "access-spanish",
+      "text": "contraseña: ejemplo-secreto",
+      "expectedRuleFamily": "ACCESS_SECRET_LABEL_V1"
+    },
+    {
+      "id": "access-zero-width",
+      "text": "access​token: synthetic-token",
+      "expectedRuleFamily": "ACCESS_SECRET_LABEL_V1"
+    },
+    {
+      "id": "bank-account-en",
+      "text": "bank account number: 1234567890",
+      "expectedRuleFamily": "BANK_ACCOUNT_LABEL_V1"
+    },
+    {
+      "id": "bank-account-id",
+      "text": "nomor rekening 123 456 789",
+      "expectedRuleFamily": "BANK_ACCOUNT_LABEL_V1"
+    },
+    {
+      "id": "bank-account-es",
+      "text": "número de cuenta: AB12 345678",
+      "expectedRuleFamily": "BANK_ACCOUNT_LABEL_V1"
+    },
+    {
+      "id": "bank-account-de",
+      "text": "Kontonummer = 12345678",
+      "expectedRuleFamily": "BANK_ACCOUNT_LABEL_V1"
+    },
+    {
+      "id": "identity-nik",
+      "text": "NIK: 3201010101010001",
+      "expectedRuleFamily": "ID_IDENTITY_LABEL_V1"
+    },
+    {
+      "id": "identity-passport",
+      "text": "passport: X1234567",
+      "expectedRuleFamily": "ID_IDENTITY_LABEL_V1"
+    },
+    {
+      "id": "identity-paspor-id",
+      "text": "paspor A1234567",
+      "expectedRuleFamily": "ID_IDENTITY_LABEL_V1"
+    },
+    {
+      "id": "identity-gov",
+      "text": "government id = TEST-998877",
+      "expectedRuleFamily": "ID_IDENTITY_LABEL_V1"
+    },
+    {
+      "id": "statement-en",
+      "text": "Please upload a bank statement",
+      "expectedRuleFamily": "STATEMENT_SOLICITATION_V1"
+    },
+    {
+      "id": "statement-id",
+      "text": "Kirim rekening koran sekarang",
+      "expectedRuleFamily": "STATEMENT_SOLICITATION_V1"
+    },
+    {
+      "id": "statement-attach",
+      "text": "attach your account statement",
+      "expectedRuleFamily": "STATEMENT_SOLICITATION_V1"
+    },
+    {
+      "id": "statement-punctuation",
+      "text": "Share, please, the bank statement.",
+      "expectedRuleFamily": "STATEMENT_SOLICITATION_V1"
+    },
+    {
+      "id": "benign-groceries",
+      "text": "Spent 125000 IDR on groceries",
+      "expectedRuleFamily": null
+    },
+    {
+      "id": "benign-accounting",
+      "text": "Accounting software subscription",
+      "expectedRuleFamily": null
+    },
+    { "id": "benign-bank-fee", "text": "Bank fee was 5 USD", "expectedRuleFamily": null },
+    {
+      "id": "benign-pin-map",
+      "text": "Pin the café location on the map",
+      "expectedRuleFamily": null
+    },
+    { "id": "benign-otp-word", "text": "OTP delivery was delayed", "expectedRuleFamily": null },
+    { "id": "benign-invalid-pan", "text": "4242 4242 4242 4241", "expectedRuleFamily": null },
+    { "id": "benign-repeated-pan", "text": "0000 0000 0000 0000", "expectedRuleFamily": null },
+    {
+      "id": "benign-invalid-iban",
+      "text": "DE89 3704 0044 0532 0130 01",
+      "expectedRuleFamily": null
+    },
+    {
+      "id": "benign-short-account",
+      "text": "account number of categories is 5",
+      "expectedRuleFamily": null
+    },
+    {
+      "id": "benign-statement",
+      "text": "Statement: lunch expense was planned",
+      "expectedRuleFamily": null
+    },
+    {
+      "id": "benign-multilingual",
+      "text": "Pengeluaran transportasi bulan ini",
+      "expectedRuleFamily": null
+    },
+    { "id": "benign-unicode", "text": "Ｃａｆｅ́ expense 12 EUR", "expectedRuleFamily": null }
+  ]
+}

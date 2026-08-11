@@ -13,5 +13,6 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/web.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "vite.config.ts"],
-  "exclude": ["dist", "coverage"]
+  "exclude": ["dist", "coverage"],
+  "references": [{ "path": "../../packages/privacy-rules/tsconfig.json" }]
 }
