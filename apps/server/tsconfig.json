@@ -23,6 +23,7 @@
     { "path": "../../packages/contracts/tsconfig.json" },
     { "path": "../../packages/currency-registry/tsconfig.json" },
     { "path": "../../packages/domain/tsconfig.json" },
+    { "path": "../../packages/privacy-rules/tsconfig.json" },
     { "path": "../../packages/test-support/tsconfig.json" }
   ]
 }

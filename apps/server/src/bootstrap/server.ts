@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import Fastify from "fastify";
 
 import { canonicalRequestHmac } from "@cashmemo/domain";
+import { FinitePrivacyBoundary } from "@cashmemo/privacy-rules";
 
 import { parseEnvironment } from "./environment.schema.js";
 import { createBetterAuthAdapter } from "../modules/identity/better-auth.adapter.js";
@@ -24,6 +25,10 @@ import {
 } from "../modules/memo/money-memo.service.js";
 import { MoneyValidationError } from "@cashmemo/domain";
 import { withAccountTransaction } from "../adapters/postgres/transaction-context.js";
+import { LabelsService } from "../modules/labels/labels.service.js";
+import { registerLabelRoutes } from "../modules/labels/labels.controller.js";
+import { SearchRepository } from "../modules/history/search.repository.js";
+import { registerHistorySearchRoute } from "../modules/history/history.controller.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -99,6 +104,14 @@ async function main() {
 
   const sessions = new SessionService({ auth, pool: runtimePool });
   const onboarding = new OnboardingService({ pool: runtimePool });
+  const privacy = new FinitePrivacyBoundary();
+  const labels = new LabelsService({
+    idempotencyHmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
+    pool: runtimePool,
+    privacy,
+  });
+  const cursorCodec = { hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8") };
+  const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
 
   const app = Fastify({ logger: false });
 
@@ -120,6 +133,15 @@ async function main() {
   await app.register(import("@fastify/cors"), {
     credentials: true,
     origin: allowedOrigins,
+  });
+
+  registerLabelRoutes(app, { labels, sessions });
+  registerHistorySearchRoute(app, {
+    cursorCodec,
+    pool: runtimePool,
+    searchRepository,
+    sessions,
+    traversalOptions: { cursorCodec, pool: runtimePool },
   });
 
   // ─── Custom auth endpoints that use the identity service ───
@@ -321,12 +343,23 @@ async function main() {
       reportingTimezone: string;
     };
     await onboarding.completeOnboarding(ctx.accountId, body.privacyNoticeVersion);
+    const preferences = await onboarding.setPreferences(ctx.accountId, {
+      defaultCurrency: body.defaultCurrency,
+      locale: body.locale,
+      reportingTimezone: body.reportingTimezone,
+    });
     await onboarding.seedStarterLabels(ctx.accountId);
     reply.code(200).send({
       accountStatus: "active",
       emailVerified: true,
       onboardingState: "complete",
-      preferences: null,
+      preferences: {
+        defaultCurrency: preferences.defaultCurrency,
+        locale: preferences.locale,
+        reportingTimezone: preferences.reportingTimezone,
+        revision: preferences.revision,
+        timezoneBoundaryWarningRequired: false,
+      },
       profileRevision: "2",
       userId: ctx.accountId,
     });

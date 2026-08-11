@@ -1381,20 +1381,22 @@ components:
     Category:
       type: object
       additionalProperties: false
-      required: [id, kind, name, status, revision]
+      required: [id, kind, name, origin, status, revision]
       properties:
         id: { type: string, format: uuid }
         kind: { $ref: '#/components/schemas/Direction' }
         name: { $ref: '#/components/schemas/LabelName' }
+        origin: { type: string, enum: [starter, custom] }
         status: { $ref: '#/components/schemas/LabelStatus' }
         revision: { $ref: '#/components/schemas/Revision' }
     MoneySpace:
       type: object
       additionalProperties: false
-      required: [id, name, status, revision]
+      required: [id, name, origin, status, revision]
       properties:
         id: { type: string, format: uuid }
         name: { $ref: '#/components/schemas/LabelName' }
+        origin: { type: string, enum: [starter, custom] }
         status: { $ref: '#/components/schemas/LabelStatus' }
         revision: { $ref: '#/components/schemas/Revision' }
     LabelUpdate:

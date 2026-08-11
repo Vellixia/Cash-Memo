@@ -75,7 +75,16 @@ async function updateMemoLifecycle(
 ): Promise<void> {
   await withAccountTransaction(pool, accountId, async (tx) => {
     await tx.query(
-      `UPDATE money_memos SET lifecycle_state = $3::text::memo_lifecycle_state, updated_at = now(), revision = revision + 1
+      `UPDATE money_memos SET
+         lifecycle_state = $3::text::memo_lifecycle_state,
+         prior_lifecycle_state = CASE
+           WHEN $3 = 'recently_deleted' THEN lifecycle_state::text::memo_prior_lifecycle_state
+           ELSE NULL
+         END,
+         deleted_at = CASE WHEN $3 = 'recently_deleted' THEN now() ELSE NULL END,
+         purge_after = CASE WHEN $3 = 'recently_deleted' THEN now() + interval '30 days' ELSE NULL END,
+         updated_at = now(),
+         revision = revision + 1
        WHERE id = $1 AND user_id = $2`,
       [memoId, accountId, newState],
     );
@@ -246,11 +255,9 @@ describe("versioned traversal integration (FR-030; SC-026)", { concurrent: false
     expect(decoded).toEqual(payload);
   });
 
-  it("malformed cursor is rejected", async () => {
-    await expect(decodeCursor("not-a-valid-cursor", cursorOptions)).rejects.toThrow(
-      CursorCodecError,
-    );
-    await expect(decodeCursor("", cursorOptions)).rejects.toThrow(CursorCodecError);
+  it("malformed cursor is rejected", () => {
+    expect(() => decodeCursor("not-a-valid-cursor", cursorOptions)).toThrow(CursorCodecError);
+    expect(() => decodeCursor("", cursorOptions)).toThrow(CursorCodecError);
   });
 
   it("query fingerprint is deterministic for equivalent queries", () => {

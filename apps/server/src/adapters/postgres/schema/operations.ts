@@ -33,6 +33,8 @@ export const idempotencyOperation = pgEnum("idempotency_operation", [
   "export",
   "memo_delete",
   "account_delete",
+  "category_create",
+  "money_space_create",
 ]);
 export const idempotencyState = pgEnum("idempotency_state", [
   "in_progress",

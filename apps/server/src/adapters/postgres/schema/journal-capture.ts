@@ -24,6 +24,12 @@ const bytea = customType<{ data: Buffer }>({
   },
 });
 
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});
+
 const timestampWithTimezone = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 
@@ -161,6 +167,10 @@ export const moneyMemos = pgTable(
     purpose: memoPurpose("purpose"),
     planningStatus: planningStatus("planning_status"),
     note: text("note"),
+    searchDocument: text("search_document").notNull().default(""),
+    searchVector: tsvector("search_vector").generatedAlwaysAs(
+      sql`to_tsvector('simple'::regconfig, coalesce(${sql.raw('"search_document"')}, ''))`,
+    ),
     origin: memoOrigin("origin").notNull(),
     lifecycleState: memoLifecycleState("lifecycle_state").notNull().default("active"),
     priorLifecycleState: memoPriorLifecycleState("prior_lifecycle_state"),
@@ -246,6 +256,7 @@ export const moneyMemos = pgTable(
       "gin",
       sql`to_tsvector('simple', coalesce(${table.note}, ''))`,
     ),
+    index("money_memos_search_vector_idx").using("gin", table.searchVector),
     index("money_memos_purge_due_idx")
       .on(table.userId, table.purgeAfter)
       .where(sql`${table.lifecycleState} IN ('recently_deleted', 'purging')`),

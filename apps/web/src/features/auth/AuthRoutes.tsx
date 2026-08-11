@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
 
 import type { ApiPort } from "../../app/api-port.js";
 import { AuthError } from "../../app/api-port.js";
+import type { JournalApiPort } from "../../app/journal-api.js";
+import { SearchAndFilters } from "../history/SearchAndFilters.js";
+import { LabelManager } from "../labels/LabelManager.js";
 
 interface AuthRoutesProps {
   api: ApiPort;
+  journalApi?: JournalApiPort;
 }
 
 type AuthScreen =
@@ -17,7 +21,7 @@ type AuthScreen =
   | "onboarding"
   | "empty-journal";
 
-export function AuthRoutes({ api }: AuthRoutesProps) {
+export function AuthRoutes({ api, journalApi }: AuthRoutesProps) {
   const [screen, setScreen] = useState<AuthScreen>("loading");
   const [resetError, setResetError] = useState(false);
   const [onboardingRetryable, setOnboardingRetryable] = useState(false);
@@ -207,6 +211,12 @@ export function AuthRoutes({ api }: AuthRoutesProps) {
         >
           Log out
         </button>
+        {journalApi === undefined ? null : (
+          <>
+            <LabelManager api={journalApi} />
+            <SearchAndFilters api={journalApi} />
+          </>
+        )}
       </div>
     </div>
   );

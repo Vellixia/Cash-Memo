@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   ACCEPTED_PRE_0003_MIGRATION_FILES,
+  ACCEPTED_PRE_0005_MIGRATION_FILES,
   applyMigrationFiles,
   applyMigrations,
   connectionUriForDatabase,
@@ -66,6 +67,8 @@ describe("reviewed PostgreSQL migrations", { concurrent: false }, () => {
         "6f43200917f3f22b9ed6bc0b9e2c8ed69559b31e2ce74d314887a5b47e4ced12",
       "0004_identity_access_boundary.sql":
         "1ab96602ecd115c8f511174da01828da88341a7c6be5d15d77cefe0d9a51c2d0",
+      "0005_search_projection.sql":
+        "87a07250e0180a520f6667ca62b6e485dd5eeb883e1c27cd7722e6232051018b",
     });
     for (const filename of ACCEPTED_PRE_0003_MIGRATION_FILES) {
       const migration = await readMigration(filename);
@@ -97,6 +100,80 @@ describe("reviewed PostgreSQL migrations", { concurrent: false }, () => {
     );
     expect(tables.rows).toHaveLength(23);
     expect(tables.rows.map((row) => row.table_name)).not.toContain("deletion_suppression_records");
+  });
+
+  it("installs the generated simple search projection, GIN index, and label refresh triggers", async () => {
+    const columns = await adminPool.query<{
+      column_name: string;
+      data_type: string;
+      is_generated: string;
+    }>(
+      `SELECT column_name, data_type, is_generated
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'money_memos'
+         AND column_name IN ('search_document', 'search_vector')
+       ORDER BY column_name`,
+    );
+    expect(columns.rows).toEqual([
+      { column_name: "search_document", data_type: "text", is_generated: "NEVER" },
+      { column_name: "search_vector", data_type: "tsvector", is_generated: "ALWAYS" },
+    ]);
+    const index = await adminPool.query<{ indexdef: string }>(
+      `SELECT indexdef FROM pg_indexes
+       WHERE schemaname = 'public' AND indexname = 'money_memos_search_vector_idx'`,
+    );
+    expect(index.rows[0]?.indexdef).toContain("USING gin (search_vector)");
+    const triggers = await adminPool.query<{ tgname: string }>(
+      `SELECT tgname FROM pg_trigger
+       WHERE NOT tgisinternal AND tgname IN (
+         'money_memos_refresh_search_document',
+         'categories_refresh_memo_search_documents',
+         'money_spaces_refresh_memo_search_documents'
+       ) ORDER BY tgname`,
+    );
+    expect(triggers.rows.map((row) => row.tgname)).toEqual([
+      "categories_refresh_memo_search_documents",
+      "money_memos_refresh_search_document",
+      "money_spaces_refresh_memo_search_documents",
+    ]);
+  });
+
+  it("safe-forward migrates an accepted pre-0005 database and backfills existing rows", async () => {
+    if (environment.postgres === undefined) throw new Error("PostgreSQL test service missing");
+    await adminPool.query("CREATE DATABASE cashmemo_pre_0005");
+    const previousPool = new Pool({
+      connectionString: connectionUriForDatabase(
+        environment.postgres.connectionUri,
+        "cashmemo_pre_0005",
+      ),
+    });
+    try {
+      await applyMigrationFiles(previousPool, ACCEPTED_PRE_0005_MIGRATION_FILES);
+      await previousPool.query(
+        `INSERT INTO users (id, name, email, email_verified, status)
+         VALUES ($1, 'Cashmemo account', 'pre-0005@cashmemo.test', true, 'active')`,
+        [ACCOUNT_ONE],
+      );
+      await previousPool.query(
+        `INSERT INTO money_memos (
+           id, user_id, direction, amount_minor, currency_code, currency_exponent,
+           currency_registry_version, occurred_at, occurred_local, occurred_timezone,
+           occurred_offset_minutes, timezone_database_version, note, origin, lifecycle_state, revision
+         ) VALUES (gen_random_uuid(), $1, 'expense', 100, 'USD', 2, 'test-v1', now(),
+           timestamp '2026-01-01 00:00:00', 'UTC', 0, 'test-tzdb', 'backfill token',
+           'manual', 'active', 1)`,
+        [ACCOUNT_ONE],
+      );
+      await applyMigrationFiles(previousPool, ["0005_search_projection.sql"]);
+      const projection = await previousPool.query<{ matches: boolean }>(
+        `SELECT search_vector @@ plainto_tsquery('simple', 'backfill') AS matches
+         FROM money_memos WHERE user_id = $1`,
+        [ACCOUNT_ONE],
+      );
+      expect(projection.rows[0]?.matches).toBe(true);
+    } finally {
+      await previousPool.end();
+    }
   });
 
   it("forward-migrates representative accepted pre-0003 identity rows without fabricating tokens", async () => {

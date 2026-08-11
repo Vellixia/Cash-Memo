@@ -311,6 +311,7 @@ export type Category = {
   id: string;
   kind: Direction;
   name: LabelName;
+  origin: "starter" | "custom";
   status: LabelStatus;
   revision: Revision;
 };
@@ -318,6 +319,7 @@ export type Category = {
 export type MoneySpace = {
   id: string;
   name: LabelName;
+  origin: "starter" | "custom";
   status: LabelStatus;
   revision: Revision;
 };

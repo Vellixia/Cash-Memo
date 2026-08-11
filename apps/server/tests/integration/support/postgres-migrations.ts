@@ -8,10 +8,14 @@ export const ACCEPTED_PRE_0003_MIGRATION_FILES = [
   "0001_cashmemo_mvp.sql",
   "0002_roles_rls.sql",
 ] as const;
-export const MIGRATION_FILES = [
+export const ACCEPTED_PRE_0005_MIGRATION_FILES = [
   ...ACCEPTED_PRE_0003_MIGRATION_FILES,
   "0003_better_auth_compat.sql",
   "0004_identity_access_boundary.sql",
+] as const;
+export const MIGRATION_FILES = [
+  ...ACCEPTED_PRE_0005_MIGRATION_FILES,
+  "0005_search_projection.sql",
 ] as const;
 export type MigrationFilename = (typeof MIGRATION_FILES)[number];
 

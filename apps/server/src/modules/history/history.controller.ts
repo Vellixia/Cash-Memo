@@ -11,11 +11,14 @@ import {
 } from "./versioned-traversal.service.js";
 import type { TraversalQuery } from "./query-fingerprint.js";
 import type { CursorCodecOptions } from "./cursor-codec.js";
+import { CursorCodecError } from "./cursor-codec.js";
+import { SearchRepositoryError, type SearchRepository } from "./search.repository.js";
 
 export interface HistoryControllerOptions {
   pool: Pool;
   sessions: SessionService;
   cursorCodec: CursorCodecOptions;
+  searchRepository?: SearchRepository;
   traversalOptions: VersionedTraversalOptions;
 }
 
@@ -71,6 +74,46 @@ export function registerHistoryRoutes(
         reply.code(409).send({ messageCode: "RESULTS_CHANGED", restartRequired: true });
       } else {
         reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
+      }
+    }
+  });
+
+  if (options.searchRepository !== undefined) {
+    registerHistorySearchRoute(app, {
+      ...options,
+      searchRepository: options.searchRepository,
+    });
+  }
+}
+
+export function registerHistorySearchRoute(
+  app: FastifyInstance,
+  options: Readonly<HistoryControllerOptions> & { readonly searchRepository: SearchRepository },
+): void {
+  app.post("/api/v1/memos/search", async (request, reply) => {
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(request.headers)) {
+      if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+    }
+    const ctx = await options.sessions.authenticate(headers);
+    if (ctx === null) {
+      await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });
+      return;
+    }
+    try {
+      const page = await options.searchRepository.search(ctx.accountId, request.body);
+      await reply.code(200).send(page);
+    } catch (error) {
+      if (error instanceof TraversalError && error.code === "RESULTS_CHANGED") {
+        await reply.code(409).send({ messageCode: "RESULTS_CHANGED", restartRequired: true });
+      } else if (error instanceof SearchRepositoryError) {
+        await reply
+          .code(error.code === "PRIVACY_BOUNDARY_BLOCKED" ? 422 : 400)
+          .send({ messageCode: error.code });
+      } else if (error instanceof CursorCodecError) {
+        await reply.code(400).send({ messageCode: "INVALID_CURSOR" });
+      } else {
+        await reply.code(500).send({ messageCode: "INTERNAL_ERROR" });
       }
     }
   });

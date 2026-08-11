@@ -172,19 +172,19 @@
 
 **Independent Test**: Manage starter/custom labels and find exact account-owned subsets across every filter, lifecycle, search, empty, and stale-traversal case.
 
-- [ ] T094 [P] [US6] Write category/Money Space lifecycle, normalized uniqueness, kind/reference, stale revision, and no-account-semantics contracts in `apps/server/tests/contract/labels.contract.spec.ts` (FR-051–FR-055)
-- [ ] T095 [P] [US6] Write search/vector, date/direction/label/purpose/planning/currency/lifecycle intersection, ordering, and empty-state tests in `apps/server/tests/integration/search-filters.spec.ts` (FR-056–FR-059)
-- [ ] T096 [P] [US6] Write detector-before-label/search, URL/log exclusion, Unicode/control-input, and no-cross-user-value tests in `apps/server/tests/privacy/search-label-boundaries.spec.ts` (FR-056, FR-060, FR-075, FR-078)
-- [ ] T097 [US6] Implement owned Category/MoneySpace create/rename/deactivate/restore services with normalized active uniqueness and reference safety in `apps/server/src/modules/labels/labels.service.ts` (FR-051–FR-055)
-- [ ] T098 [US6] Implement category and Money Space OpenAPI endpoints with revision/idempotency/privacy checks in `apps/server/src/modules/labels/labels.controller.ts`
-- [ ] T099 [US6] Add generated `simple` text-search projection, GIN index, and transactional label-name refresh migration in `apps/server/src/adapters/postgres/migrations/0005_search_projection.sql` (FR-056)
-- [ ] T100 [US6] Implement account-first search and intersection-filter repository with bound transient query values in `apps/server/src/modules/history/search.repository.ts` (FR-056–FR-060)
-- [ ] T101 [US6] Increment HistoryListState transactionally for label rename/status changes affecting search/filter membership in `apps/server/src/modules/labels/history-invalidation.ts` (FR-030, FR-052, SC-026)
-- [ ] T102 [P] [US6] Implement label management UI that presents Money Spaces only as context labels and preserves failed edits in `apps/web/src/features/labels/LabelManager.tsx` (FR-052–FR-055)
-- [ ] T103 [US6] Implement POST search/filter UI with visible removable criteria, stable pages, loading/error/no-match/reset, and `RESULTS_CHANGED` refresh in `apps/web/src/features/history/SearchAndFilters.tsx` (FR-056–FR-059)
-- [ ] T104 [US6] Execute label/search/filter endpoint, RLS, GIN, and cursor two-account isolation matrix in `tests/security/us6-search-label-isolation.spec.ts` (FR-060, FR-082; SC-015)
-- [ ] T105 [US6] Create `pnpm acceptance:us6` suite covering every US6 success/degraded/privacy scenario and shared traversal regressions in `tests/acceptance/us6-organize-find.spec.ts`
-- [ ] T106 [US6] Invoke `pnpm acceptance:us6` and write content-safe evidence to `ops/evidence/stories/us6.json` (FR-118)
+- [x] T094 [P] [US6] Write category/Money Space lifecycle, normalized uniqueness, kind/reference, stale revision, and no-account-semantics contracts in `apps/server/tests/contract/labels.contract.spec.ts` (FR-051–FR-055)
+- [x] T095 [P] [US6] Write search/vector, date/direction/label/purpose/planning/currency/lifecycle intersection, ordering, and empty-state tests in `apps/server/tests/integration/search-filters.spec.ts` (FR-056–FR-059)
+- [x] T096 [P] [US6] Write detector-before-label/search, URL/log exclusion, Unicode/control-input, and no-cross-user-value tests in `apps/server/tests/privacy/search-label-boundaries.spec.ts` (FR-056, FR-060, FR-075, FR-078)
+- [x] T097 [US6] Implement owned Category/MoneySpace create/rename/deactivate/restore services with normalized active uniqueness and reference safety in `apps/server/src/modules/labels/labels.service.ts` (FR-051–FR-055)
+- [x] T098 [US6] Implement category and Money Space OpenAPI endpoints with revision/idempotency/privacy checks in `apps/server/src/modules/labels/labels.controller.ts`
+- [x] T099 [US6] Add generated `simple` text-search projection, GIN index, and transactional label-name refresh migration in `apps/server/src/adapters/postgres/migrations/0005_search_projection.sql` (FR-056)
+- [x] T100 [US6] Implement account-first search and intersection-filter repository with bound transient query values in `apps/server/src/modules/history/search.repository.ts` (FR-056–FR-060)
+- [x] T101 [US6] Increment HistoryListState transactionally for label rename/status changes affecting search/filter membership in `apps/server/src/modules/labels/history-invalidation.ts` (FR-030, FR-052, SC-026)
+- [x] T102 [P] [US6] Implement label management UI that presents Money Spaces only as context labels and preserves failed edits in `apps/web/src/features/labels/LabelManager.tsx` (FR-052–FR-055)
+- [x] T103 [US6] Implement POST search/filter UI with visible removable criteria, stable pages, loading/error/no-match/reset, and `RESULTS_CHANGED` refresh in `apps/web/src/features/history/SearchAndFilters.tsx` (FR-056–FR-059)
+- [x] T104 [US6] Execute label/search/filter endpoint, RLS, GIN, and cursor two-account isolation matrix in `tests/security/us6-search-label-isolation.spec.ts` (FR-060, FR-082; SC-015)
+- [x] T105 [US6] Create `pnpm acceptance:us6` suite covering every US6 success/degraded/privacy scenario and shared traversal regressions in `tests/acceptance/us6-organize-find.spec.ts`
+- [x] T106 [US6] Invoke `pnpm acceptance:us6` and write content-safe evidence to `ops/evidence/stories/us6.json` (FR-118)
 
 **Checkpoint**: Growing journal can be organized/found without label-account semantics or search disclosure.
 

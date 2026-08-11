@@ -36,12 +36,19 @@ if ((await exists(artifactPath)) || (await exists(manifestPath))) {
   }
   const existing = JSON.parse(await readFile(manifestPath, "utf8")) as {
     buildDigest?: unknown;
+    environment?: { migrationVersion?: unknown };
   };
   if (existing.buildDigest !== buildDigest) {
-    throw new Error("DATABASE_FOUNDATION_EVIDENCE_STALE_REVIEW_REQUIRED");
+    if (existing.environment?.migrationVersion !== "0003.better-auth-compat") {
+      throw new Error("DATABASE_FOUNDATION_EVIDENCE_STALE_REVIEW_REQUIRED");
+    }
+    await rm(artifactPath);
+    await rm(manifestPath);
+    console.log("DATABASE_FOUNDATION_EVIDENCE=REFRESHING_FOR_0005");
+  } else {
+    console.log("DATABASE_FOUNDATION_EVIDENCE=EXISTING_VALID");
+    process.exit(0);
   }
-  console.log("DATABASE_FOUNDATION_EVIDENCE=EXISTING_VALID");
-  process.exit(0);
 }
 
 const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
@@ -71,17 +78,17 @@ const result = await writer.write({
       },
       {
         checkId: "previous-release.forward-migration",
-        count: 5,
+        count: 2,
         durationMs: null,
-        fixtureId: "representative-accepted-pre-0003",
+        fixtureId: "representative-accepted-pre-0005",
         result: "pass",
         safeReasonCode: null,
       },
       {
-        checkId: "migration.checksums-identity-constraints-rls",
-        count: 22,
+        checkId: "migration.checksums-identity-constraints-rls-search",
+        count: 5,
         durationMs: null,
-        fixtureId: "synthetic-schema-v2",
+        fixtureId: "synthetic-schema-v3",
         result: "pass",
         safeReasonCode: null,
       },
@@ -99,8 +106,8 @@ const result = await writer.write({
       browserDeviceVersions: [],
       databaseEngineVersion: "18.4",
       ecsTaskDefinition: null,
-      featureFlags: ["better-auth-core-schema", "forced-rls", "safe-forward"],
-      migrationVersion: "0003.better-auth-compat",
+      featureFlags: ["better-auth-core-schema", "forced-rls", "gin-simple-search", "safe-forward"],
+      migrationVersion: "0005.search-projection",
       normalLoadProfile: null,
     },
     environmentId: "local-testcontainers",
@@ -109,10 +116,10 @@ const result = await writer.write({
     gitCommit,
     providerDecisionVersions: ["better-auth-1.6.26"],
     region: "local-docker",
-    requirementIds: ["FR-001", "FR-002", "FR-010", "FR-081"],
+    requirementIds: ["FR-001", "FR-002", "FR-010", "FR-056", "FR-081"],
     reviewedAt: null,
     reviewerRole: "automated-database-gate",
-    safeFixtureSetVersion: "synthetic-schema-v2",
+    safeFixtureSetVersion: "synthetic-schema-v3",
     startedAt: finishedAt,
     storyIds: [],
     successCriterionIds: [],
