@@ -76,7 +76,7 @@ const config = {
       from: { path: "/domain(?:/|$)" },
       to: {
         dependencyTypes: ["npm", "npm-bundled", "npm-optional", "npm-peer"],
-        path: "^(?:@nestjs/|@aws-sdk/|better-auth$|drizzle-orm$|fastify$|openai$)",
+        path: "^(?:@nestjs/|better-auth$|drizzle-orm$|fastify$|minio$|openai$)",
       },
     },
     {
@@ -85,7 +85,7 @@ const config = {
       from: { pathNot: "/adapters(?:/|$)" },
       to: {
         dependencyTypes: ["npm", "npm-bundled", "npm-optional", "npm-peer"],
-        path: "^(?:@aws-sdk/|better-auth$|drizzle-orm$|openai$)",
+        path: "^(?:better-auth$|drizzle-orm$|minio$|openai$)",
       },
     },
     {

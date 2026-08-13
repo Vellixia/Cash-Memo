@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AwsBackupLineageInventoryAdapter,
+  BackupLineageInventoryAdapter,
   ContractBackupLineageSource,
   type BackupArtifactClass,
-} from "../../apps/server/src/adapters/aws/backup-lineage-inventory.adapter.js";
+} from "../../apps/server/src/adapters/backup/backup-lineage-inventory.adapter.js";
 import {
-  AwsDeletionSuppressionAdapter,
-  ContractS3DeletionLedgerClient,
-} from "../../apps/server/src/adapters/aws/deletion-suppression.adapter.js";
+  ContractS3CompatibleDeletionLedgerClient,
+  RustfsDeletionSuppressionAdapter,
+} from "../../apps/server/src/adapters/rustfs/deletion-suppression.adapter.js";
 import { createSuppressionRecord } from "../../apps/server/src/modules/deletion/deletion-suppression.port.js";
 import { SuppressionCleanupService } from "../../apps/server/src/modules/deletion/suppression-cleanup.service.js";
 import { SuppressionKeyManager } from "../../apps/server/src/modules/deletion/suppression-key-manager.js";
@@ -17,14 +17,13 @@ const KEY1 = Buffer.from("synthetic-phase13-cleanup-key-material-v1", "utf8");
 const KEY2 = Buffer.from("synthetic-phase13-cleanup-key-material-v2", "utf8");
 
 async function fixture(now = new Date("2026-10-01T00:00:00.000Z")) {
-  const client = new ContractS3DeletionLedgerClient();
-  const ledger = new AwsDeletionSuppressionAdapter({
+  const client = new ContractS3CompatibleDeletionLedgerClient();
+  const ledger = new RustfsDeletionSuppressionAdapter({
     bucket: "synthetic",
     client,
-    kmsKeyId: "synthetic-kms",
   });
   const source = new ContractBackupLineageSource();
-  const inventory = new AwsBackupLineageInventoryAdapter(source);
+  const inventory = new BackupLineageInventoryAdapter(source);
   const keys = new SuppressionKeyManager();
   keys.createVersion("key-v1", KEY1, new Date("2026-01-01T00:00:00.000Z"));
   keys.rotate("key-v2", KEY2, new Date("2026-07-01T00:00:00.000Z"));
@@ -63,7 +62,7 @@ describe("verifier-controlled suppression cleanup", () => {
     });
   });
 
-  it.each(["manual_snapshot", "automated_pitr_window", "temporary_restore_copy"] as const)(
+  it.each(["manual_operator_copy", "wal_archive", "temporary_restore_copy"] as const)(
     "retains when capable %s remains after floor",
     async (artifactClass) => {
       const { record, service, source } = await fixture();
@@ -108,11 +107,11 @@ describe("verifier-controlled suppression cleanup", () => {
 
   it("retains on unverifiable artifact", async () => {
     const { record, service, source } = await fixture();
-    source.setPagesForTest("shared_snapshot", [
+    source.setPagesForTest("volume_snapshot", [
       {
-        artifacts: [present("shared_snapshot", "unverifiable")],
+        artifacts: [present("volume_snapshot", "unverifiable")],
         nextToken: null,
-        source: "shared_snapshot",
+        source: "volume_snapshot",
         sourceCurrent: true,
       },
     ]);

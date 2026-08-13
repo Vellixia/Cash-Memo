@@ -8,6 +8,7 @@ import type {
 
 export interface MailpitAdapterOptions {
   readonly apiUrl: string;
+  readonly fromAddress: string;
 }
 
 export function createMailpitAdapter(options: Readonly<MailpitAdapterOptions>): EmailPort {
@@ -28,7 +29,7 @@ export function createMailpitAdapter(options: Readonly<MailpitAdapterOptions>): 
 
       const response = await fetch(`${options.apiUrl}/api/v1/send`, {
         body: JSON.stringify({
-          From: "noreply@cashmemo.test",
+          From: options.fromAddress,
           Subject: subject,
           Text: body,
           To: [input.destination],

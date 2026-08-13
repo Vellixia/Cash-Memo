@@ -9,9 +9,9 @@ describe("US5 executable failure matrix", () => {
     expect(result.capabilities).toEqual([
       "ai_extraction",
       "authentication",
+      "backup_repository",
       "database",
       "email_delivery",
-      "kms",
       "network",
       "object_storage",
       "reporting",

@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { ContractExportObjectStore } from "../../apps/server/src/adapters/aws/export-object-store.adapter.js";
+import { ContractExportObjectStore } from "../../apps/server/src/adapters/rustfs/export-object-store.adapter.js";
 import { withAccountTransaction } from "../../apps/server/src/adapters/postgres/transaction-context.js";
 import { AccountDeletionService } from "../../apps/server/src/modules/deletion/account-deletion.service.js";
 import { ContractDeletionSuppressionPort } from "../../apps/server/src/modules/deletion/deletion-suppression.port.js";

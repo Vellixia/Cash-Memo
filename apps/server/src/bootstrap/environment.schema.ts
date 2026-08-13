@@ -6,15 +6,32 @@ const optional = <Schema extends z.ZodType>(schema: Schema) =>
 
 const nonEmpty = z.string().trim().min(1);
 const opaqueSecret = z.string().min(32).max(4096);
-const httpsUrl = z.url().refine((value) => value.startsWith("https://"), "HTTPS_REQUIRED");
+const serviceUrl = z.url().refine((value) => {
+  const parsed = new URL(value);
+  return (
+    (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+    parsed.username === "" &&
+    parsed.password === "" &&
+    parsed.search === "" &&
+    parsed.hash === ""
+  );
+}, "SERVICE_URL_REQUIRED");
+const httpsUrl = serviceUrl.refine((value) => value.startsWith("https://"), "HTTPS_REQUIRED");
+const postgresUrl = z
+  .url()
+  .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
+    message: "POSTGRESQL_URL_REQUIRED",
+  });
 const bucketName = z
   .string()
   .min(3)
   .max(63)
   .regex(/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/u, "INVALID_BUCKET_NAME");
-const kmsArn = z
+const namespace = z
   .string()
-  .regex(/^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key\/[0-9a-f-]+$/u, "INVALID_KMS_ARN");
+  .min(1)
+  .max(128)
+  .regex(/^[a-z0-9][a-z0-9/_-]*$/u, "INVALID_NAMESPACE");
 
 const environmentSchema = z
   .object({
@@ -24,29 +41,43 @@ const environmentSchema = z
     PROCESS_ROLE: z.enum(["api", "worker", "all"]),
     PORT: z.coerce.number().int().min(1).max(65_535),
 
-    DATABASE_URL: z
-      .url()
-      .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
-        message: "POSTGRESQL_URL_REQUIRED",
-      }),
-    AUTH_DATABASE_URL: z
-      .url()
-      .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
-        message: "POSTGRESQL_URL_REQUIRED",
-      }),
+    DATABASE_URL: postgresUrl,
+    AUTH_DATABASE_URL: postgresUrl,
     AUTH_SESSION_SECRET: opaqueSecret,
     AUTH_TOKEN_HMAC_KEY: opaqueSecret,
     PASSWORD_PEPPER: opaqueSecret,
     EVIDENCE_HMAC_KEY: opaqueSecret,
     DELETION_SUPPRESSION_HMAC_KEY: opaqueSecret,
+    SECRET_DELIVERY_MODE: z.literal("injected_environment"),
 
-    AWS_REGION: nonEmpty.max(32),
-    EXPORT_BUCKET: bucketName,
-    EVIDENCE_BUCKET: bucketName,
-    DELETION_LEDGER_BUCKET: bucketName,
-    KMS_EXPORT_KEY_ARN: kmsArn,
-    KMS_EVIDENCE_KEY_ARN: kmsArn,
-    SES_FROM_ADDRESS: z.email(),
+    OBJECT_STORAGE_MODE: z.enum(["disabled", "contract", "rustfs"]),
+    RUSTFS_PRIMARY_ENDPOINT: optional(serviceUrl),
+    RUSTFS_PRIMARY_REGION: optional(nonEmpty.max(64)),
+    RUSTFS_PRIMARY_ACCESS_KEY: optional(nonEmpty.max(256)),
+    RUSTFS_PRIMARY_SECRET_KEY: optional(opaqueSecret),
+    RUSTFS_PRIMARY_STORAGE_POLICY_VERSION: optional(z.literal("cashmemo-rustfs-encrypted-v1")),
+    RUSTFS_EXPORT_BUCKET: optional(bucketName),
+    RUSTFS_EVIDENCE_BUCKET: optional(bucketName),
+
+    BACKUP_MODE: z.enum(["disabled", "contract", "pgbackrest"]),
+    RUSTFS_SECONDARY_ENDPOINT: optional(serviceUrl),
+    RUSTFS_SECONDARY_REGION: optional(nonEmpty.max(64)),
+    RUSTFS_SECONDARY_ACCESS_KEY: optional(nonEmpty.max(256)),
+    RUSTFS_SECONDARY_SECRET_KEY: optional(opaqueSecret),
+    RUSTFS_SECONDARY_STORAGE_POLICY_VERSION: optional(z.literal("cashmemo-rustfs-encrypted-v1")),
+    RUSTFS_SECONDARY_BUCKET: optional(bucketName),
+    PGBACKREST_STANZA: optional(namespace),
+    PGBACKREST_REPOSITORY_PREFIX: optional(namespace),
+    DELETION_LEDGER_NAMESPACE: optional(namespace),
+
+    EMAIL_PROVIDER: z.enum(["disabled", "mailpit", "cloudflare"]),
+    EMAIL_FROM_ADDRESS: z.email(),
+    MAILPIT_API_URL: optional(serviceUrl),
+    CLOUDFLARE_ACCOUNT_ID: optional(nonEmpty.max(128)),
+    CLOUDFLARE_EMAIL_API_TOKEN: optional(opaqueSecret),
+    CLOUDFLARE_EMAIL_BASE_URL: optional(z.literal("https://api.cloudflare.com/client/v4")).default(
+      "https://api.cloudflare.com/client/v4",
+    ),
 
     ASSISTED_CAPTURE_MODE: z.enum(["disabled", "fake", "openai"]),
     OPENAI_API_KEY: optional(nonEmpty.max(4096)),
@@ -58,42 +89,102 @@ const environmentSchema = z
 
     CURRENCY_REGISTRY_VERSION: nonEmpty.max(128),
     TZDB_VERSION: nonEmpty.max(64),
-    OTEL_EXPORTER_OTLP_ENDPOINT: optional(httpsUrl),
+    OTEL_EXPORTER_OTLP_ENDPOINT: optional(serviceUrl),
   })
   .superRefine((environment, context) => {
     const productionEquivalent =
       environment.APP_ENV === "staging" || environment.APP_ENV === "production";
 
     if (productionEquivalent && !environment.APP_ORIGIN.startsWith("https://")) {
-      context.addIssue({
-        code: "custom",
-        path: ["APP_ORIGIN"],
-        message: "HTTPS_REQUIRED",
-      });
+      context.addIssue({ code: "custom", path: ["APP_ORIGIN"], message: "HTTPS_REQUIRED" });
     }
 
-    if (productionEquivalent && environment.AWS_REGION !== "ap-southeast-1") {
-      context.addIssue({
-        code: "custom",
-        path: ["AWS_REGION"],
-        message: "APPROVED_REGION_REQUIRED",
-      });
+    const requireFields = (fields: readonly (keyof typeof environment)[], message: string) => {
+      for (const field of fields) {
+        if (environment[field] === undefined) {
+          context.addIssue({ code: "custom", path: [field], message });
+        }
+      }
+    };
+
+    if (environment.OBJECT_STORAGE_MODE === "rustfs") {
+      requireFields(
+        [
+          "RUSTFS_PRIMARY_ENDPOINT",
+          "RUSTFS_PRIMARY_REGION",
+          "RUSTFS_PRIMARY_ACCESS_KEY",
+          "RUSTFS_PRIMARY_SECRET_KEY",
+          "RUSTFS_PRIMARY_STORAGE_POLICY_VERSION",
+          "RUSTFS_EXPORT_BUCKET",
+          "RUSTFS_EVIDENCE_BUCKET",
+        ],
+        "REQUIRED_FOR_RUSTFS_PRIMARY",
+      );
+    }
+
+    if (environment.BACKUP_MODE === "pgbackrest") {
+      requireFields(
+        [
+          "RUSTFS_SECONDARY_ENDPOINT",
+          "RUSTFS_SECONDARY_REGION",
+          "RUSTFS_SECONDARY_ACCESS_KEY",
+          "RUSTFS_SECONDARY_SECRET_KEY",
+          "RUSTFS_SECONDARY_STORAGE_POLICY_VERSION",
+          "RUSTFS_SECONDARY_BUCKET",
+          "PGBACKREST_STANZA",
+          "PGBACKREST_REPOSITORY_PREFIX",
+          "DELETION_LEDGER_NAMESPACE",
+        ],
+        "REQUIRED_FOR_PGBACKREST_SECONDARY",
+      );
+    }
+
+    if (environment.EMAIL_PROVIDER === "mailpit") {
+      requireFields(["MAILPIT_API_URL"], "REQUIRED_FOR_MAILPIT");
+    }
+    if (environment.EMAIL_PROVIDER === "cloudflare") {
+      requireFields(
+        ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_EMAIL_API_TOKEN"],
+        "REQUIRED_FOR_CLOUDFLARE_EMAIL",
+      );
     }
 
     if (environment.ASSISTED_CAPTURE_MODE === "openai") {
-      for (const field of ["OPENAI_API_KEY", "OPENAI_PROJECT_ID", "OPENAI_BASE_URL"] as const) {
-        if (environment[field] === undefined) {
-          context.addIssue({ code: "custom", path: [field], message: "REQUIRED_FOR_OPENAI" });
-        }
-      }
+      requireFields(
+        ["OPENAI_API_KEY", "OPENAI_PROJECT_ID", "OPENAI_BASE_URL"],
+        "REQUIRED_FOR_OPENAI",
+      );
     }
 
-    if (productionEquivalent && environment.OTEL_EXPORTER_OTLP_ENDPOINT === undefined) {
-      context.addIssue({
-        code: "custom",
-        path: ["OTEL_EXPORTER_OTLP_ENDPOINT"],
-        message: "REQUIRED_IN_PRODUCTION_EQUIVALENT_ENVIRONMENT",
-      });
+    if (productionEquivalent) {
+      if (environment.OBJECT_STORAGE_MODE !== "rustfs") {
+        context.addIssue({
+          code: "custom",
+          path: ["OBJECT_STORAGE_MODE"],
+          message: "RUSTFS_REQUIRED_IN_PRODUCTION_EQUIVALENT_ENVIRONMENT",
+        });
+      }
+      if (environment.BACKUP_MODE !== "pgbackrest") {
+        context.addIssue({
+          code: "custom",
+          path: ["BACKUP_MODE"],
+          message: "PGBACKREST_REQUIRED_IN_PRODUCTION_EQUIVALENT_ENVIRONMENT",
+        });
+      }
+      if (environment.EMAIL_PROVIDER !== "cloudflare") {
+        context.addIssue({
+          code: "custom",
+          path: ["EMAIL_PROVIDER"],
+          message: "CLOUDFLARE_EMAIL_REQUIRED_IN_PRODUCTION_EQUIVALENT_ENVIRONMENT",
+        });
+      }
+      if (environment.OTEL_EXPORTER_OTLP_ENDPOINT === undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["OTEL_EXPORTER_OTLP_ENDPOINT"],
+          message: "REQUIRED_IN_PRODUCTION_EQUIVALENT_ENVIRONMENT",
+        });
+      }
     }
   });
 
@@ -111,7 +202,6 @@ export class EnvironmentConfigurationError extends Error {
 
 export const parseEnvironment = (source: NodeJS.ProcessEnv): Environment => {
   const result = environmentSchema.safeParse(source);
-
   if (!result.success) {
     const invalidNames = [
       ...new Set(
@@ -122,6 +212,5 @@ export const parseEnvironment = (source: NodeJS.ProcessEnv): Environment => {
     ].sort();
     throw new EnvironmentConfigurationError(invalidNames);
   }
-
   return result.data;
 };

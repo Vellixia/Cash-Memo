@@ -36,16 +36,17 @@ interface ExportObjectStore {
   putPrivateExport(input: Readonly<ExportObjectPut>): Promise<ExportObjectHandle>;
 }
 
-interface S3ExportClient {
+interface S3CompatibleExportClient {
   deleteObjects(input: {
     readonly bucket: string;
     readonly objects: readonly { readonly key: string; readonly versionId: string }[];
   }): Promise<void>;
-  getObject(input: {
-    readonly bucket: string;
-    readonly key: string;
-    readonly versionId?: string;
-  }): Promise<Readable>;
+  getObject(input: { readonly bucket: string; readonly key: string }): Promise<Readable>;
+  headObject(input: { readonly bucket: string; readonly key: string }): Promise<{
+    readonly checksumSha256: string;
+    readonly metadata: Readonly<Record<string, string>>;
+    readonly versionId: string;
+  } | null>;
   listObjectVersions(input: {
     readonly bucket: string;
     readonly key: string;
@@ -56,16 +57,14 @@ interface S3ExportClient {
     readonly checksumSha256: string;
     readonly contentType: "application/zip";
     readonly key: string;
-    readonly kmsKeyId: string;
     readonly metadata: Readonly<Record<string, string>>;
-    readonly serverSideEncryption: "aws:kms";
   }): Promise<{ readonly versionId: string }>;
 }
 
-interface AwsExportObjectStoreOptions {
+interface RustfsExportObjectStoreOptions {
   readonly bucket: string;
-  readonly client: S3ExportClient;
-  readonly kmsKeyId: string;
+  readonly client: S3CompatibleExportClient;
+  readonly retryLimit?: number;
 }
 
 function assertOpaqueScope(value: string): void {
@@ -86,6 +85,25 @@ function createOpaqueKey(): string {
   return `exports/${randomUUID()}/${randomUUID()}.zip`;
 }
 
+function isRetryable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    ["S3_COMPATIBLE_TIMEOUT", "S3_COMPATIBLE_UNAVAILABLE"].includes(error.message)
+  );
+}
+
+async function retry<T>(limit: number, operation: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isRetryable(error) || attempt >= limit) throw error;
+      attempt += 1;
+    }
+  }
+}
+
 async function digestStream(
   stream: Readable,
 ): Promise<{ readonly bytes: Buffer; readonly sha256: string }> {
@@ -97,8 +115,8 @@ async function digestStream(
   return { bytes, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
-class AwsExportObjectStoreAdapter implements ExportObjectStore {
-  constructor(private readonly options: Readonly<AwsExportObjectStoreOptions>) {}
+class RustfsExportObjectStoreAdapter implements ExportObjectStore {
+  constructor(private readonly options: Readonly<RustfsExportObjectStoreOptions>) {}
 
   async putPrivateExport(input: Readonly<ExportObjectPut>): Promise<ExportObjectHandle> {
     assertOpaqueScope(input.accountScopeHmac);
@@ -106,20 +124,36 @@ class AwsExportObjectStoreAdapter implements ExportObjectStore {
     const actual = createHash("sha256").update(input.body).digest("hex");
     if (actual !== input.expectedSha256) throw new Error("EXPORT_INTEGRITY_MISMATCH");
     const key = createOpaqueKey();
-    const result = await this.options.client.putObject({
-      body: input.body,
-      bucket: this.options.bucket,
-      checksumSha256: input.expectedSha256,
-      contentType: "application/zip",
-      key,
-      kmsKeyId: this.options.kmsKeyId,
-      metadata: {
-        accountScopeHmac: input.accountScopeHmac,
-        expiresAt: input.expiresAt.toISOString(),
-      },
-      serverSideEncryption: "aws:kms",
+    const metadata = Object.freeze({
+      accountScopeHmac: input.accountScopeHmac,
+      expiresAt: input.expiresAt.toISOString(),
     });
-    return Object.freeze({ key, sha256: input.expectedSha256, versionId: result.versionId });
+    try {
+      const result = await retry(this.options.retryLimit ?? 2, () =>
+        this.options.client.putObject({
+          body: input.body,
+          bucket: this.options.bucket,
+          checksumSha256: input.expectedSha256,
+          contentType: "application/zip",
+          key,
+          metadata,
+        }),
+      );
+      return Object.freeze({ key, sha256: input.expectedSha256, versionId: result.versionId });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "S3_COMPATIBLE_AMBIGUOUS_RESPONSE") {
+        throw error;
+      }
+      const verified = await this.options.client.headObject({ bucket: this.options.bucket, key });
+      const verifiedScope = verified?.metadata["accountScopeHmac"];
+      if (
+        verified?.checksumSha256 !== input.expectedSha256 ||
+        verifiedScope !== input.accountScopeHmac
+      ) {
+        throw new Error("EXPORT_STORAGE_OUTCOME_UNVERIFIABLE", { cause: error });
+      }
+      return Object.freeze({ key, sha256: input.expectedSha256, versionId: verified.versionId });
+    }
   }
 
   async openPrivateStream(
@@ -130,7 +164,14 @@ class AwsExportObjectStoreAdapter implements ExportObjectStore {
     assertOpaqueScope(accountScopeHmac);
     assertOpaqueKey(key);
     assertSha256(expectedSha256);
-    const stream = await this.options.client.getObject({ bucket: this.options.bucket, key });
+    const head = await this.options.client.headObject({ bucket: this.options.bucket, key });
+    const headScope = head?.metadata["accountScopeHmac"];
+    if (head?.checksumSha256 !== expectedSha256 || headScope !== accountScopeHmac) {
+      throw new Error("EXPORT_OBJECT_NOT_FOUND");
+    }
+    const stream = await retry(this.options.retryLimit ?? 2, () =>
+      this.options.client.getObject({ bucket: this.options.bucket, key }),
+    );
     const verified = await digestStream(stream);
     if (verified.sha256 !== expectedSha256) throw new Error("EXPORT_INTEGRITY_MISMATCH");
     return Readable.from(verified.bytes);
@@ -142,7 +183,9 @@ class AwsExportObjectStoreAdapter implements ExportObjectStore {
   ): Promise<readonly ExportObjectVersion[]> {
     assertOpaqueScope(accountScopeHmac);
     assertOpaqueKey(key);
-    return this.options.client.listObjectVersions({ bucket: this.options.bucket, key });
+    return retry(this.options.retryLimit ?? 2, () =>
+      this.options.client.listObjectVersions({ bucket: this.options.bucket, key }),
+    );
   }
 
   async deleteEveryVersion(
@@ -151,10 +194,12 @@ class AwsExportObjectStoreAdapter implements ExportObjectStore {
   ): Promise<ExportObjectDeleteResult> {
     const versions = await this.listVersions(accountScopeHmac, key);
     if (versions.length > 0) {
-      await this.options.client.deleteObjects({
-        bucket: this.options.bucket,
-        objects: versions.map((version) => ({ key: version.key, versionId: version.versionId })),
-      });
+      await retry(this.options.retryLimit ?? 2, () =>
+        this.options.client.deleteObjects({
+          bucket: this.options.bucket,
+          objects: versions.map((version) => ({ key: version.key, versionId: version.versionId })),
+        }),
+      );
     }
     const residual = await this.listVersions(accountScopeHmac, key);
     return Object.freeze({ deletedVersions: versions.length, residualVersions: residual.length });
@@ -234,8 +279,7 @@ class ContractExportObjectStore implements ExportObjectStore {
     assertOpaqueScope(accountScopeHmac);
     assertOpaqueKey(key);
     assertSha256(expectedSha256);
-    const current = this.versions.get(key);
-    const latest = current?.at(-1);
+    const latest = this.versions.get(key)?.at(-1);
     if (
       latest?.accountScopeHmac !== accountScopeHmac ||
       latest.deleteMarker ||
@@ -277,14 +321,14 @@ class ContractExportObjectStore implements ExportObjectStore {
 }
 
 export {
-  AwsExportObjectStoreAdapter,
   ContractExportObjectStore,
+  RustfsExportObjectStoreAdapter,
   createOpaqueKey,
-  type AwsExportObjectStoreOptions,
   type ExportObjectDeleteResult,
   type ExportObjectHandle,
   type ExportObjectPut,
   type ExportObjectStore,
   type ExportObjectVersion,
-  type S3ExportClient,
+  type RustfsExportObjectStoreOptions,
+  type S3CompatibleExportClient,
 };

@@ -12,7 +12,7 @@ import { canonicalRequestHmac, Money, serializeMoney } from "@cashmemo/domain";
 
 import type { Pool, QueryResultRow } from "pg";
 
-import type { ExportObjectStore } from "../../adapters/aws/export-object-store.adapter.js";
+import type { ExportObjectStore } from "../../adapters/rustfs/export-object-store.adapter.js";
 import { withAccountTransaction } from "../../adapters/postgres/transaction-context.js";
 import type { BackgroundJobRepository } from "../operations/background-jobs.js";
 import {

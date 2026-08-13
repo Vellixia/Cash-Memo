@@ -2134,7 +2134,7 @@ export type DownloadExportError = DownloadExportErrors[keyof DownloadExportError
 
 export type DownloadExportResponses = {
   /**
-   * Same-origin authenticated stream; internal S3 URL is never exposed.
+   * Same-origin authenticated stream; internal object-store URL is never exposed.
    */
   200: Blob | File;
 };

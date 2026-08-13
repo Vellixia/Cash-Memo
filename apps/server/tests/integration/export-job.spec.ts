@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { ContractExportObjectStore } from "../../src/adapters/aws/export-object-store.adapter.js";
+import { ContractExportObjectStore } from "../../src/adapters/rustfs/export-object-store.adapter.js";
 import { ExportJobService } from "../../src/modules/export/export-job.service.js";
 import { BackgroundJobRepository } from "../../src/modules/operations/background-jobs.js";
 import { applyMigrations } from "./support/postgres-migrations.js";

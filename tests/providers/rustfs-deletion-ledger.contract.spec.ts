@@ -1,22 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AwsDeletionSuppressionAdapter,
-  ContractS3DeletionLedgerClient,
+  ContractS3CompatibleDeletionLedgerClient,
+  RustfsDeletionSuppressionAdapter,
   encodeRecord,
   objectKey,
-} from "../../apps/server/src/adapters/aws/deletion-suppression.adapter.js";
+} from "../../apps/server/src/adapters/rustfs/deletion-suppression.adapter.js";
 import { createSuppressionRecord } from "../../apps/server/src/modules/deletion/deletion-suppression.port.js";
 
 const KEY = Buffer.from("synthetic-phase13-ledger-key-material-v1", "utf8");
 const ID = "00000000-0000-4000-8000-000000000185";
 
 function fixture() {
-  const client = new ContractS3DeletionLedgerClient();
-  const adapter = new AwsDeletionSuppressionAdapter({
+  const client = new ContractS3CompatibleDeletionLedgerClient();
+  const adapter = new RustfsDeletionSuppressionAdapter({
     bucket: "synthetic-ledger",
     client,
-    kmsKeyId: "synthetic-kms-key",
   });
   const record = createSuppressionRecord({
     entityId: ID,
@@ -29,14 +28,13 @@ function fixture() {
   return { adapter, client, record };
 }
 
-describe("AWS deletion-ledger adapter contract", () => {
-  it("uses conditional KMS-encrypted write and verifies durable object", async () => {
+describe("RustFS deletion-ledger adapter contract", () => {
+  it("requires encrypted storage, uses a conditional write, and verifies durable object", async () => {
     const { adapter, client, record } = fixture();
     await expect(adapter.ensureDurable(record)).resolves.toMatchObject({ verifiedDurable: true });
     expect(client.lastPutForTest()).toMatchObject({
       ifNoneMatch: "*",
-      kmsKeyId: "synthetic-kms-key",
-      serverSideEncryption: "aws:kms",
+      requireEncryptedStorage: true,
     });
     await expect(adapter.verifyDurable(record.deletionToken, "key-v1")).resolves.toEqual(record);
   });
@@ -113,5 +111,22 @@ describe("AWS deletion-ledger adapter contract", () => {
       verifierDecision: "verified_eligible",
     });
     await expect(adapter.verifyDurable(record.deletionToken, "key-v1")).resolves.toBeNull();
+  });
+
+  it("fails removal closed when post-delete absence cannot be verified", async () => {
+    const { adapter, client, record } = fixture();
+    await adapter.ensureDurable(record);
+    const loaded = await adapter.loadForCleanup(record.deletionToken, "key-v1");
+    if (loaded === null) throw new Error("FIXTURE_MISSING");
+    client.setFaultForTest("unavailable");
+
+    await expect(
+      adapter.removeVerified({
+        expectedVersionId: loaded.versionId,
+        suppressionKeyVersion: "key-v1",
+        token: record.deletionToken,
+        verifierDecision: "verified_eligible",
+      }),
+    ).rejects.toThrow("SUPPRESSION_LEDGER_UNAVAILABLE");
   });
 });

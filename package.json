@@ -46,8 +46,6 @@
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
     "local:cert": "node scripts/local/bootstrap-https.mjs",
-    "local:down": "docker compose -f infra/containers/compose.yaml down",
-    "local:up": "node scripts/local/bootstrap-https.mjs && docker compose -f infra/containers/compose.yaml up -d --wait",
     "preview:https": "node scripts/verify/run-gates.mjs workspace preview:https",
     "release": "node scripts/verify/run-gates.mjs release",
     "test:acceptance": "node scripts/verify/run-gates.mjs stories",
@@ -59,14 +57,13 @@
     "test:privacy": "node scripts/verify/run-gates.mjs test privacy",
     "test:property": "node scripts/verify/run-gates.mjs test property",
     "test:providers:real": "node scripts/verify/run-gates.mjs providers",
+    "test:rustfs:real": "vitest run tests/providers/rustfs-real.integration.spec.ts",
     "test:pwa": "node scripts/verify/run-gates.mjs test pwa",
     "test:security": "node scripts/verify/run-gates.mjs test security",
     "test:unit": "node scripts/verify/run-gates.mjs test unit",
     "typecheck": "node scripts/verify/run-gates.mjs typecheck",
     "toolchain:check": "node scripts/toolchain/check-versions.mjs",
-    "toolchain:opentofu": "node scripts/toolchain/bootstrap-opentofu.mjs",
-    "verify": "node scripts/verify/run-gates.mjs verify",
-    "verify:phase15-remote": "node scripts/verify/run-phase15-remote.mjs"
+    "verify": "node scripts/verify/run-gates.mjs verify"
   },
   "devDependencies": {
     "@cashmemo/test-support": "workspace:*",

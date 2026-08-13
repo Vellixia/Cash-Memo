@@ -2,9 +2,9 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  AwsDeletionSuppressionAdapter,
-  ContractS3DeletionLedgerClient,
-} from "../../src/adapters/aws/deletion-suppression.adapter.js";
+  ContractS3CompatibleDeletionLedgerClient,
+  RustfsDeletionSuppressionAdapter,
+} from "../../src/adapters/rustfs/deletion-suppression.adapter.js";
 import { AccountPurgeWorker } from "../../src/modules/deletion/account-purge.worker.js";
 import { MemoPurgeWorker } from "../../src/modules/deletion/memo-purge.worker.js";
 import { applyMigrations } from "./support/postgres-migrations.js";
@@ -103,17 +103,16 @@ describe("write-before-purge integration", { concurrent: false }, () => {
   });
 
   function boundary() {
-    const client = new ContractS3DeletionLedgerClient();
-    const port = new AwsDeletionSuppressionAdapter({
+    const client = new ContractS3CompatibleDeletionLedgerClient();
+    const port = new RustfsDeletionSuppressionAdapter({
       bucket: "synthetic",
       client,
-      kmsKeyId: "synthetic-kms",
     });
     return { client, port };
   }
 
   function memoWorker(
-    port: AwsDeletionSuppressionAdapter,
+    port: RustfsDeletionSuppressionAdapter,
     afterSuppressionVerified?: () => Promise<void>,
   ) {
     return new MemoPurgeWorker({
@@ -128,7 +127,7 @@ describe("write-before-purge integration", { concurrent: false }, () => {
   }
 
   function accountWorker(
-    port: AwsDeletionSuppressionAdapter,
+    port: RustfsDeletionSuppressionAdapter,
     afterSuppressionVerified?: () => Promise<void>,
   ) {
     return new AccountPurgeWorker({

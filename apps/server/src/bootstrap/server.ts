@@ -8,6 +8,8 @@ import { canonicalRequestHmac } from "@cashmemo/domain";
 
 import { parseEnvironment } from "./environment.schema.js";
 import { resolveCapabilityMode } from "./capability-mode.js";
+import { OtlpHttpTelemetrySink } from "../adapters/telemetry/otlp-http.sink.js";
+import { ResilientTelemetryExporter } from "../adapters/telemetry/resilient-exporter.js";
 import { createBetterAuthAdapter } from "../modules/identity/better-auth.adapter.js";
 import { IdentityService } from "../modules/identity/identity.service.js";
 import { SessionService } from "../modules/identity/session.service.js";
@@ -51,7 +53,16 @@ import { registerAssistedCaptureRoutes } from "../modules/assisted-capture/voice
 import { ConfirmDraftService } from "../modules/assisted-capture/confirm-draft.service.js";
 import { AudioSweeper } from "../modules/operations/audio-sweeper.js";
 import { BackgroundJobRepository } from "../modules/operations/background-jobs.js";
-import { ContractExportObjectStore } from "../adapters/aws/export-object-store.adapter.js";
+import {
+  ContractExportObjectStore,
+  RustfsExportObjectStoreAdapter,
+  type ExportObjectStore,
+} from "../adapters/rustfs/export-object-store.adapter.js";
+import {
+  RustfsMinioDeletionLedgerClient,
+  RustfsMinioExportClient,
+} from "../adapters/rustfs/minio-s3-compatible.client.js";
+import { RustfsDeletionSuppressionAdapter } from "../adapters/rustfs/deletion-suppression.adapter.js";
 import {
   allowedOrigins,
   privateSecurityHeaders,
@@ -59,7 +70,10 @@ import {
 } from "../adapters/http/security-boundary.js";
 import { ExportJobService } from "../modules/export/export-job.service.js";
 import { registerExportRoutes } from "../modules/export/export.controller.js";
-import { ContractDeletionSuppressionPort } from "../modules/deletion/deletion-suppression.port.js";
+import {
+  ContractDeletionSuppressionPort,
+  type DeletionSuppressionPort,
+} from "../modules/deletion/deletion-suppression.port.js";
 import { MemoPurgeWorker } from "../modules/deletion/memo-purge.worker.js";
 import { AccountPurgeWorker } from "../modules/deletion/account-purge.worker.js";
 import { AccountDeletionService } from "../modules/deletion/account-deletion.service.js";
@@ -67,6 +81,9 @@ import { registerAccountDeletionRoutes } from "../modules/deletion/account-delet
 import { ProviderDeletionService } from "../modules/deletion/provider-deletion.service.js";
 import { PrivacyBoundaryService } from "../modules/privacy/privacy-boundary.service.js";
 import { AbuseControls, abuseOperationForRequest } from "../modules/operations/abuse-controls.js";
+import { createMailpitAdapter } from "../adapters/mailpit/mailpit-email.adapter.js";
+import { createCloudflareEmailAdapter } from "../adapters/cloudflare/cloudflare-email.adapter.js";
+import type { EmailPort } from "../modules/identity/email.port.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -98,6 +115,34 @@ async function main() {
   runtimePool.on("error", () => undefined);
   workerPool.on("error", () => undefined);
 
+  const email: EmailPort =
+    env.EMAIL_PROVIDER === "mailpit"
+      ? createMailpitAdapter({
+          apiUrl: env.MAILPIT_API_URL ?? "",
+          fromAddress: env.EMAIL_FROM_ADDRESS,
+        })
+      : env.EMAIL_PROVIDER === "cloudflare"
+        ? createCloudflareEmailAdapter({
+            accountId: env.CLOUDFLARE_ACCOUNT_ID ?? "",
+            apiToken: env.CLOUDFLARE_EMAIL_API_TOKEN ?? "",
+            baseUrl: env.CLOUDFLARE_EMAIL_BASE_URL,
+            fromAddress: env.EMAIL_FROM_ADDRESS,
+          })
+        : {
+            send: () => Promise.reject(new Error("EMAIL_DELIVERY_DISABLED")),
+          };
+
+  const deliver = async (
+    operation: "password_reset" | "verification",
+    destination: string,
+    oneTimeUrl: string,
+  ) => {
+    const result = await email.send({ destination, oneTimeUrl, operation });
+    if (result.state === "failed" || result.state === "bounced") {
+      throw new Error("EMAIL_DELIVERY_UNAVAILABLE");
+    }
+  };
+
   const deliveryCallbacks = {
     sendPasswordReset: async ({
       destination,
@@ -106,16 +151,7 @@ async function main() {
       destination: string;
       oneTimeUrl: string;
     }) => {
-      await fetch("http://127.0.0.1:8025/api/v1/send", {
-        body: JSON.stringify({
-          From: { Email: env.SES_FROM_ADDRESS, Name: "Cashmemo" },
-          Subject: "Reset your Cashmemo password",
-          Text: `Use this link to reset your password:\n\n${oneTimeUrl}\n\nThis link expires in 1 hour.`,
-          To: [{ Email: destination, Name: "" }],
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
+      await deliver("password_reset", destination, oneTimeUrl);
     },
     sendVerification: async ({
       destination,
@@ -124,16 +160,7 @@ async function main() {
       destination: string;
       oneTimeUrl: string;
     }) => {
-      await fetch("http://127.0.0.1:8025/api/v1/send", {
-        body: JSON.stringify({
-          From: { Email: env.SES_FROM_ADDRESS, Name: "Cashmemo" },
-          Subject: "Verify your Cashmemo email address",
-          Text: `Use this link to verify your email address:\n\n${oneTimeUrl}\n\nThis link expires in 24 hours.`,
-          To: [{ Email: destination, Name: "" }],
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
+      await deliver("verification", destination, oneTimeUrl);
     },
   };
 
@@ -165,7 +192,24 @@ async function main() {
   const searchRepository = new SearchRepository({ cursorCodec, pool: runtimePool, privacy });
   const currentMonth = new CurrentMonthService({ pool: runtimePool });
   const monthlyReview = new MonthlyReviewService({ pool: runtimePool });
-  const objectStore = new ContractExportObjectStore();
+  let contractObjectStore: ContractExportObjectStore | undefined;
+  let objectStore: ExportObjectStore;
+  if (env.OBJECT_STORAGE_MODE === "rustfs") {
+    objectStore = new RustfsExportObjectStoreAdapter({
+      bucket: env.RUSTFS_EXPORT_BUCKET ?? "",
+      client: new RustfsMinioExportClient({
+        accessKey: env.RUSTFS_PRIMARY_ACCESS_KEY ?? "",
+        endpoint: env.RUSTFS_PRIMARY_ENDPOINT ?? "",
+        region: env.RUSTFS_PRIMARY_REGION ?? "",
+        secretKey: env.RUSTFS_PRIMARY_SECRET_KEY ?? "",
+      }),
+    });
+  } else {
+    const contractStore = new ContractExportObjectStore();
+    if (env.OBJECT_STORAGE_MODE === "disabled") contractStore.setWriteFailureForTest(true);
+    contractObjectStore = contractStore;
+    objectStore = contractStore;
+  }
   const backgroundJobs = new BackgroundJobRepository(workerPool, {
     backoffBaseMilliseconds: 1_000,
     backoffMaximumMilliseconds: 60_000,
@@ -178,7 +222,27 @@ async function main() {
     objectStore,
     pool: runtimePool,
   });
-  const suppression = new ContractDeletionSuppressionPort();
+  let contractSuppression: ContractDeletionSuppressionPort | undefined;
+  let suppression: DeletionSuppressionPort;
+  if (env.BACKUP_MODE === "pgbackrest") {
+    suppression = new RustfsDeletionSuppressionAdapter({
+      bucket: env.RUSTFS_SECONDARY_BUCKET ?? "",
+      client: new RustfsMinioDeletionLedgerClient({
+        accessKey: env.RUSTFS_SECONDARY_ACCESS_KEY ?? "",
+        encryptedStoragePolicyVerified:
+          env.RUSTFS_SECONDARY_STORAGE_POLICY_VERSION === "cashmemo-rustfs-encrypted-v1",
+        endpoint: env.RUSTFS_SECONDARY_ENDPOINT ?? "",
+        region: env.RUSTFS_SECONDARY_REGION ?? "",
+        secretKey: env.RUSTFS_SECONDARY_SECRET_KEY ?? "",
+      }),
+      ...(env.DELETION_LEDGER_NAMESPACE === undefined
+        ? {}
+        : { namespace: env.DELETION_LEDGER_NAMESPACE }),
+    });
+  } else {
+    contractSuppression = new ContractDeletionSuppressionPort();
+    suppression = contractSuppression;
+  }
   const deletionWorkerOptions = {
     auditHmacKey: Buffer.from(env.EVIDENCE_HMAC_KEY, "utf8"),
     policyVersion: "phase12-v1",
@@ -265,6 +329,25 @@ async function main() {
   }
 
   const app = Fastify({ logger: false });
+  const telemetry =
+    env.OTEL_EXPORTER_OTLP_ENDPOINT === undefined
+      ? undefined
+      : new ResilientTelemetryExporter({
+          batchSize: 32,
+          maxLatencyMs: 5_000,
+          maxQueueSize: 1_024,
+          sink: new OtlpHttpTelemetrySink(env.OTEL_EXPORTER_OTLP_ENDPOINT),
+        });
+  app.addHook("onResponse", (_request, reply, done) => {
+    telemetry?.record({
+      count: 1,
+      name: reply.statusCode >= 500 ? "operation_failed" : "operation_completed",
+    });
+    done();
+  });
+  app.addHook("onClose", async () => {
+    await telemetry?.flush();
+  });
   app.addHook("onClose", async () => {
     await closeAssisted();
     await workerPool.end();
@@ -389,8 +472,8 @@ async function main() {
         exportWriteFailure?: boolean;
         suppressionWriteFailure?: boolean;
       };
-      suppression.setWriteFailureForTest(body.suppressionWriteFailure === true);
-      objectStore.setWriteFailureForTest(body.exportWriteFailure === true);
+      contractSuppression?.setWriteFailureForTest(body.suppressionWriteFailure === true);
+      contractObjectStore?.setWriteFailureForTest(body.exportWriteFailure === true);
       await reply.code(204).send();
     });
 

@@ -192,7 +192,7 @@ function columnsByName(table: AnyPgTable): ReadonlyMap<string, InspectedColumn> 
 }
 
 describe("PostgreSQL schema matches all 24 persistent model contracts", () => {
-  it("declares exactly 23 RDS tables and keeps deletion suppression outside RDS", () => {
+  it("declares exactly 23 PostgreSQL tables and keeps deletion suppression outside PostgreSQL", () => {
     const tableNames = rdsTables.map((table) => getTableConfig(table).name).sort();
     expect(tableNames).toEqual(Object.keys(requiredColumnsByTable).sort());
     expect(new Set(tableNames).size).toBe(23);
@@ -221,7 +221,7 @@ describe("PostgreSQL schema matches all 24 persistent model contracts", () => {
         "content_hash",
         "free_form_reason",
       ],
-      storage: "external_kms_ledger",
+      storage: "external_encrypted_ledger",
       ttlDeletionAuthority: false,
     });
     expect(tableNames).not.toContain("deletion_suppression_records");
@@ -296,7 +296,7 @@ describe("PostgreSQL schema matches all 24 persistent model contracts", () => {
     }
   });
 
-  it("makes Money Memo the only RDS model with authoritative financial magnitude", () => {
+  it("makes Money Memo the only PostgreSQL model with authoritative financial magnitude", () => {
     const magnitudeTables = rdsTables
       .filter((table) => inspectColumns(table).some((column) => column.name === "amount_minor"))
       .map((table) => getTableConfig(table).name);

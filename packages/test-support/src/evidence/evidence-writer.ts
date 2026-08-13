@@ -45,6 +45,14 @@ const manifestKeys = new Set([
 const environmentKeys = new Set([
   "browserDeviceVersions",
   "databaseEngineVersion",
+  "runtimeArtifact",
+  "featureFlags",
+  "migrationVersion",
+  "normalLoadProfile",
+]);
+const legacyEnvironmentKeys = new Set([
+  "browserDeviceVersions",
+  "databaseEngineVersion",
   "ecsTaskDefinition",
   "featureFlags",
   "migrationVersion",
@@ -77,7 +85,7 @@ export interface EvidenceArtifactBody {
 export interface EvidenceEnvironment {
   readonly browserDeviceVersions: readonly string[];
   readonly databaseEngineVersion: string;
-  readonly ecsTaskDefinition: string | null;
+  readonly runtimeArtifact: string | null;
   readonly featureFlags: readonly string[];
   readonly migrationVersion: string;
   readonly normalLoadProfile: string | null;
@@ -240,12 +248,17 @@ function validStoryIds(value: unknown): value is readonly string[] {
 }
 
 function validateEnvironment(value: unknown): value is EvidenceEnvironment {
-  if (!isPlainExactObject(value, environmentKeys)) return false;
+  const current = isPlainExactObject(value, environmentKeys);
+  const legacy = isPlainExactObject(value, legacyEnvironmentKeys);
+  if (!current && !legacy) return false;
   const environment = value as Record<string, unknown>;
+  const runtimeArtifact = current
+    ? environment["runtimeArtifact"]
+    : environment["ecsTaskDefinition"];
   return (
     isUniqueSafeIdArray(environment["browserDeviceVersions"]) &&
     isSafeId(environment["databaseEngineVersion"]) &&
-    (environment["ecsTaskDefinition"] === null || isSafeId(environment["ecsTaskDefinition"])) &&
+    (runtimeArtifact === null || isSafeId(runtimeArtifact)) &&
     isUniqueSafeIdArray(environment["featureFlags"]) &&
     isSafeId(environment["migrationVersion"]) &&
     (environment["normalLoadProfile"] === null || isSafeId(environment["normalLoadProfile"]))

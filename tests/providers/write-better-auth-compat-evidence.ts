@@ -152,7 +152,7 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: [],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: [
         "argon2id-password-callbacks",
         "cookie-cache-disabled",

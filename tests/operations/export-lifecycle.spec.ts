@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { ContractExportObjectStore } from "../../apps/server/src/adapters/aws/export-object-store.adapter.js";
+import { ContractExportObjectStore } from "../../apps/server/src/adapters/rustfs/export-object-store.adapter.js";
 
 const ACCOUNT_SCOPE = createHash("sha256").update("synthetic-account-scope").digest("hex");
 const OTHER_SCOPE = createHash("sha256").update("synthetic-other-scope").digest("hex");

@@ -17,6 +17,12 @@ export interface TelemetrySink {
   export(signals: readonly SafeTelemetrySignal[]): Promise<void>;
 }
 
+const SAFE_SIGNAL_NAMES = [
+  "capability_degraded",
+  "operation_completed",
+  "operation_failed",
+] as const;
+
 /** Non-blocking, memory-bounded exporter for allowlisted content-free counters only. */
 export class ResilientTelemetryExporter {
   private readonly queue: SafeTelemetrySignal[] = [];
@@ -43,7 +49,11 @@ export class ResilientTelemetryExporter {
   }
 
   record(signal: SafeTelemetrySignal): void {
-    if (!Number.isSafeInteger(signal.count) || signal.count < 0)
+    if (
+      !Number.isSafeInteger(signal.count) ||
+      signal.count < 0 ||
+      !SAFE_SIGNAL_NAMES.includes(signal.name)
+    )
       throw new Error("INVALID_TELEMETRY_COUNTER");
     if (this.queue.length >= this.options.maxQueueSize) {
       this.dropped += 1;

@@ -10,13 +10,26 @@ const MANIFEST = new URL(
   "../../../../ops/evidence/operations/deletion-restore-readiness.manifest.json",
   import.meta.url,
 );
+const SUPERSESSION = new URL(
+  "../../../../ops/evidence/historical/aws-environment.superseded.json",
+  import.meta.url,
+);
+const CURRENT_WRITER = new URL(
+  "../../../../scripts/operations/write-deletion-restore-readiness.ts",
+  import.meta.url,
+);
 
 describe("Phase 13 readiness evidence privacy", () => {
   it("states non-production readiness, SC-021 open, and real PITR open", async () => {
     const evidence = await readFile(ARTIFACT, "utf8");
+    const supersession = await readFile(SUPERSESSION, "utf8");
+    const writer = await readFile(CURRENT_WRITER, "utf8");
     expect(evidence).toContain("phase13.evidence-class-non-production-readiness");
     expect(evidence).toContain("phase13.sc021-open");
     expect(evidence).toContain("phase13.real-aws-pitr-drill-open");
+    expect(supersession).toContain("historical-not-current-proof");
+    expect(supersession).toContain("ops/evidence/operations/deletion-restore-readiness.json");
+    expect(writer).toContain("phase13.real-pgbackrest-pitr-drill-open");
     expect(evidence).not.toContain("SC-021 PASS");
   });
 

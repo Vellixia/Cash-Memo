@@ -9,12 +9,12 @@ import type {
 interface DeletionLedgerObject {
   readonly body: Buffer;
   readonly checksumSha256: string;
+  readonly encryptedAtRest: boolean;
   readonly etag: string;
-  readonly kmsKeyId: string;
   readonly versionId: string;
 }
 
-interface S3DeletionLedgerClient {
+interface S3CompatibleDeletionLedgerClient {
   deleteObject(input: {
     readonly bucket: string;
     readonly expectedVersionId: string;
@@ -31,15 +31,14 @@ interface S3DeletionLedgerClient {
     readonly contentType: "application/vnd.cashmemo.deletion-suppression+json";
     readonly ifNoneMatch: "*";
     readonly key: string;
-    readonly kmsKeyId: string;
-    readonly serverSideEncryption: "aws:kms";
+    readonly requireEncryptedStorage: true;
   }): Promise<{ readonly versionId: string }>;
 }
 
-interface AwsDeletionSuppressionOptions {
+interface RustfsDeletionSuppressionOptions {
   readonly bucket: string;
-  readonly client: S3DeletionLedgerClient;
-  readonly kmsKeyId: string;
+  readonly client: S3CompatibleDeletionLedgerClient;
+  readonly namespace?: string;
 }
 
 interface VerifiedSuppressionRemoval {
@@ -75,12 +74,19 @@ function assertOpaqueToken(token: Buffer): void {
   if (token.length !== 32) throw new Error("INVALID_DELETION_TOKEN");
 }
 
-function objectKey(token: Buffer, suppressionKeyVersion: string): string {
+function objectKey(
+  token: Buffer,
+  suppressionKeyVersion: string,
+  namespace = "suppression",
+): string {
   assertOpaqueToken(token);
   if (!/^[a-z0-9][a-z0-9._-]{0,63}$/u.test(suppressionKeyVersion)) {
     throw new Error("INVALID_SUPPRESSION_KEY_VERSION");
   }
-  return `suppression/${suppressionKeyVersion}/${token.toString("hex")}.json`;
+  if (!/^[a-z0-9][a-z0-9/_-]{0,127}$/u.test(namespace)) {
+    throw new Error("INVALID_DELETION_LEDGER_NAMESPACE");
+  }
+  return `${namespace}/${suppressionKeyVersion}/${token.toString("hex")}.json`;
 }
 
 function encodeRecord(record: Readonly<DeletionSuppressionRecord>): Buffer {
@@ -132,15 +138,19 @@ function equalBytes(left: Buffer, right: Buffer): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-class AwsDeletionSuppressionAdapter
+class RustfsDeletionSuppressionAdapter
   implements DeletionSuppressionPort, DeletionSuppressionCleanupPort
 {
-  constructor(private readonly options: Readonly<AwsDeletionSuppressionOptions>) {}
+  constructor(private readonly options: Readonly<RustfsDeletionSuppressionOptions>) {}
 
   async ensureDurable(
     record: Readonly<DeletionSuppressionRecord>,
   ): Promise<DeletionSuppressionWrite> {
-    const key = objectKey(record.deletionToken, record.suppressionKeyVersion);
+    const key = objectKey(
+      record.deletionToken,
+      record.suppressionKeyVersion,
+      this.options.namespace,
+    );
     const body = encodeRecord(record);
     try {
       await this.options.client.putObject({
@@ -150,11 +160,15 @@ class AwsDeletionSuppressionAdapter
         contentType: "application/vnd.cashmemo.deletion-suppression+json",
         ifNoneMatch: "*",
         key,
-        kmsKeyId: this.options.kmsKeyId,
-        serverSideEncryption: "aws:kms",
+        requireEncryptedStorage: true,
       });
     } catch (error) {
-      if (!(error instanceof Error) || error.message !== "CONDITIONAL_WRITE_EXISTS") throw error;
+      if (
+        !(error instanceof Error) ||
+        !["CONDITIONAL_WRITE_EXISTS", "S3_COMPATIBLE_AMBIGUOUS_RESPONSE"].includes(error.message)
+      ) {
+        throw error;
+      }
     }
     const verified = await this.readVerified(key);
     if (verified === null || !equalBytes(encodeRecord(verified.record), body)) {
@@ -168,12 +182,16 @@ class AwsDeletionSuppressionAdapter
     suppressionKeyVersion: string,
   ): Promise<DeletionSuppressionRecord | null> {
     return (
-      (await this.readVerified(objectKey(deletionToken, suppressionKeyVersion)))?.record ?? null
+      (
+        await this.readVerified(
+          objectKey(deletionToken, suppressionKeyVersion, this.options.namespace),
+        )
+      )?.record ?? null
     );
   }
 
   async loadForCleanup(token: Buffer, suppressionKeyVersion: string) {
-    return this.readVerified(objectKey(token, suppressionKeyVersion));
+    return this.readVerified(objectKey(token, suppressionKeyVersion, this.options.namespace));
   }
 
   async removeVerified(input: Readonly<VerifiedSuppressionRemoval>): Promise<void> {
@@ -183,8 +201,16 @@ class AwsDeletionSuppressionAdapter
     await this.options.client.deleteObject({
       bucket: this.options.bucket,
       expectedVersionId: input.expectedVersionId,
-      key: objectKey(input.token, input.suppressionKeyVersion),
+      key: objectKey(input.token, input.suppressionKeyVersion, this.options.namespace),
     });
+    if (
+      (await this.options.client.getObject({
+        bucket: this.options.bucket,
+        key: objectKey(input.token, input.suppressionKeyVersion, this.options.namespace),
+      })) !== null
+    ) {
+      throw new Error("SUPPRESSION_REMOVAL_UNVERIFIABLE");
+    }
   }
 
   private async readVerified(key: string): Promise<{
@@ -193,27 +219,24 @@ class AwsDeletionSuppressionAdapter
   } | null> {
     const object = await this.options.client.getObject({ bucket: this.options.bucket, key });
     if (object === null) return null;
-    if (
-      object.kmsKeyId !== this.options.kmsKeyId ||
-      checksum(object.body) !== object.checksumSha256
-    ) {
+    if (!object.encryptedAtRest || checksum(object.body) !== object.checksumSha256) {
       throw new Error("SUPPRESSION_DURABILITY_UNVERIFIABLE");
     }
     return Object.freeze({ record: decodeRecord(object.body), versionId: object.versionId });
   }
 }
 
-class ContractS3DeletionLedgerClient implements S3DeletionLedgerClient {
+class ContractS3CompatibleDeletionLedgerClient implements S3CompatibleDeletionLedgerClient {
   private readonly objects = new Map<string, DeletionLedgerObject>();
   private sequence = 0;
   private fault: "ambiguous" | "none" | "unavailable" | "write_failure" = "none";
-  private lastPut: Parameters<S3DeletionLedgerClient["putObject"]>[0] | null = null;
+  private lastPut: Parameters<S3CompatibleDeletionLedgerClient["putObject"]>[0] | null = null;
 
   setFaultForTest(fault: "ambiguous" | "none" | "unavailable" | "write_failure"): void {
     this.fault = fault;
   }
 
-  async putObject(input: Parameters<S3DeletionLedgerClient["putObject"]>[0]) {
+  async putObject(input: Parameters<S3CompatibleDeletionLedgerClient["putObject"]>[0]) {
     await Promise.resolve();
     if (this.fault === "write_failure") throw new Error("SUPPRESSION_DURABLE_WRITE_FAILED");
     if (this.objects.has(input.key)) throw new Error("CONDITIONAL_WRITE_EXISTS");
@@ -223,14 +246,14 @@ class ContractS3DeletionLedgerClient implements S3DeletionLedgerClient {
     this.objects.set(input.key, {
       body: Buffer.from(input.body),
       checksumSha256: input.checksumSha256,
+      encryptedAtRest: input.requireEncryptedStorage,
       etag: checksum(input.body),
-      kmsKeyId: input.kmsKeyId,
       versionId,
     });
     return { versionId };
   }
 
-  async getObject(input: Parameters<S3DeletionLedgerClient["getObject"]>[0]) {
+  async getObject(input: Parameters<S3CompatibleDeletionLedgerClient["getObject"]>[0]) {
     await Promise.resolve();
     if (this.fault === "unavailable") throw new Error("SUPPRESSION_LEDGER_UNAVAILABLE");
     if (this.fault === "ambiguous") return null;
@@ -238,7 +261,7 @@ class ContractS3DeletionLedgerClient implements S3DeletionLedgerClient {
     return value === undefined ? null : { ...value, body: Buffer.from(value.body) };
   }
 
-  async deleteObject(input: Parameters<S3DeletionLedgerClient["deleteObject"]>[0]) {
+  async deleteObject(input: Parameters<S3CompatibleDeletionLedgerClient["deleteObject"]>[0]) {
     await Promise.resolve();
     const value = this.objects.get(input.key);
     if (value?.versionId !== input.expectedVersionId) {
@@ -251,19 +274,19 @@ class ContractS3DeletionLedgerClient implements S3DeletionLedgerClient {
     return [...this.objects.values()].map((value) => value.body.toString("utf8"));
   }
 
-  lastPutForTest(): Parameters<S3DeletionLedgerClient["putObject"]>[0] | null {
+  lastPutForTest(): Parameters<S3CompatibleDeletionLedgerClient["putObject"]>[0] | null {
     return this.lastPut === null ? null : { ...this.lastPut, body: Buffer.from(this.lastPut.body) };
   }
 }
 
 export {
-  AwsDeletionSuppressionAdapter,
-  ContractS3DeletionLedgerClient,
+  ContractS3CompatibleDeletionLedgerClient,
+  RustfsDeletionSuppressionAdapter,
   decodeRecord,
   encodeRecord,
   objectKey,
-  type AwsDeletionSuppressionOptions,
+  type RustfsDeletionSuppressionOptions,
   type DeletionSuppressionCleanupPort,
-  type S3DeletionLedgerClient,
+  type S3CompatibleDeletionLedgerClient,
   type VerifiedSuppressionRemoval,
 };

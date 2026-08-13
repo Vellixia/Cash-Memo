@@ -1,9 +1,9 @@
 export type FailureCapability =
   | "ai_extraction"
   | "authentication"
+  | "backup_repository"
   | "database"
   | "email_delivery"
-  | "kms"
   | "network"
   | "object_storage"
   | "reporting"
@@ -155,9 +155,9 @@ export const FAILURE_MATRIX: readonly FailureMatrixEntry[] = Object.freeze([
     [
       ["object_storage.unavailable", "object_storage"],
       ["object_storage.permission_denied", "object_storage"],
-      ["kms.unavailable", "kms"],
-      ["kms.encrypt_failed", "kms"],
-      ["kms.decrypt_failed", "kms"],
+      ["backup_repository.unavailable", "backup_repository"],
+      ["backup_repository.encryption_policy_failed", "backup_repository"],
+      ["backup_repository.wal_archive_failed", "backup_repository"],
     ] as const
   ).map(([faultId, capability]) =>
     entry({

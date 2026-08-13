@@ -323,6 +323,6 @@ export const deletionSuppressionRecordContract = {
     "content_hash",
     "free_form_reason",
   ],
-  storage: "external_kms_ledger",
+  storage: "external_encrypted_ledger",
   ttlDeletionAuthority: false,
 } as const;

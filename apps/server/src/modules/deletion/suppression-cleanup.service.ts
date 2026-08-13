@@ -1,5 +1,5 @@
-import type { BackupLineageInventoryPort } from "../../adapters/aws/backup-lineage-inventory.adapter.js";
-import type { DeletionSuppressionCleanupPort } from "../../adapters/aws/deletion-suppression.adapter.js";
+import type { BackupLineageInventoryPort } from "../../adapters/backup/backup-lineage-inventory.adapter.js";
+import type { DeletionSuppressionCleanupPort } from "../../adapters/rustfs/deletion-suppression.adapter.js";
 import type { SuppressionKeyManager } from "./suppression-key-manager.js";
 
 interface SuppressionCleanupResult {

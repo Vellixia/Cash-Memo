@@ -1,25 +1,25 @@
 type BackupArtifactClass =
-  | "automated_pitr_window"
-  | "retained_automated_backup"
-  | "manual_snapshot"
-  | "final_snapshot"
-  | "copied_snapshot"
-  | "shared_snapshot"
-  | "aws_backup_recovery_point"
+  | "pgbackrest_full_backup"
+  | "pgbackrest_differential_backup"
+  | "pgbackrest_incremental_backup"
+  | "wal_archive"
+  | "local_repository"
+  | "secondary_object_version"
+  | "manual_operator_copy"
+  | "volume_snapshot"
   | "replica"
-  | "cross_region_copy"
   | "temporary_restore_copy";
 
 const REQUIRED_ARTIFACT_CLASSES: readonly BackupArtifactClass[] = Object.freeze([
-  "automated_pitr_window",
-  "retained_automated_backup",
-  "manual_snapshot",
-  "final_snapshot",
-  "copied_snapshot",
-  "shared_snapshot",
-  "aws_backup_recovery_point",
+  "pgbackrest_full_backup",
+  "pgbackrest_differential_backup",
+  "pgbackrest_incremental_backup",
+  "wal_archive",
+  "local_repository",
+  "secondary_object_version",
+  "manual_operator_copy",
+  "volume_snapshot",
   "replica",
-  "cross_region_copy",
   "temporary_restore_copy",
 ]);
 
@@ -28,7 +28,7 @@ interface BackupArtifact {
   readonly capable: boolean;
   readonly registered: boolean;
   readonly requiresKeyVersions: readonly string[];
-  readonly state: "absent" | "destroyed" | "present" | "unverifiable";
+  readonly state: "absent" | "destroyed" | "expired" | "present" | "unverifiable";
 }
 
 interface InventoryPage {
@@ -55,7 +55,7 @@ interface BackupLineageInventoryPort {
   inventory(): Promise<BackupLineageInventory>;
 }
 
-class AwsBackupLineageInventoryAdapter implements BackupLineageInventoryPort {
+class BackupLineageInventoryAdapter implements BackupLineageInventoryPort {
   constructor(private readonly source: BackupLineageSource) {}
 
   async inventory(): Promise<BackupLineageInventory> {
@@ -136,7 +136,7 @@ class ContractBackupLineageSource implements BackupLineageSource {
 }
 
 export {
-  AwsBackupLineageInventoryAdapter,
+  BackupLineageInventoryAdapter,
   ContractBackupLineageSource,
   REQUIRED_ARTIFACT_CLASSES,
   type BackupArtifact,

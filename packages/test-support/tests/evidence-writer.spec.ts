@@ -68,7 +68,7 @@ const safeRecord: EvidenceRecordInput = {
     environment: {
       browserDeviceVersions: [],
       databaseEngineVersion: "postgresql-18.0",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: ["fake-providers"],
       migrationVersion: "none",
       normalLoadProfile: null,

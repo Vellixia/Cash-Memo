@@ -18,7 +18,7 @@ otherwise. Raw-audio provider boundary and transcript provider boundary are dist
 Only current recording is sent to STT. No journal history, labels, prior memos, credentials, or
 analytics context accompanies it. MIME, magic bytes, codec, measured duration, and size are checked.
 Raw audio stays in bounded memory or approved encrypted task-local temporary storage and is removed
-on success, cancellation, expiry, or terminal failure. It never belongs in PostgreSQL, S3,
+on success, cancellation, expiry, or terminal failure. It never belongs in PostgreSQL, RustFS,
 IndexedDB, evidence, logs, traces, or metrics.
 
 After STT, transcript crosses server detector before persistence and again before AI extraction.

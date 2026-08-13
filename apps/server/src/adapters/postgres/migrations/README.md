@@ -27,8 +27,8 @@ all application/domain tables. `cashmemo_runtime` access to `sessions`, `credent
 
 Migrations have no automated down migration because deleting journal tables or weakening RLS would
 be destructive. Recovery is safe-forward: stop deployment before application traffic, restore the
-pre-deployment RDS snapshot into an isolated environment when investigation needs old state, then
-ship a reviewed corrective forward migration. Never network-release a restored copy before
+pre-deployment pgBackRest backup into an isolated environment when investigation needs old state,
+then ship a reviewed corrective forward migration. Never network-release a restored copy before
 deletion-suppression reconciliation.
 
 `checksums.sha256` is reviewed with every new migration. Released migration files must never be

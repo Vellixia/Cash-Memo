@@ -49,6 +49,8 @@ describe("raw voice and transcript privacy boundaries", () => {
       "utf8",
     );
     expect(documentation).toMatch(/cannot inspect speech before STT/iu);
-    expect(documentation).toMatch(/never belongs in PostgreSQL, S3,\s+IndexedDB, evidence, logs/iu);
+    expect(documentation).toMatch(
+      /never belongs in PostgreSQL, RustFS,\s+IndexedDB, evidence, logs/iu,
+    );
   });
 });

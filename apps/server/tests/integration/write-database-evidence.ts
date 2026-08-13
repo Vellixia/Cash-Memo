@@ -105,7 +105,7 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: [],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: ["better-auth-core-schema", "forced-rls", "gin-simple-search", "safe-forward"],
       migrationVersion: "0005.search-projection",
       normalLoadProfile: null,
