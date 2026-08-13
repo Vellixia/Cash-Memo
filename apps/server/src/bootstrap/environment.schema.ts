@@ -35,7 +35,7 @@ const namespace = z
 
 const environmentSchema = z
   .object({
-    APP_ENV: z.enum(["local", "test", "staging", "production"]),
+    APP_ENV: z.enum(["local", "test", "development", "staging", "production"]),
     APP_ORIGIN: z.url(),
     BUILD_VERSION: nonEmpty.max(128),
     PROCESS_ROLE: z.enum(["api", "worker", "all"]),
@@ -92,10 +92,11 @@ const environmentSchema = z
     OTEL_EXPORTER_OTLP_ENDPOINT: optional(serviceUrl),
   })
   .superRefine((environment, context) => {
+    const hosted = new Set(["development", "staging", "production"]).has(environment.APP_ENV);
     const productionEquivalent =
       environment.APP_ENV === "staging" || environment.APP_ENV === "production";
 
-    if (productionEquivalent && !environment.APP_ORIGIN.startsWith("https://")) {
+    if (hosted && !environment.APP_ORIGIN.startsWith("https://")) {
       context.addIssue({ code: "custom", path: ["APP_ORIGIN"], message: "HTTPS_REQUIRED" });
     }
 
@@ -156,7 +157,7 @@ const environmentSchema = z
       );
     }
 
-    if (productionEquivalent) {
+    if (hosted) {
       if (environment.OBJECT_STORAGE_MODE !== "rustfs") {
         context.addIssue({
           code: "custom",
@@ -171,7 +172,7 @@ const environmentSchema = z
           message: "PGBACKREST_REQUIRED_IN_PRODUCTION_EQUIVALENT_ENVIRONMENT",
         });
       }
-      if (environment.EMAIL_PROVIDER !== "cloudflare") {
+      if (productionEquivalent && environment.EMAIL_PROVIDER !== "cloudflare") {
         context.addIssue({
           code: "custom",
           path: ["EMAIL_PROVIDER"],
@@ -190,6 +191,26 @@ const environmentSchema = z
 
 export type Environment = z.infer<typeof environmentSchema>;
 
+const workerEnvironmentSchema = z.object({
+  APP_ENV: z.enum(["local", "test", "development", "staging", "production"]),
+  BUILD_VERSION: nonEmpty.max(128),
+  DATABASE_URL: postgresUrl,
+  PORT: z.coerce.number().int().min(1).max(65_535),
+  PROCESS_ROLE: z.literal("worker"),
+  SECRET_DELIVERY_MODE: z.literal("injected_environment"),
+  AUTH_DATABASE_URL: z.never().optional(),
+  AUTH_SESSION_SECRET: z.never().optional(),
+  AUTH_TOKEN_HMAC_KEY: z.never().optional(),
+  PASSWORD_PEPPER: z.never().optional(),
+  CLOUDFLARE_EMAIL_API_TOKEN: z.never().optional(),
+  OPENAI_API_KEY: z.never().optional(),
+  RUSTFS_PRIMARY_SECRET_KEY: z.never().optional(),
+  RUSTFS_SECONDARY_SECRET_KEY: z.never().optional(),
+  PGBACKREST_REPOSITORY_CIPHER_PASS: z.never().optional(),
+});
+
+export type WorkerEnvironment = z.infer<typeof workerEnvironmentSchema>;
+
 export class EnvironmentConfigurationError extends Error {
   readonly invalidNames: readonly string[];
 
@@ -202,6 +223,21 @@ export class EnvironmentConfigurationError extends Error {
 
 export const parseEnvironment = (source: NodeJS.ProcessEnv): Environment => {
   const result = environmentSchema.safeParse(source);
+  if (!result.success) {
+    const invalidNames = [
+      ...new Set(
+        result.error.issues.map((issue) =>
+          issue.path.length === 0 ? "ENVIRONMENT" : String(issue.path[0]),
+        ),
+      ),
+    ].sort();
+    throw new EnvironmentConfigurationError(invalidNames);
+  }
+  return result.data;
+};
+
+export const parseWorkerEnvironment = (source: NodeJS.ProcessEnv): WorkerEnvironment => {
+  const result = workerEnvironmentSchema.safeParse(source);
   if (!result.success) {
     const invalidNames = [
       ...new Set(

@@ -1,6 +1,6 @@
 export interface HttpSecurityEnvironment {
   readonly appOrigin: string;
-  readonly environment: "local" | "production" | "staging" | "test";
+  readonly environment: "development" | "local" | "production" | "staging" | "test";
 }
 const STATE_CHANGING_METHODS = new Set(["DELETE", "PATCH", "POST", "PUT"]);
 export function allowedOrigins(

@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.12
 
 ARG NODE_IMAGE=node:24.14.0-bookworm-slim@sha256:d8e448a56fc63242f70026718378bd4b00f8c82e78d20eefb199224a4d8e33d8
+ARG RELEASE_SHA=0000000000000000000000000000000000000000
+ARG BUILD_VERSION=0.0.0
 
 FROM ${NODE_IMAGE} AS build-base
 
@@ -42,9 +44,17 @@ FROM development AS builder
 
 RUN pnpm build
 
+FROM builder AS runtime-dependencies
+
+RUN pnpm --filter @cashmemo/server deploy --prod --legacy /opt/cashmemo-server
+
 FROM ${NODE_IMAGE} AS production
 
-ENV NODE_ENV=production
+ARG RELEASE_SHA
+ARG BUILD_VERSION
+
+ENV NODE_ENV=production \
+    CASHMEMO_IMAGE_REVISION=${RELEASE_SHA}
 
 RUN groupadd --system --gid 10001 cashmemo \
     && useradd --system --uid 10001 --gid cashmemo --home-dir /nonexistent --shell /usr/sbin/nologin cashmemo \
@@ -52,17 +62,24 @@ RUN groupadd --system --gid 10001 cashmemo \
 
 WORKDIR /workspace
 
-COPY --from=builder --chown=cashmemo:cashmemo /workspace/node_modules ./node_modules
-COPY --from=builder --chown=cashmemo:cashmemo /workspace/apps/server/node_modules ./apps/server/node_modules
-COPY --from=builder --chown=cashmemo:cashmemo /workspace/apps/server/dist ./apps/server/dist
-COPY --from=builder --chown=cashmemo:cashmemo /workspace/apps/server/package.json ./apps/server/package.json
+COPY --from=runtime-dependencies --chown=cashmemo:cashmemo /opt/cashmemo-server ./server
 COPY --from=builder --chown=cashmemo:cashmemo /workspace/apps/server/src/adapters/postgres/migrations ./apps/server/src/adapters/postgres/migrations
 COPY --from=builder --chown=cashmemo:cashmemo /workspace/apps/web/dist ./apps/web/dist
-COPY --from=builder --chown=cashmemo:cashmemo /workspace/packages ./packages
 COPY --from=builder --chown=cashmemo:cashmemo /workspace/scripts/db/migrate-production.mjs ./scripts/db/migrate-production.mjs
+COPY --chown=cashmemo:cashmemo infra/containers/runtime-entrypoint.mjs /usr/local/lib/cashmemo/runtime-entrypoint.mjs
+COPY --chown=cashmemo:cashmemo infra/containers/runtime-healthcheck.mjs /usr/local/lib/cashmemo/runtime-healthcheck.mjs
+
+LABEL org.opencontainers.image.title="cashmemo-runtime" \
+      org.opencontainers.image.revision="${RELEASE_SHA}" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      dev.cashmemo.runtime.roles="api,worker,migrate" \
+      dev.cashmemo.runtime.uid="10001" \
+      dev.cashmemo.dependency.baseline="pnpm-lock.yaml" \
+      dev.cashmemo.runtime.root-filesystem="read-only-required"
 
 USER 10001:10001
 VOLUME ["/tmp", "/var/lib/cashmemo/audio", "/var/lib/cashmemo/work"]
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-CMD ["node", "apps/server/dist/src/bootstrap/main.js"]
+ENTRYPOINT ["node", "/usr/local/lib/cashmemo/runtime-entrypoint.mjs"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["node", "/usr/local/lib/cashmemo/runtime-healthcheck.mjs", "ready"]
+CMD ["api"]

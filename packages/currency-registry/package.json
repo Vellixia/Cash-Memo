@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist",
+    "data/registry-v1.json"
+  ],
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",

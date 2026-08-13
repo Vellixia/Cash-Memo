@@ -2,11 +2,10 @@ import Fastify from "fastify";
 import { Pool } from "pg";
 
 import { BackgroundJobRepository } from "../modules/operations/background-jobs.js";
-import { parseEnvironment } from "./environment.schema.js";
+import { parseWorkerEnvironment } from "./environment.schema.js";
 
 async function main(): Promise<void> {
-  const env = parseEnvironment(process.env);
-  if (env.PROCESS_ROLE !== "worker") throw new Error("WORKER_PROCESS_ROLE_REQUIRED");
+  const env = parseWorkerEnvironment(process.env);
 
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
@@ -29,6 +28,11 @@ async function main(): Promise<void> {
   timer.unref();
 
   const health = Fastify({ logger: false });
+  health.get("/api/v1/live", () => ({ role: "worker", status: "ok" }));
+  health.get("/api/v1/ready", async (_request, reply) => {
+    if (!ready) return reply.code(503).send({ status: "unavailable" });
+    return { role: "worker", status: "ok" };
+  });
   health.get("/api/v1/health", async (_request, reply) => {
     if (!ready) return reply.code(503).send({ status: "unavailable" });
     return { role: "worker", status: "ok" };
@@ -44,7 +48,7 @@ async function main(): Promise<void> {
   await health.listen({ host: "0.0.0.0", port: env.PORT });
 }
 
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : "WORKER_STARTUP_FAILED");
+void main().catch(() => {
+  console.error("WORKER_STARTUP_FAILED");
   process.exitCode = 1;
 });

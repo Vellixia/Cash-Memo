@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsx --env-file=../../.env.local src/bootstrap/server.ts",
+    "dev": "tsx --env-file-if-exists=../../.env.local src/bootstrap/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -13,7 +16,6 @@
     "@cashmemo/currency-registry": "workspace:*",
     "@cashmemo/domain": "workspace:*",
     "@cashmemo/privacy-rules": "workspace:*",
-    "@cashmemo/test-support": "workspace:*",
     "@fastify/cors": "^11.3.0",
     "argon2": "0.45.1",
     "better-auth": "1.6.26",
@@ -23,6 +25,7 @@
     "pg": "8.22.0"
   },
   "devDependencies": {
+    "@cashmemo/test-support": "workspace:*",
     "@testcontainers/postgresql": "12.1.0",
     "@types/pg": "8.21.0",
     "drizzle-kit": "0.31.10",

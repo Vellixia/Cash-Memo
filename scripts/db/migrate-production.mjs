@@ -115,6 +115,16 @@ async function main() {
 }
 
 void main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : "MIGRATION_FAILED"}\n`);
+  const message = error instanceof Error ? error.message : "";
+  const code = new Set([
+    "MIGRATION_BUILD_ID_INVALID",
+    "MIGRATION_CHECKSUM_MISMATCH",
+    "MIGRATION_DATABASE_UNAVAILABLE",
+    "MIGRATION_SCHEMA_INCOMPATIBLE",
+    "MIGRATION_SET_UNEXPECTED",
+  ]).has(message)
+    ? message
+    : "MIGRATION_FAILED";
+  process.stderr.write(`${code}\n`);
   process.exitCode = 1;
 });

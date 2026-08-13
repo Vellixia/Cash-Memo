@@ -1,8 +1,8 @@
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+import { extname, resolve, sep } from "node:path";
 
 import { Pool } from "pg";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 
 import { canonicalRequestHmac } from "@cashmemo/domain";
 
@@ -84,8 +84,6 @@ import { AbuseControls, abuseOperationForRequest } from "../modules/operations/a
 import { createMailpitAdapter } from "../adapters/mailpit/mailpit-email.adapter.js";
 import { createCloudflareEmailAdapter } from "../adapters/cloudflare/cloudflare-email.adapter.js";
 import type { EmailPort } from "../modules/identity/email.port.js";
-
-void dirname(fileURLToPath(import.meta.url));
 
 async function main() {
   const env = parseEnvironment(process.env);
@@ -384,7 +382,7 @@ async function main() {
   });
 
   app.addHook("onRequest", async (request, reply) => {
-    const originRequired = env.APP_ENV === "production" || env.APP_ENV === "staging";
+    const originRequired = !new Set(["local", "test"]).has(env.APP_ENV);
     if (
       (originRequired || request.headers.origin !== undefined) &&
       requireSameOrigin({
@@ -1240,16 +1238,65 @@ async function main() {
     }
   });
 
-  // Health
-  app.get("/api/v1/health", () => {
-    return { status: "ok" };
-  });
+  // Content-free process liveness and authoritative dependency readiness.
+  app.get("/api/v1/live", () => ({ role: "api", status: "ok" }));
+  const readiness = async (_request: unknown, reply: FastifyReply) => {
+    try {
+      await runtimePool.query("SELECT 1");
+      return { role: "api", status: "ok" };
+    } catch {
+      return reply.code(503).send({ role: "api", status: "unavailable" });
+    }
+  };
+  app.get("/api/v1/ready", readiness);
+  app.get("/api/v1/health", readiness);
+
+  if (process.env["NODE_ENV"] === "production") {
+    const webRoot = resolve(process.cwd(), "apps/web/dist");
+    const contentTypes: Readonly<Record<string, string>> = {
+      ".css": "text/css; charset=utf-8",
+      ".html": "text/html; charset=utf-8",
+      ".ico": "image/x-icon",
+      ".js": "text/javascript; charset=utf-8",
+      ".json": "application/json; charset=utf-8",
+      ".map": "application/json; charset=utf-8",
+      ".png": "image/png",
+      ".svg": "image/svg+xml",
+      ".webmanifest": "application/manifest+json",
+    };
+    const servePwa = async (request: FastifyRequest, reply: FastifyReply) => {
+      const requested = ((request.params as { "*"?: string })["*"] ?? "").replace(/^\/+/, "");
+      if (requested.startsWith("api/")) {
+        return reply.code(404).send({ messageCode: "NOT_FOUND" });
+      }
+      const assetPath = requested !== "" && extname(requested) !== "" ? requested : "index.html";
+      const target = resolve(webRoot, assetPath);
+      if (target !== webRoot && !target.startsWith(`${webRoot}${sep}`)) {
+        return reply.code(404).send({ messageCode: "NOT_FOUND" });
+      }
+      try {
+        const body = await readFile(target);
+        void reply.type(contentTypes[extname(target)] ?? "application/octet-stream");
+        void reply.header(
+          "Cache-Control",
+          target.endsWith("index.html")
+            ? "public, no-cache"
+            : "public, max-age=31536000, immutable",
+        );
+        return await reply.send(body);
+      } catch {
+        return reply.code(404).send({ messageCode: "NOT_FOUND" });
+      }
+    };
+    app.get("/", servePwa);
+    app.get("/*", servePwa);
+  }
 
   await app.listen({ host: "0.0.0.0", port });
   console.log(`Server listening on port ${String(port)}`);
 }
 
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : "SERVER_STARTUP_FAILED");
+void main().catch(() => {
+  console.error("SERVER_STARTUP_FAILED");
   process.exitCode = 1;
 });

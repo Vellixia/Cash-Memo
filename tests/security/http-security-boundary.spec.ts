@@ -32,6 +32,11 @@ describe("HTTP security boundary", () => {
       allowedOrigins({ appOrigin: "http://localhost:3000", environment: "production" }),
     ).toThrow("PRODUCTION_ORIGIN_INVALID");
   });
+  it("allows only the configured origin in hosted development", () => {
+    expect(
+      allowedOrigins({ appOrigin: "https://dev.cashmemo.example", environment: "development" }),
+    ).toEqual(["https://dev.cashmemo.example"]);
+  });
   it("allows explicit localhost only locally", () => {
     expect(allowedOrigins({ appOrigin: "https://localhost:5173", environment: "local" })).toContain(
       "http://localhost:5173",

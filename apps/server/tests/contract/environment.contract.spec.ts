@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EnvironmentConfigurationError,
   parseEnvironment,
+  parseWorkerEnvironment,
 } from "../../src/bootstrap/environment.schema.js";
 
 const base = (): NodeJS.ProcessEnv => ({
@@ -38,6 +39,33 @@ describe("canonical runtime environment", () => {
       OBJECT_STORAGE_MODE: "contract",
       SECRET_DELIVERY_MODE: "injected_environment",
     });
+  });
+
+  it("gives the worker only its database/health configuration", () => {
+    expect(
+      parseWorkerEnvironment({
+        APP_ENV: "test",
+        BUILD_VERSION: "test",
+        DATABASE_URL: "postgresql://worker:synthetic@postgres:5432/cashmemo",
+        PORT: "3001",
+        PROCESS_ROLE: "worker",
+        SECRET_DELIVERY_MODE: "injected_environment",
+      }),
+    ).toMatchObject({ PROCESS_ROLE: "worker" });
+  });
+
+  it("rejects API/provider/storage secrets injected into worker", () => {
+    expect(() =>
+      parseWorkerEnvironment({
+        APP_ENV: "test",
+        AUTH_SESSION_SECRET: "x".repeat(32),
+        BUILD_VERSION: "test",
+        DATABASE_URL: "postgresql://worker:synthetic@postgres:5432/cashmemo",
+        PORT: "3001",
+        PROCESS_ROLE: "worker",
+        SECRET_DELIVERY_MODE: "injected_environment",
+      }),
+    ).toThrow(EnvironmentConfigurationError);
   });
 
   it("fails production closed on missing RustFS, pgBackRest, Cloudflare, and OTLP", () => {
