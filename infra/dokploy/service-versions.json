@@ -1,9 +1,13 @@
 {
   "schemaVersion": "cashmemo-dokploy-service-versions-v1",
   "reviewedAt": "2026-08-13",
-  "cashmemoImage": {
-    "identity": "digest-required-at-deploy",
-    "mutableTagAllowed": false
+  "cashmemoArtifacts": {
+    "runtime": "ghcr.io/vellixia/cashmemo-runtime",
+    "pgBackRest": "ghcr.io/vellixia/cashmemo-pgbackrest",
+    "verifier": "ghcr.io/vellixia/cashmemo-verifier",
+    "identity": "repository@sha256-required-at-deploy",
+    "mutableTagAllowed": false,
+    "nodeBase": "node:24.14.0-bookworm-slim@sha256:d8e448a56fc63242f70026718378bd4b00f8c82e78d20eefb199224a4d8e33d8"
   },
   "postgresql": {
     "preserveExistingService": "cashmemo-test-postgres",
@@ -11,11 +15,13 @@
   },
   "rustfs": {
     "developmentImage": "rustfs/rustfs:1.0.0-rc.1",
+    "developmentDigest": "sha256:dff0be7e82690e57838035e22c978c3f32c800fbd525b11a6252649aee7beed4",
     "preRelease": true,
     "productionApproved": false,
     "source": "https://github.com/rustfs/rustfs/releases/tag/1.0.0-rc.1"
   },
   "pgBackRest": {
+    "source": "https://github.com/pgbackrest/pgbackrest/releases/tag/release/2.59.0",
     "sourceSha256": "faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875",
     "version": "2.59.0"
   },

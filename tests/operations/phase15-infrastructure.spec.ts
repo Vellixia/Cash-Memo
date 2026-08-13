@@ -26,7 +26,10 @@ describe("Phase 15 self-hosted deployment foundation", () => {
 
   it("uses one immutable release digest for API and worker roles", async () => {
     const compose = await read("infra/dokploy/compose.yaml");
-    expect(compose.match(/image: \$\{CASHMEMO_IMAGE_DIGEST:/gu)).toHaveLength(2);
+    expect(compose.match(/image: \$\{CASHMEMO_RUNTIME_IMAGE:/gu)).toHaveLength(3);
+    expect(compose).toContain('command: ["migrate"]');
+    expect(compose).toContain('command: ["api"]');
+    expect(compose).toContain('command: ["worker"]');
     expect(compose).toContain("PROCESS_ROLE: api");
     expect(compose).toContain("PROCESS_ROLE: worker");
     expect(compose).toContain('user: "10001:10001"');
@@ -34,12 +37,10 @@ describe("Phase 15 self-hosted deployment foundation", () => {
     expect(compose).toContain('cap_drop: ["ALL"]');
   });
 
-  it("keeps storage private, distinct, console-disabled, and raw-audio-free", async () => {
+  it("keeps external storage private, distinct, and raw-audio-free", async () => {
     const compose = await read("infra/dokploy/compose.yaml");
     const policy = await read("infra/dokploy/storage-policy.json");
-    expect(compose).toContain("rustfs-primary-data:/data");
-    expect(compose).toContain("rustfs-secondary-dev-data:/data");
-    expect(compose.match(/RUSTFS_CONSOLE_ENABLE: "false"/gu)).toHaveLength(2);
+    expect(compose).not.toMatch(/^\s{2}rustfs-(?:primary|secondary-dev):/mu);
     expect(compose).not.toMatch(/ports:|RUSTFS_CORS|RUSTFS_SERVER_DOMAINS/u);
     expect(policy).toContain('"rawAudioAllowed": false');
     expect(policy).toContain('"deletionLedgerLifecycleTtlAllowed": false');
@@ -114,7 +115,7 @@ describe("Phase 15 self-hosted deployment foundation", () => {
     const bake = await read("infra/containers/docker-bake.hcl");
     expect(workflow).not.toContain("continue-on-error");
     expect(bake).toContain("push-by-digest=true");
-    expect(workflow).toContain("cashmemo-dokploy-handoff-v1");
+    expect(workflow).toContain("cashmemo-oci-artifacts-v2");
     expect(workflow).toContain("deployed:false");
     expect(workflow).not.toMatch(
       /curl.*dokploy|dokploy\s+(?:deploy|compose)|opentofu|terraform|aws /iu,
@@ -123,10 +124,11 @@ describe("Phase 15 self-hosted deployment foundation", () => {
 
   it("hardens OCI runtime and dispatches API/worker from one image", async () => {
     const dockerfile = await read("infra/containers/Dockerfile");
+    const entrypoint = await read("infra/containers/runtime-entrypoint.mjs");
     const bake = await read("infra/containers/docker-bake.hcl");
     expect(dockerfile).toMatch(/ARG NODE_IMAGE=.*@sha256:[0-9a-f]{64}/u);
     expect(dockerfile).toContain("USER 10001:10001");
-    expect(dockerfile).toContain("bootstrap/main.js");
+    expect(entrypoint).toContain("bootstrap/main.js");
     expect(dockerfile).not.toContain(":latest");
     expect(bake).toContain("type=sbom");
     expect(bake).toContain("type=provenance,mode=max");

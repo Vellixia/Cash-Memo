@@ -1,8 +1,26 @@
 name: cashmemo-development
 
+# PostgreSQL, RustFS Primary, RustFS Secondary Dev, Infisical, and OTLP/OpenObserve are
+# pre-existing Dokploy resources. This definition consumes their injected endpoints only.
 services:
+  cashmemo-migrate:
+    image: ${CASHMEMO_RUNTIME_IMAGE:?immutable ghcr.io image@sha256 digest required}
+    command: ["migrate"]
+    restart: "no"
+    read_only: true
+    user: "10001:10001"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    env_file: ["${CASHMEMO_MIGRATION_ENV_FILE:?protected migration-only environment required}"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/lib/cashmemo/work:rw,noexec,nosuid,size=32m
+    networks: [dokploy-network]
+    profiles: ["migration"]
+
   cashmemo-api:
-    image: ${CASHMEMO_IMAGE_DIGEST:?immutable Cashmemo image digest required}
+    image: ${CASHMEMO_RUNTIME_IMAGE:?immutable ghcr.io image@sha256 digest required}
+    command: ["api"]
     restart: unless-stopped
     read_only: true
     user: "10001:10001"
@@ -11,20 +29,14 @@ services:
     environment:
       PROCESS_ROLE: api
       PORT: "3000"
-    env_file: ["${CASHMEMO_RUNTIME_ENV_FILE:?injected runtime environment required}"]
+    env_file: ["${CASHMEMO_API_ENV_FILE:?protected API environment required}"]
     expose: ["3000"]
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
       - /var/lib/cashmemo/audio:rw,noexec,nosuid,size=16m
       - /var/lib/cashmemo/work:rw,noexec,nosuid,size=64m
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+      test: ["CMD", "node", "/usr/local/lib/cashmemo/runtime-healthcheck.mjs", "ready"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -32,7 +44,8 @@ services:
     networks: [dokploy-network]
 
   cashmemo-worker:
-    image: ${CASHMEMO_IMAGE_DIGEST:?immutable Cashmemo image digest required}
+    image: ${CASHMEMO_RUNTIME_IMAGE:?immutable ghcr.io image@sha256 digest required}
+    command: ["worker"]
     restart: unless-stopped
     read_only: true
     user: "10001:10001"
@@ -41,90 +54,62 @@ services:
     environment:
       PROCESS_ROLE: worker
       PORT: "3001"
-    env_file: ["${CASHMEMO_WORKER_ENV_FILE:?injected worker environment required}"]
+    env_file: ["${CASHMEMO_WORKER_ENV_FILE:?protected worker environment required}"]
     expose: ["3001"]
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
-      - /var/lib/cashmemo/audio:rw,noexec,nosuid,size=16m
+      - /tmp:rw,noexec,nosuid,size=32m
       - /var/lib/cashmemo/work:rw,noexec,nosuid,size=64m
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+      test: ["CMD", "node", "/usr/local/lib/cashmemo/runtime-healthcheck.mjs", "ready"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
     networks: [dokploy-network]
 
-  rustfs-primary:
-    image: rustfs/rustfs:1.0.0-rc.1
-    restart: unless-stopped
-    environment:
-      RUSTFS_ACCESS_KEY: ${RUSTFS_PRIMARY_ACCESS_KEY:?required}
-      RUSTFS_SECRET_KEY: ${RUSTFS_PRIMARY_SECRET_KEY:?required}
-      RUSTFS_RPC_SECRET: ${RUSTFS_PRIMARY_RPC_SECRET:?distinct RPC secret required}
-      RUSTFS_CONSOLE_ENABLE: "false"
-      RUSTFS_VOLUMES: /data
-    expose: ["9000"]
-    volumes: ["rustfs-primary-data:/data"]
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks: [dokploy-network]
-
-  rustfs-secondary-dev:
-    image: rustfs/rustfs:1.0.0-rc.1
-    restart: unless-stopped
-    environment:
-      RUSTFS_ACCESS_KEY: ${RUSTFS_SECONDARY_ACCESS_KEY:?required}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECONDARY_SECRET_KEY:?required}
-      RUSTFS_RPC_SECRET: ${RUSTFS_SECONDARY_RPC_SECRET:?distinct RPC secret required}
-      RUSTFS_CONSOLE_ENABLE: "false"
-      RUSTFS_VOLUMES: /data
-    expose: ["9000"]
-    volumes: ["rustfs-secondary-dev-data:/data"]
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks: [dokploy-network]
-
   cashmemo-pgbackrest:
-    image: ${PGBACKREST_IMAGE_DIGEST:?immutable pgBackRest image digest required}
+    image: ${PGBACKREST_IMAGE:?immutable ghcr.io image@sha256 digest required}
+    command: ["health"]
     restart: "no"
-    user: ${PGBACKREST_RUNTIME_UID_GID:?validated existing PostgreSQL volume ownership required}
+    user: "10002:10002"
     read_only: true
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
-    env_file: ["${PGBACKREST_ENV_FILE:?injected pgBackRest environment required}"]
-    command: ["--stanza=cashmemo", "check"]
+    env_file: ["${PGBACKREST_ENV_FILE:?protected backup-only environment required}"]
     volumes:
-      - cashmemo-postgres-data:/var/lib/postgresql/18/docker
-      - ${PGBACKREST_CONFIG_PATH:?rendered protected config
-        required}:/etc/pgbackrest/pgbackrest.conf:ro
+      - cashmemo-postgres-data:/var/lib/postgresql/18/docker:ro
+      - cashmemo-postgres-socket:/var/run/postgresql:ro
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=32m
+      - /var/lib/pgbackrest:rw,noexec,nosuid,size=32m
       - /var/spool/pgbackrest:rw,noexec,nosuid,size=64m
     networks: [dokploy-network]
-    profiles: ["pgbackrest-admin"]
+    profiles: ["backup-check"]
+
+  cashmemo-verifier:
+    image: ${CASHMEMO_VERIFIER_IMAGE:?immutable ghcr.io image@sha256 digest required}
+    command: ["${CASHMEMO_VERIFIER_MODE:-full-development}"]
+    restart: "no"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    env_file: ["${CASHMEMO_VERIFIER_ENV_FILE:?protected synthetic verifier environment required}"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+      - /tmp/cashmemo-verifier:rw,noexec,nosuid,size=64m
+      - /workspace/test-results:rw,noexec,nosuid,size=128m
+      - /workspace/playwright-report:rw,noexec,nosuid,size=64m
+    networks: [dokploy-network]
+    profiles: ["verification"]
 
 networks:
   dokploy-network:
     external: true
 
 volumes:
-  rustfs-primary-data:
-  rustfs-secondary-dev-data:
   cashmemo-postgres-data:
     external: true
     name: ${CASHMEMO_POSTGRES_VOLUME_NAME:?existing PostgreSQL volume name required}
+  cashmemo-postgres-socket:
+    external: true
+    name: ${CASHMEMO_POSTGRES_SOCKET_VOLUME_NAME:?existing PostgreSQL socket volume required}
