@@ -34,12 +34,12 @@ Versions below are planning baselines. Implementation must pin exact package/mod
 
 ## ADR-002 — Runtime, Backend, and API
 
-**Decision**: Node.js 24 LTS, TypeScript strict mode, NestJS 11 with Fastify, JSON REST under `/api/v1`, OpenAPI 3.1 as the product contract, one modular-monolith image. Embedded workers use PostgreSQL leases.
+**Decision**: Node.js 24 LTS, TypeScript strict mode, Fastify 5, JSON REST under `/api/v1`, OpenAPI 3.1 as the product contract, one modular-monolith image. Role-separated workers use PostgreSQL leases from the same image.
 
 **Why it fits**:
 
 - Node 24 is the current LTS line and supports the browser-adjacent TypeScript toolchain.
-- Nest modules, guards, validation interception, and dependency injection express the constitutional inward boundaries, while Fastify supplies bounded request handling and schema hooks.
+- Project-owned modules and ports express the constitutional inward boundaries, while Fastify supplies bounded request handling and lifecycle hooks without an additional application framework.
 - REST resources and state transitions are straightforward here; OpenAPI provides exact nullability, errors, and schema validation.
 - A database-leased worker handles purge/export/expiry jobs with one database and one deployable system.
 
@@ -53,7 +53,7 @@ Versions below are planning baselines. Implementation must pin exact package/mod
 | GraphQL | Flexible client queries | Makes authorization, query cost, stable error semantics, caching, and export/report contract surface more complex than required |
 | Separate worker service | Independent scaling | Constitution requires modular monolith; current load fits role-separated processes from the same image/release |
 
-**Sources**: [Node.js releases](https://nodejs.org/en/about/previous-releases), [NestJS 11 migration guide](https://docs.nestjs.com/migration-guide), [NestJS Fastify adapter](https://docs.nestjs.com/techniques/performance)
+**Sources**: [Node.js releases](https://nodejs.org/en/about/previous-releases), [Fastify documentation](https://fastify.dev/docs/latest/)
 
 ## ADR-003 — Authentication
 

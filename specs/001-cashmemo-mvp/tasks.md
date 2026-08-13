@@ -508,7 +508,7 @@ P1–P16 + external approvals ─→ P17 real-service/full-release evidence
 | US8 | T164, T167, T171, T175 | Export contract/storage, account state, and suppression contract targets differ |
 | Backup | T185, T189, T191, T194 | Ledger, inventory, cleanup, and restore contracts are separate |
 | Privacy/security | T202, T205, T207, T211, T212, T214 | Separate boundary/canary/surface/isolation/auth/input suites |
-| Infrastructure | T219–T226 | Separate OpenTofu modules; composition waits until each passes |
+| Infrastructure | T219–T226 | Separate Dokploy/config/provider targets; composition waits until each passes |
 | PWA/performance | T242, T244, T248–T251 | Separate service-worker, manifest, accessibility, load, DB-plan, and audio targets |
 
 ### Delivery Strategy

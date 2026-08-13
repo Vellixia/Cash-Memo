@@ -7,14 +7,14 @@
 
 ## Summary
 
-Deliver the complete first production-usable Cashmemo product as one TypeScript modular monolith: a responsive React/Vite PWA and a NestJS HTTP application packaged in one image, backed by one PostgreSQL database. Better Auth supplies verified email/password flows and database-backed sessions inside the application boundary. Provider-neutral adapters use OpenAI's transcription and structured-output APIs only after privacy checks and explicit consent; structured manual capture never depends on either provider. Raw audio is request-owned transient material held only in bounded memory or encrypted task-local ephemeral storage, never in the database, object storage, backups, or telemetry.
+Deliver the complete first production-usable Cashmemo product as one TypeScript modular monolith: a responsive React/Vite PWA and a Fastify HTTP application packaged in one image, backed by one PostgreSQL database. Better Auth supplies verified email/password flows and database-backed sessions inside the application boundary. Provider-neutral adapters use OpenAI's transcription and structured-output APIs only after privacy checks and explicit consent; structured manual capture never depends on either provider. Raw audio is request-owned transient material held only in bounded memory or encrypted task-local ephemeral storage, never in the database, object storage, backups, or telemetry.
 
 The architecture makes authoritative Money Memos structurally distinct from drafts, represents money as positive integer minor units plus a versioned currency rule, stores both the authoritative occurrence instant and the user's local-time interpretation, and partitions every aggregate by currency. PostgreSQL transactions, revision checks, row-level security, caller idempotency keys, and database-leased background jobs provide isolation and retry safety without Redis, queues, microservices, or a second database.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 6.x in strict mode on Node.js 24 LTS; SQL for PostgreSQL 18; OpenAPI 3.1; Docker Compose for Dokploy handoff
-**Primary Dependencies**: React 19.2, Vite 8, React Router, TanStack Query, React Hook Form, Zod, Dexie, `vite-plugin-pwa`, NestJS 11 with Fastify, Better Auth, Drizzle ORM, OpenAI JavaScript SDK, OpenTelemetry  
+**Primary Dependencies**: React 19.2, Vite 8, React Router, TanStack Query, React Hook Form, Zod, Dexie, `vite-plugin-pwa`, Fastify 5, Better Auth, Drizzle ORM, MinIO JavaScript client, OpenAI JavaScript SDK
 **Storage**: PostgreSQL 18 for product and job state; browser IndexedDB for the user's same-device draft replica; encrypted container-local ephemeral space only when an STT adapter requires a temporary file; private RustFS Primary S3-compatible storage for expiring exports/approved evidence; separate RustFS Secondary for encrypted pgBackRest/WAL and content-free deletion-suppression records  
 **Testing**: Vitest, fast-check, Testcontainers/PostgreSQL, Playwright, axe-core, k6, OpenAPI schema validation, real-provider smoke/contract suites, restore drills  
 **Target Platform**: Docker + Dokploy using one immutable Cashmemo image with API/worker roles; existing private PostgreSQL 18; current and previous major Chrome, Edge, Firefox, and Safari on supported desktop/mobile OSes  
@@ -35,7 +35,7 @@ The architecture makes authoritative Money Memos structurally distinct from draf
 
 ### Backend and module boundaries
 
-One NestJS/Fastify process exposes the API and serves the PWA. The same image can start an embedded worker role; API and worker are one release/deployment unit and share domain/application modules.
+One Fastify process exposes the API and serves the PWA. The same image can start a worker role; API and worker are one release/deployment unit and share domain/application modules.
 
 ```text
 HTTP/controller or scheduled-job adapter
