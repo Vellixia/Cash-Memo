@@ -1,4 +1,4 @@
-name: Publish immutable Dokploy handoff
+name: Publish immutable Cashmemo artifacts
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
         description: Exact reviewed Git commit SHA
         required: true
       target:
-        description: Protected deployment environment
+        description: Artifact approval environment
         required: true
         type: choice
         options: [development, staging, production]
@@ -17,13 +17,13 @@ permissions:
   packages: write
 
 concurrency:
-  group: publish-${{ inputs.target }}
+  group: publish-${{ inputs.target }}-${{ inputs.revision }}
   cancel-in-progress: false
 
 jobs:
   gates:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -34,12 +34,26 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.14.0
-      - run: corepack enable && corepack prepare pnpm@11.13.1 --activate
+      - name: Activate pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.1 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Dependency vulnerability policy
+        run: pnpm audit --prod --audit-level high
+      - name: Secret scan exact source tree
+        run: >-
+          docker run --rm --volume "$GITHUB_WORKSPACE:/repo:ro"
+          ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          detect --source=/repo --config=/repo/.gitleaks.toml --no-git --redact=100 --no-banner
+          --exit-code=1
+      - run: pnpm toolchain:check
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm architecture:check
+      - run: pnpm test:unit
       - run: pnpm test:property
+      - run: pnpm test:contract
       - run: pnpm test:integration
       - run: pnpm test:privacy
       - run: pnpm test:security
@@ -48,7 +62,7 @@ jobs:
   publish:
     needs: gates
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     environment: ${{ inputs.target }}-artifact
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -56,45 +70,153 @@ jobs:
           ref: ${{ inputs.revision }}
           persist-credentials: false
       - uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
-      - name: Login to protected OCI registry
-        env:
-          OCI_PASSWORD: ${{ secrets.OCI_PASSWORD }}
-        run:
-          printf '%s' "$OCI_PASSWORD" | docker login "${{ vars.OCI_REGISTRY }}" --username "${{
-          vars.OCI_USERNAME }}" --password-stdin
-      - name: Build once, attach provenance/SBOM, and push by digest
-        id: handoff
-        env:
-          IMAGE_NAME: ${{ vars.OCI_IMAGE }}
-          RELEASE_SHA: ${{ inputs.revision }}
-          PGBACKREST_IMAGE_NAME: ${{ vars.PGBACKREST_OCI_IMAGE }}
+      - name: Resolve repository-owned GHCR names
         run: |
-          docker buildx bake --file infra/containers/docker-bake.hcl production --push --metadata-file image-metadata.json
-          digest=$(jq -er '.["production"]."containerimage.digest"' image-metadata.json)
-          test "${digest#sha256:}" != "$digest"
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
-          docker buildx build --file infra/pgbackrest/Dockerfile --tag "${PGBACKREST_IMAGE_NAME}:${RELEASE_SHA}" --provenance=mode=max --sbom=true --push --metadata-file pgbackrest-image-metadata.json .
-          pgbackrest_digest=$(jq -er '."containerimage.digest"' pgbackrest-image-metadata.json)
-          test "${pgbackrest_digest#sha256:}" != "$pgbackrest_digest"
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "RUNTIME_IMAGE_NAME=ghcr.io/${owner}/cashmemo-runtime" >> "$GITHUB_ENV"
+          echo "PGBACKREST_IMAGE_NAME=ghcr.io/${owner}/cashmemo-pgbackrest" >> "$GITHUB_ENV"
+          echo "VERIFIER_IMAGE_NAME=ghcr.io/${owner}/cashmemo-verifier" >> "$GITHUB_ENV"
+      - name: Login to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build local security candidates from exact revision
+        env:
+          RELEASE_SHA: ${{ inputs.revision }}
+        run: |
+          docker build --target production --file infra/containers/Dockerfile --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" --tag "cashmemo-runtime:$RELEASE_SHA" .
+          docker build --target runtime --file infra/pgbackrest/Dockerfile --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" --tag "cashmemo-pgbackrest:$RELEASE_SHA" .
+          docker build --target verifier --file infra/containers/Verifier.Dockerfile --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" --tag "cashmemo-verifier:$RELEASE_SHA" .
+          node scripts/verify/verify-image-runtime.mjs runtime "cashmemo-runtime:$RELEASE_SHA"
+          node scripts/verify/verify-image-runtime.mjs pgbackrest "cashmemo-pgbackrest:$RELEASE_SHA"
+          node scripts/verify/verify-image-runtime.mjs verifier "cashmemo-verifier:$RELEASE_SHA"
+      - name: Generate pre-publish runtime SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: cashmemo-runtime:${{ inputs.revision }}
+          format: spdx-json
+          output-file: candidate-runtime.spdx.json
+          upload-artifact: false
+      - name: Generate pre-publish pgBackRest SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: cashmemo-pgbackrest:${{ inputs.revision }}
+          format: spdx-json
+          output-file: candidate-pgbackrest.spdx.json
+          upload-artifact: false
+      - name: Generate pre-publish verifier SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: cashmemo-verifier:${{ inputs.revision }}
+          format: spdx-json
+          output-file: candidate-verifier.spdx.json
+          upload-artifact: false
+      - name: Validate pre-publish SBOMs
+        run: >-
+          test -s candidate-runtime.spdx.json -a -s candidate-pgbackrest.spdx.json -a -s
+          candidate-verifier.spdx.json
+      - name: Pre-publish scan runtime candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cashmemo-runtime:${{ inputs.revision }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+      - name: Pre-publish scan pgBackRest candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cashmemo-pgbackrest:${{ inputs.revision }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+      - name: Pre-publish scan verifier candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cashmemo-verifier:${{ inputs.revision }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+      - name: Build exact revision, attest SBOM/provenance, and push by digest
+        id: images
+        env:
+          RELEASE_SHA: ${{ inputs.revision }}
+        run: |
+          docker buildx bake --file infra/containers/docker-bake.hcl artifacts --metadata-file image-metadata.json
+          runtime_digest=$(jq -er '.runtime."containerimage.digest"' image-metadata.json)
+          pgbackrest_digest=$(jq -er '.pgbackrest."containerimage.digest"' image-metadata.json)
+          verifier_digest=$(jq -er '.verifier."containerimage.digest"' image-metadata.json)
+          for digest in "$runtime_digest" "$pgbackrest_digest" "$verifier_digest"; do
+            test "${digest#sha256:}" != "$digest"
+          done
+          echo "runtime_digest=$runtime_digest" >> "$GITHUB_OUTPUT"
           echo "pgbackrest_digest=$pgbackrest_digest" >> "$GITHUB_OUTPUT"
-          jq -n --arg digest "$digest" --arg image "${{ vars.OCI_IMAGE }}" --arg pgbackrestDigest "$pgbackrest_digest" --arg pgbackrestImage "${{ vars.PGBACKREST_OCI_IMAGE }}" --arg revision "${{ inputs.revision }}" --arg target "${{ inputs.target }}" '{schemaVersion:"cashmemo-dokploy-handoff-v1",image:$image,imageDigest:$digest,pgbackrestImage:$pgbackrestImage,pgbackrestImageDigest:$pgbackrestDigest,revision:$revision,target:$target,deployed:false}' > dokploy-handoff.json
-      - name: Scan exact image digest
+          echo "verifier_digest=$verifier_digest" >> "$GITHUB_OUTPUT"
+      - name: Scan exact runtime digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ vars.OCI_IMAGE }}@${{ steps.handoff.outputs.digest }}
+          image-ref: ${{ env.RUNTIME_IMAGE_NAME }}@${{ steps.images.outputs.runtime_digest }}
           severity: CRITICAL,HIGH
           exit-code: 1
-      - name: Scan exact pgBackRest image digest
+      - name: Scan exact pgBackRest digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ vars.PGBACKREST_OCI_IMAGE }}@${{ steps.handoff.outputs.pgbackrest_digest }}
+          image-ref: ${{ env.PGBACKREST_IMAGE_NAME }}@${{ steps.images.outputs.pgbackrest_digest }}
           severity: CRITICAL,HIGH
           exit-code: 1
+      - name: Scan exact verifier digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.VERIFIER_IMAGE_NAME }}@${{ steps.images.outputs.verifier_digest }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+      - name: Materialize runtime SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.RUNTIME_IMAGE_NAME }}@${{ steps.images.outputs.runtime_digest }}
+          format: spdx-json
+          output-file: runtime.spdx.json
+          upload-artifact: false
+      - name: Materialize pgBackRest SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.PGBACKREST_IMAGE_NAME }}@${{ steps.images.outputs.pgbackrest_digest }}
+          format: spdx-json
+          output-file: pgbackrest.spdx.json
+          upload-artifact: false
+      - name: Materialize verifier SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.VERIFIER_IMAGE_NAME }}@${{ steps.images.outputs.verifier_digest }}
+          format: spdx-json
+          output-file: verifier.spdx.json
+          upload-artifact: false
+      - name: Write content-safe immutable handoff
+        env:
+          PGBACKREST_DIGEST: ${{ steps.images.outputs.pgbackrest_digest }}
+          REVISION: ${{ inputs.revision }}
+          RUNTIME_DIGEST: ${{ steps.images.outputs.runtime_digest }}
+          TARGET: ${{ inputs.target }}
+          VERIFIER_DIGEST: ${{ steps.images.outputs.verifier_digest }}
+        run: |
+          test -s runtime.spdx.json
+          test -s pgbackrest.spdx.json
+          test -s verifier.spdx.json
+          runtime_sbom=$(sha256sum runtime.spdx.json | cut -d ' ' -f1)
+          pgbackrest_sbom=$(sha256sum pgbackrest.spdx.json | cut -d ' ' -f1)
+          verifier_sbom=$(sha256sum verifier.spdx.json | cut -d ' ' -f1)
+          jq -n \
+            --arg revision "$REVISION" --arg target "$TARGET" \
+            --arg runtimeImage "$RUNTIME_IMAGE_NAME" --arg runtimeDigest "$RUNTIME_DIGEST" --arg runtimeSbom "$runtime_sbom" \
+            --arg pgbackrestImage "$PGBACKREST_IMAGE_NAME" --arg pgbackrestDigest "$PGBACKREST_DIGEST" --arg pgbackrestSbom "$pgbackrest_sbom" \
+            --arg verifierImage "$VERIFIER_IMAGE_NAME" --arg verifierDigest "$VERIFIER_DIGEST" --arg verifierSbom "$verifier_sbom" \
+            '{schemaVersion:"cashmemo-oci-artifacts-v2",revision:$revision,target:$target,deployed:false,artifacts:{runtime:{image:$runtimeImage,digest:$runtimeDigest,sbomSha256:$runtimeSbom,scan:"pass",roles:["api","worker","migrate"]},pgbackrest:{image:$pgbackrestImage,digest:$pgbackrestDigest,sbomSha256:$pgbackrestSbom,scan:"pass",version:"2.59.0"},verifier:{image:$verifierImage,digest:$verifierDigest,sbomSha256:$verifierSbom,scan:"pass",productionAllowed:false}}}' \
+            > cashmemo-oci-handoff.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dokploy-handoff-${{ inputs.target }}-${{ inputs.revision }}
+          name: cashmemo-oci-handoff-${{ inputs.target }}-${{ inputs.revision }}
           path: |
-            dokploy-handoff.json
+            cashmemo-oci-handoff.json
             image-metadata.json
-            pgbackrest-image-metadata.json
+            runtime.spdx.json
+            pgbackrest.spdx.json
+            verifier.spdx.json
           retention-days: 7

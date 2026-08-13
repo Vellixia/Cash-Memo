@@ -58,29 +58,56 @@ jobs:
           exit-code: 1
 
   image-and-sbom:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: runtime
+            dockerfile: infra/containers/Dockerfile
+            target: production
+          - artifact: pgbackrest
+            dockerfile: infra/pgbackrest/Dockerfile
+            target: runtime
+          - artifact: verifier
+            dockerfile: infra/containers/Verifier.Dockerfile
+            target: verifier
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+      - name: Activate pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.1 --activate
+      - run: pnpm install --frozen-lockfile
       - name: Build exact revision image
-        run:
-          docker build --target production --file infra/containers/Dockerfile --label
-          org.opencontainers.image.revision=${{ github.sha }} -t cashmemo:${{ github.sha }} .
+        env:
+          IMAGE_REF: cashmemo-${{ matrix.artifact }}:${{ github.sha }}
+        run: >-
+          docker build --target "${{ matrix.target }}" --file "${{ matrix.dockerfile }}" --build-arg
+          RELEASE_SHA="${GITHUB_SHA}" --build-arg BUILD_VERSION="git-${GITHUB_SHA}" --label
+          org.opencontainers.image.revision="${GITHUB_SHA}" -t "$IMAGE_REF" .
+      - name: Verify non-root, immutable metadata, and read-only root
+        env:
+          IMAGE_REF: cashmemo-${{ matrix.artifact }}:${{ github.sha }}
+        run: >-
+          node scripts/verify/verify-image-runtime.mjs "${{ matrix.artifact }}" "$IMAGE_REF"
       - name: OCI image scanning
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: cashmemo:${{ github.sha }}
+          image-ref: cashmemo-${{ matrix.artifact }}:${{ github.sha }}
           severity: CRITICAL,HIGH
           exit-code: 1
       - name: Generate SBOM with Syft for exact image
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: cashmemo:${{ github.sha }}
+          image: cashmemo-${{ matrix.artifact }}:${{ github.sha }}
           format: spdx-json
-          output-file: cashmemo-${{ github.sha }}.sbom.json
-          artifact-name: cashmemo-${{ github.sha }}.sbom.json
+          output-file: cashmemo-${{ matrix.artifact }}-${{ github.sha }}.sbom.json
+          artifact-name: cashmemo-${{ matrix.artifact }}-${{ github.sha }}.sbom.json
           upload-artifact: true
       - name: Validate SBOM
-        run: test -s cashmemo-${{ github.sha }}.sbom.json
+        run: test -s cashmemo-${{ matrix.artifact }}-${{ github.sha }}.sbom.json

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "cashmemo-oci-artifact-evidence-v1",
+  "artifact": "pgbackrest",
+  "repository": "ghcr.io/vellixia/cashmemo-pgbackrest",
+  "sourceRevisionResolution": "workflow_dispatch.inputs.revision",
+  "publishStatus": "BLOCKED_EXTERNAL",
+  "publishedDigest": null,
+  "localBuildStatus": "NOT_EXECUTED_LOCAL_DOCKER_PROHIBITED",
+  "pgBackRestVersion": "2.59.0",
+  "upstreamSourceSha256": "faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875",
+  "runtimeUid": 10002,
+  "readOnlyRootPolicy": "required",
+  "sbomStatus": "PENDING_GHCR_WORKFLOW",
+  "scanStatus": "PENDING_GHCR_WORKFLOW",
+  "definitionTests": { "status": "pass", "count": 11 },
+  "contentSafety": "aggregate-metadata-only"
+}
