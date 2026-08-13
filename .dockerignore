@@ -5,10 +5,12 @@ node_modules/
 !.github/workflows/
 .github/workflows/*
 !.github/workflows/security.yml
+!.github/workflows/deploy.yml
 .specify/
 .agents/
 .claude/
 archive/
+specs/
 Dockerfile*
 .dockerignore
 dist/

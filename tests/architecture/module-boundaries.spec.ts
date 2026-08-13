@@ -25,7 +25,7 @@ describe("modular monolith architecture", () => {
     }
   });
 
-  it("has exactly the web and server application entry points in one image definition", async () => {
+  it("keeps web/server in one runtime image and verifier outside production", async () => {
     const applicationDirectories = (await readdir("apps", { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
@@ -34,9 +34,12 @@ describe("modular monolith architecture", () => {
       name.toLowerCase().includes("dockerfile"),
     );
     const dockerfile = await readFile("infra/containers/Dockerfile", "utf8");
+    const verifierDockerfile = await readFile("infra/containers/Verifier.Dockerfile", "utf8");
 
     expect(applicationDirectories).toEqual(["server", "web"]);
-    expect(containerFiles).toEqual(["Dockerfile"]);
+    expect(containerFiles.sort()).toEqual(["Dockerfile", "Verifier.Dockerfile"]);
     expect(dockerfile.match(/^FROM .* AS production$/gmu)).toHaveLength(1);
+    expect(verifierDockerfile).toContain('dev.cashmemo.verifier.production="forbidden"');
+    expect(verifierDockerfile).not.toMatch(/^FROM .* AS production$/gmu);
   });
 });

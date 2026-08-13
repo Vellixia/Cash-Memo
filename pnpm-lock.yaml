@@ -59,6 +59,9 @@ importers:
       globals:
         specifier: 17.9.0
         version: 17.9.0
+      minio:
+        specifier: 8.0.7
+        version: 8.0.7
       pg:
         specifier: 8.22.0
         version: 8.22.0
@@ -101,9 +104,6 @@ importers:
       '@cashmemo/privacy-rules':
         specifier: workspace:*
         version: link:../../packages/privacy-rules
-      '@cashmemo/test-support':
-        specifier: workspace:*
-        version: link:../../packages/test-support
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0
@@ -126,6 +126,9 @@ importers:
         specifier: 8.22.0
         version: 8.22.0
     devDependencies:
+      '@cashmemo/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
       '@testcontainers/postgresql':
         specifier: 12.1.0
         version: 12.1.0
