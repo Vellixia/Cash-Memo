@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 
 const files = [
-  "tests/providers/aws-deletion-ledger.contract.spec.ts",
-  "tests/providers/aws-backup-inventory.contract.spec.ts",
+  "tests/providers/rustfs-deletion-ledger.contract.spec.ts",
+  "tests/providers/backup-lineage-inventory.contract.spec.ts",
   "apps/server/tests/integration/write-before-purge.spec.ts",
   "apps/server/tests/privacy/deletion-restore-readiness-privacy.spec.ts",
   "tests/operations/suppression-cleanup.spec.ts",

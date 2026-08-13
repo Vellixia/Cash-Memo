@@ -3,10 +3,13 @@ interface QuarterlyRestoreDrillInput {
   readonly isolatedRestore: boolean;
   readonly neighboringDataVerified: boolean;
   readonly networkIsolationVerified: boolean;
+  readonly pgbackrestCheckVerified: boolean;
   readonly reconciliationComplete: boolean;
+  readonly restoredStateInspected: boolean;
   readonly restoreCopyDestroyed: boolean;
   readonly rpoMeasured: boolean;
   readonly rtoMeasured: boolean;
+  readonly walArchiveVerified: boolean;
 }
 
 interface DrillResult {

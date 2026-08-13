@@ -13,13 +13,13 @@ const generated = resolve(directory, ".generated");
 const artifact = resolve(directory, "deletion-restore-readiness.json");
 const manifest = resolve(directory, "deletion-restore-readiness.manifest.json");
 const paths = [
-  "apps/server/src/adapters/aws/deletion-suppression.adapter.ts",
-  "apps/server/src/adapters/aws/backup-lineage-inventory.adapter.ts",
+  "apps/server/src/adapters/rustfs/deletion-suppression.adapter.ts",
+  "apps/server/src/adapters/backup/backup-lineage-inventory.adapter.ts",
   "apps/server/src/modules/deletion/suppression-cleanup.service.ts",
   "apps/server/src/modules/deletion/restore-reconciliation.service.ts",
   "scripts/operations/restore-reconcile.mjs",
   "scripts/operations/restore-copy-lifecycle.mjs",
-  "infra/opentofu/modules/data-safety/no-resurrection-copies.tf",
+  "infra/dokploy/policies/backup-copy-policy.json",
 ] as const;
 const digest = createHash("sha256");
 for (const path of paths) {
@@ -43,7 +43,7 @@ const now = new Date().toISOString();
 const fixture = "synthetic-phase13-non-production-readiness-v1";
 const checks = [
   ["phase13.evidence-class-non-production-readiness", 1],
-  ["phase13.real-aws-pitr-drill-open", 1],
+  ["phase13.real-pgbackrest-pitr-drill-open", 1],
   ["phase13.sc021-open", 1],
   ["phase13.hard-delete-before-ledger", 0],
   ["phase13.hard-delete-on-unverifiable-ledger", 0],
@@ -83,8 +83,8 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: [],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
-      featureFlags: ["contract-aws-ledger", "contract-backup-inventory", "synthetic-restore"],
+      runtimeArtifact: null,
+      featureFlags: ["contract-rustfs-ledger", "contract-backup-inventory", "synthetic-restore"],
       migrationVersion: "0006.phase11-operations",
       normalLoadProfile: null,
     },

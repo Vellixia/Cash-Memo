@@ -7,9 +7,9 @@ necessary, never sufficient.
 
 1. Load suppression record through privileged cleanup boundary.
 2. Confirm removal floor reached. Before floor: retain and retry later.
-3. Obtain complete, current authoritative lineage inventory across automated/PITR, retained
-   automated, manual, final, copied, shared, AWS Backup, replica, cross-region, and temporary
-   restore-copy classes.
+3. Obtain complete, current authoritative lineage inventory across pgBackRest full/differential/
+   incremental backup sets, WAL archives, local repositories, Secondary RustFS versions,
+   manual/operator/volume copies, replicas, and temporary restore copies.
 4. Classify every artifact. Present resurrection-capable, active restore-copy, unregistered, or
    unverifiable artifact means retain token/key, alert, retry.
 5. Confirm no restore reconciliation still requires record or its HMAC key version.
@@ -19,10 +19,9 @@ necessary, never sufficient.
 
 ## Key rotation
 
-Create and activate new version without deleting old material. Store keys only in approved
-secret/KMS boundary. Reconciliation searches every retained version. Never print key material,
-deletion tokens, raw identities, or derivatives. Rotation failure retains existing active version
-and alerts.
+Create and activate new version without deleting old material. Store keys only in approved injected
+secret boundary. Reconciliation searches every retained version. Never print key material, deletion
+tokens, raw identities, or derivatives. Rotation failure retains existing active version and alerts.
 
 ## STOP conditions
 

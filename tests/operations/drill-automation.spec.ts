@@ -10,10 +10,13 @@ describe("quarterly restore drill readiness automation", () => {
       isolatedRestore: true,
       neighboringDataVerified: true,
       networkIsolationVerified: true,
+      pgbackrestCheckVerified: true,
       reconciliationComplete: true,
+      restoredStateInspected: true,
       restoreCopyDestroyed: true,
       rpoMeasured: true,
       rtoMeasured: true,
+      walArchiveVerified: true,
     });
     expect(result).toEqual({
       evidenceClass: "non_production_readiness",
@@ -29,10 +32,13 @@ describe("quarterly restore drill readiness automation", () => {
       isolatedRestore: true,
       neighboringDataVerified: true,
       networkIsolationVerified: true,
+      pgbackrestCheckVerified: true,
       reconciliationComplete: false,
+      restoredStateInspected: true,
       restoreCopyDestroyed: true,
       rpoMeasured: true,
       rtoMeasured: true,
+      walArchiveVerified: true,
     });
     expect(result.result).toBe("blocked");
     expect(result.safeBlockerClasses).toEqual([
