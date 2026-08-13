@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "cashmemo.dependency-baseline.v1",
+  "status": "BLOCKED_EXTERNAL_REVIEW",
+  "node": "24.14.0",
+  "pnpm": "11.13.1",
+  "betterAuth": "1.6.26",
+  "postgresql": "18",
+  "openTofu": "1.12.5",
+  "awsProvider": "6.59.0",
+  "sttModelSnapshot": "gpt-4o-mini-transcribe-2025-12-15",
+  "extractionModelSnapshot": "gpt-5.4-mini-2026-03-17",
+  "currencyRegistryVersion": "cldr47-iso4217-2026-01-01-cashmemo-v1",
+  "tzdbVersion": "2026a",
+  "moderateAuditFinding": {
+    "status": "requires-reviewed-classification",
+    "count": 1
+  },
+  "missingSafeNames": [
+    "SECURITY_REVIEW_DATE",
+    "SECURITY_REVIEW_EXPIRY",
+    "MODERATE_FINDING_DISPOSITION"
+  ],
+  "approved": false
+}

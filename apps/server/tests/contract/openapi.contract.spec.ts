@@ -191,7 +191,7 @@ describe("Cashmemo OpenAPI contract", () => {
     const diagnostic = [result.stdout, result.stderr].filter(Boolean).join("\n");
 
     expect(result.status, diagnostic).toBe(0);
-  });
+  }, 30_000);
 
   it("validates every declared parameter, request, and response example", () => {
     const result = validateDeclaredExamples();

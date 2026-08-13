@@ -1,0 +1,11 @@
+# Safe-name contract only. Copy into protected CI/environment configuration and replace
+# every REQUIRED_EXTERNAL_VALUE after independent approval. This file is not approved evidence.
+aws_account_id          = "REQUIRED_EXTERNAL_VALUE"
+domain_name             = "REQUIRED_EXTERNAL_VALUE"
+route53_zone_id         = "REQUIRED_EXTERNAL_VALUE"
+certificate_arn         = "REQUIRED_EXTERNAL_VALUE"
+github_oidc_provider_arn = "REQUIRED_EXTERNAL_VALUE"
+github_repository       = "Vellixia/cashmemo"
+release_id              = "REQUIRED_EXACT_COMMIT_SHA"
+image_digest            = "sha256:REQUIRED_IMMUTABLE_DIGEST"
+collector_image         = "REQUIRED_PINNED_IMAGE_DIGEST"

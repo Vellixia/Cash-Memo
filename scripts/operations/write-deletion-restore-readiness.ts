@@ -28,10 +28,17 @@ for (const path of paths) {
   digest.update(await readFile(resolve(root, path)));
   digest.update("\0");
 }
-const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
-  cwd: root,
-  encoding: "utf8",
-});
+const isCommitSha = (value: string | undefined): value is string =>
+  value !== undefined && /^[0-9a-f]{40}$/u.test(value);
+const declaredBuildVersion = process.env["BUILD_VERSION"];
+const gitCommit = isCommitSha(declaredBuildVersion)
+  ? declaredBuildVersion
+  : (
+      await execFileAsync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    ).stdout.trim();
 const now = new Date().toISOString();
 const fixture = "synthetic-phase13-non-production-readiness-v1";
 const checks = [
@@ -84,7 +91,7 @@ const result = await writer.write({
     environmentId: "local-contract-readiness",
     evidenceId: randomUUID(),
     finishedAt: now,
-    gitCommit: stdout.trim(),
+    gitCommit,
     providerDecisionVersions: ["local-contract-only-v1"],
     region: "local-synthetic",
     requirementIds: ["FR-096", "FR-100", "FR-114", "FR-115"],

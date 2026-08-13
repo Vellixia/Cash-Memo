@@ -22,6 +22,20 @@ if (tests.status !== 0) {
   process.exit(tests.status ?? 1);
 }
 
+const supportBuild = spawnSync(
+  "corepack",
+  ["pnpm", "--filter", "@cashmemo/test-support", "build"],
+  {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: "inherit",
+  },
+);
+if (supportBuild.status !== 0) {
+  console.error("OPERATIONS_SUITE=BLOCKED class=evidence-dependency-build-failure");
+  process.exit(supportBuild.status ?? 1);
+}
+
 const evidence = spawnSync(
   "corepack",
   ["pnpm", "exec", "tsx", "scripts/operations/write-deletion-restore-readiness.ts"],

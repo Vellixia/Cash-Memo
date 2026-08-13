@@ -64,7 +64,9 @@
     "test:unit": "node scripts/verify/run-gates.mjs test unit",
     "typecheck": "node scripts/verify/run-gates.mjs typecheck",
     "toolchain:check": "node scripts/toolchain/check-versions.mjs",
-    "verify": "node scripts/verify/run-gates.mjs verify"
+    "toolchain:opentofu": "node scripts/toolchain/bootstrap-opentofu.mjs",
+    "verify": "node scripts/verify/run-gates.mjs verify",
+    "verify:phase15-remote": "node scripts/verify/run-phase15-remote.mjs"
   },
   "devDependencies": {
     "@cashmemo/test-support": "workspace:*",

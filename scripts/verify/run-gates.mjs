@@ -51,7 +51,7 @@ async function exists(target) {
 async function run(command, args, options = {}) {
   const exitCode = await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: repositoryRoot,
+      cwd: options.cwd ?? repositoryRoot,
       env: options.env ?? process.env,
       shell: false,
       stdio: "inherit",
@@ -132,9 +132,24 @@ async function runVitestSuite(suite) {
   if (predicate === undefined) throw new GateFailure("UNKNOWN_TEST_SUITE", [suite]);
   const files = await discoverTestFiles(predicate);
   if (files.length === 0) throw new GateFailure("GATE_UNAVAILABLE", [`test:${suite}`]);
-  await run("corepack", ["pnpm", "exec", "vitest", "run", ...files.map(relative)], {
-    label: `test:${suite}`,
-  });
+  const webRoot = path.join(repositoryRoot, "apps/web");
+  const webFiles = files.filter((file) => file.startsWith(`${webRoot}${path.sep}`));
+  const rootFiles = files.filter((file) => !file.startsWith(`${webRoot}${path.sep}`));
+  if (rootFiles.length > 0) {
+    await run("corepack", ["pnpm", "exec", "vitest", "run", ...rootFiles.map(relative)], {
+      label: `test:${suite}:root`,
+    });
+  }
+  if (webFiles.length > 0) {
+    await run(
+      "corepack",
+      ["pnpm", "exec", "vitest", "run", ...webFiles.map((file) => path.relative(webRoot, file))],
+      {
+        cwd: webRoot,
+        label: `test:${suite}:web`,
+      },
+    );
+  }
 }
 
 async function runAuthCompatibility() {

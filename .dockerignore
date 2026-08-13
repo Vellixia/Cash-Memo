@@ -1,11 +1,13 @@
 node_modules/
 .pnpm-store/
 .git/
-.github/
+.github/*
+!.github/workflows/
+.github/workflows/*
+!.github/workflows/security.yml
 .specify/
 .agents/
 .claude/
-specs/
 archive/
 Dockerfile*
 .dockerignore

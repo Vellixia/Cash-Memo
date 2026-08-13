@@ -379,29 +379,29 @@
 
 **Purpose**: Repeatable AWS staging/production topology, deployment, secrets, monitoring, backups, external-input binding, and runbooks.
 
-- [ ] T219 [P] Define OpenTofu version/provider constraints, remote-state contract, validated environment inputs, and plan-digest policy in `infra/opentofu/versions.tf`, `infra/opentofu/backend.tf`, and `infra/opentofu/variables.tf`
-- [ ] T220 [P] Provision VPC, private/public subnets, security groups, ALB, TLS listener, and controlled egress modules in `infra/opentofu/modules/network/main.tf`
-- [ ] T221 [P] Provision ECR and one ECS/Fargate service/image supporting API/worker roles, encrypted ephemeral storage, health checks, and deployment circuit breaker in `infra/opentofu/modules/compute/main.tf`
-- [ ] T222 [P] Provision PostgreSQL 18 RDS Multi-AZ, encryption, nonpublic networking, parameter/monitoring groups, 35-day backup/PITR maximum, and deletion protection in `infra/opentofu/modules/database/main.tf` (FR-100, FR-114)
-- [ ] T223 [P] Provision separate KMS-encrypted export, evidence, and deletion-ledger buckets/policies with no raw-audio class and no suppression TTL in `infra/opentofu/modules/storage/main.tf` (FR-094, FR-100)
-- [ ] T224 [P] Provision SES identity/configuration-set/bounce path with content-free event mapping in `infra/opentofu/modules/email/main.tf`
-- [ ] T225 [P] Provision Secrets Manager/KMS and least-privilege runtime, worker, migration, restore, CI, and break-glass roles in `infra/opentofu/modules/security/main.tf` (FR-083)
-- [ ] T226 [P] Provision OpenTelemetry collector, CloudWatch log/metric/trace retention, core/provider-separated dashboards, burn-rate/backlog/audio/deletion/export/backup alarms in `infra/opentofu/modules/observability/main.tf` (FR-110, FR-112)
-- [ ] T227 Integrate database backup/PITR, policy-drift, inventory-failure, missed-drill, and RPO/RTO alarms with deletion-copy policy in `infra/opentofu/modules/data-safety/main.tf` (FR-100, FR-114)
-- [ ] T228 Implement one-shot migration task, advisory lock, schema compatibility startup check, and migration evidence in `infra/opentofu/modules/compute/migration-task.tf` and `scripts/db/migrate-production.mjs` (FR-116)
-- [ ] T229 Harden OCI image with pinned digest inputs, minimal packages/capabilities, non-root/read-only runtime, health probes, and SBOM attachment in `infra/containers/Dockerfile` and `infra/containers/docker-bake.hcl` (FR-116)
-- [ ] T230 Implement GitHub Actions build/scan/migrate/deploy/synthetic-verify workflow using immutable digest and protected environments in `.github/workflows/deploy.yml` (FR-116, FR-117)
-- [ ] T231 Implement and rehearse ECS circuit-breaker rollback plus expand/contract safe-forward paths in `scripts/deploy/rollback-or-safe-forward.mjs` and `ops/runbooks/deployment-rollback.md` (FR-116)
+- [X] T219 [P] Define OpenTofu version/provider constraints, remote-state contract, validated environment inputs, and plan-digest policy in `infra/opentofu/versions.tf`, `infra/opentofu/backend.tf`, and `infra/opentofu/variables.tf`
+- [X] T220 [P] Provision VPC, private/public subnets, security groups, ALB, TLS listener, and controlled egress modules in `infra/opentofu/modules/network/main.tf`
+- [X] T221 [P] Provision ECR and one ECS/Fargate service/image supporting API/worker roles, encrypted ephemeral storage, health checks, and deployment circuit breaker in `infra/opentofu/modules/compute/main.tf`
+- [X] T222 [P] Provision PostgreSQL 18 RDS Multi-AZ, encryption, nonpublic networking, parameter/monitoring groups, 35-day backup/PITR maximum, and deletion protection in `infra/opentofu/modules/database/main.tf` (FR-100, FR-114)
+- [X] T223 [P] Provision separate KMS-encrypted export, evidence, and deletion-ledger buckets/policies with no raw-audio class and no suppression TTL in `infra/opentofu/modules/storage/main.tf` (FR-094, FR-100)
+- [X] T224 [P] Provision SES identity/configuration-set/bounce path with content-free event mapping in `infra/opentofu/modules/email/main.tf`
+- [X] T225 [P] Provision Secrets Manager/KMS and least-privilege runtime, worker, migration, restore, CI, and break-glass roles in `infra/opentofu/modules/security/main.tf` (FR-083)
+- [X] T226 [P] Provision OpenTelemetry collector, CloudWatch log/metric/trace retention, core/provider-separated dashboards, burn-rate/backlog/audio/deletion/export/backup alarms in `infra/opentofu/modules/observability/main.tf` (FR-110, FR-112)
+- [X] T227 Integrate database backup/PITR, policy-drift, inventory-failure, missed-drill, and RPO/RTO alarms with deletion-copy policy in `infra/opentofu/modules/data-safety/main.tf` (FR-100, FR-114)
+- [X] T228 Implement one-shot migration task, advisory lock, schema compatibility startup check, and migration evidence in `infra/opentofu/modules/compute/migration-task.tf` and `scripts/db/migrate-production.mjs` (FR-116)
+- [X] T229 Harden OCI image with pinned digest inputs, minimal packages/capabilities, non-root/read-only runtime, health probes, and SBOM attachment in `infra/containers/Dockerfile` and `infra/containers/docker-bake.hcl` (FR-116)
+- [X] T230 Implement GitHub Actions build/scan/migrate/deploy/synthetic-verify workflow using immutable digest and protected environments in `.github/workflows/deploy.yml` (FR-116, FR-117)
+- [X] T231 Implement and rehearse ECS circuit-breaker rollback plus expand/contract safe-forward paths in `scripts/deploy/rollback-or-safe-forward.mjs` and `ops/runbooks/deployment-rollback.md` (FR-116)
 - [ ] T232 Bootstrap production-equivalent staging from empty prerequisites, run drift checks, and record environment metadata in `infra/opentofu/environments/staging/main.tf` and `ops/evidence/infrastructure/staging-bootstrap.json` (FR-105)
 - [ ] T233 Bind—not fabricate—approved AWS account IDs, `ap-southeast-1`, DNS/TLS names, environment IDs, and protected workflow identities in `infra/opentofu/environments/production/inputs.auto.tfvars.example` and `ops/evidence/external/aws-environment.json`; fail closed while missing
 - [ ] T234 Bind exact dependency patch versions, security review dates, model snapshots, currency registry, and tzdb versions in `config/release/dependency-baseline.json` and `ops/evidence/external/dependency-review.json`; block unresolved/expired entries
-- [ ] T235 Create versioned provider-decision schema/template covering data sent/excluded, training, retention/deletion, residency, failures, replacement, DPA owner, and evidence expiry in `config/providers/provider-decision.schema.json` and `docs/providers/decision-template.md` (FR-084)
+- [X] T235 Create versioned provider-decision schema/template covering data sent/excluded, training, retention/deletion, residency, failures, replacement, DPA owner, and evidence expiry in `config/providers/provider-decision.schema.json` and `docs/providers/decision-template.md` (FR-084)
 - [ ] T236 Obtain and verify—not fabricate—OpenAI production project ZDR, training-disabled, endpoint/model eligibility, regional limitation, and administrative evidence in protected reference `ops/evidence/external/openai-zdr-approval.json`; keep launch blocked if absent (FR-085)
 - [ ] T237 Obtain and verify—not fabricate—SES production/domain authorization and controlled-inbox readiness in protected reference `ops/evidence/external/ses-production-approval.json`; keep signup release blocked if absent
 - [ ] T238 Assign named accountable humans/teams for release, privacy, security, SRE, data operations, providers, accessibility, and research in `ops/owners.yaml`; reject role-only placeholders before release (FR-119)
 - [ ] T239 Validate and approve normal-load concurrency/account-size profile against beta or controlled measurements in `tests/performance/normal-load-profile.json` and `ops/evidence/external/load-profile-approval.json`; do not invent observations
-- [ ] T240 Create and rehearse core journal, STT/AI, SES, RDS, telemetry, and provider-config-drift outage runbooks in `ops/runbooks/core-journal-outage.md`, `ops/runbooks/provider-outages.md`, and `ops/runbooks/ses-rds-telemetry-outages.md` (FR-113)
-- [ ] T241 Create and rehearse secrets, migration, deployment, audio, lifecycle backlog, export exposure, S3/KMS, rate-abuse, and cross-user incident runbooks in `ops/runbooks/secrets-migrations-lifecycle.md` and `ops/runbooks/security-operations.md` (FR-113, FR-116)
+- [X] T240 Create and rehearse core journal, STT/AI, SES, RDS, telemetry, and provider-config-drift outage runbooks in `ops/runbooks/core-journal-outage.md`, `ops/runbooks/provider-outages.md`, and `ops/runbooks/ses-rds-telemetry-outages.md` (FR-113)
+- [X] T241 Create and rehearse secrets, migration, deployment, audio, lifecycle backlog, export exposure, S3/KMS, rate-abuse, and cross-user incident runbooks in `ops/runbooks/secrets-migrations-lifecycle.md` and `ops/runbooks/security-operations.md` (FR-113, FR-116)
 
 **Checkpoint**: Same immutable image/config can reach production-equivalent staging; missing external approvals remain explicit blockers.
 

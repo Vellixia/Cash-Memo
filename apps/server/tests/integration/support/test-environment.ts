@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
+import { Client } from "pg";
 
 const POSTGRES_IMAGE = "postgres:18.4-alpine";
 const MAILPIT_IMAGE = "axllent/mailpit:v1.30.7";
@@ -22,7 +25,7 @@ export interface TestEnvironment {
   };
   postgres?: {
     connectionUri: string;
-    container: StartedPostgreSqlContainer;
+    container?: StartedPostgreSqlContainer;
   };
   stop(): Promise<void>;
 }
@@ -42,17 +45,50 @@ export async function startTestEnvironment(
   );
   const started: StartedTestContainer[] = [];
   let postgres: StartedPostgreSqlContainer | undefined;
+  let externalPostgresCleanup: (() => Promise<void>) | undefined;
+  let postgresConnectionUri: string | undefined;
   let mailpit: StartedTestContainer | undefined;
   let objectFake: StartedTestContainer | undefined;
 
   try {
     if (includesService(selected, "postgres")) {
-      postgres = await new PostgreSqlContainer(POSTGRES_IMAGE)
-        .withDatabase("cashmemo_test")
-        .withUsername("cashmemo_test")
-        .withPassword("cashmemo-test-only")
-        .start();
-      started.push(postgres);
+      const externalPostgres = process.env["CASHMEMO_EXTERNAL_TEST_DATABASE_URL"];
+      if (externalPostgres !== undefined) {
+        if (process.env["CASHMEMO_ALLOW_EXTERNAL_TEST_DATABASE"] !== "1") {
+          throw new Error("EXTERNAL_TEST_DATABASE_NOT_AUTHORIZED");
+        }
+        const controlUrl = new URL(externalPostgres);
+        const databaseName = `cashmemo_test_${randomUUID().replaceAll("-", "")}`;
+        const control = new Client({ connectionString: controlUrl.toString() });
+        await control.connect();
+        await control.query(`CREATE DATABASE "${databaseName}"`);
+        await control.end();
+
+        const testUrl = new URL(controlUrl);
+        testUrl.pathname = `/${databaseName}`;
+        postgresConnectionUri = testUrl.toString();
+        externalPostgresCleanup = async () => {
+          const cleanup = new Client({ connectionString: controlUrl.toString() });
+          await cleanup.connect();
+          try {
+            await cleanup.query(
+              "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+              [databaseName],
+            );
+            await cleanup.query(`DROP DATABASE IF EXISTS "${databaseName}"`);
+          } finally {
+            await cleanup.end();
+          }
+        };
+      } else {
+        postgres = await new PostgreSqlContainer(POSTGRES_IMAGE)
+          .withDatabase("cashmemo_test")
+          .withUsername("cashmemo_test")
+          .withPassword("cashmemo-test-only")
+          .start();
+        postgresConnectionUri = postgres.getConnectionUri();
+        started.push(postgres);
+      }
     }
 
     const auxiliaryStarts: Promise<void>[] = [];
@@ -88,9 +124,14 @@ export async function startTestEnvironment(
     await Promise.all(auxiliaryStarts);
 
     return {
-      ...(postgres === undefined
+      ...(postgresConnectionUri === undefined
         ? {}
-        : { postgres: { connectionUri: postgres.getConnectionUri(), container: postgres } }),
+        : {
+            postgres: {
+              connectionUri: postgresConnectionUri,
+              ...(postgres === undefined ? {} : { container: postgres }),
+            },
+          }),
       ...(mailpit === undefined
         ? {}
         : {
@@ -108,10 +149,12 @@ export async function startTestEnvironment(
             },
           }),
       async stop() {
+        if (externalPostgresCleanup !== undefined) await externalPostgresCleanup();
         await Promise.allSettled(started.toReversed().map(async (container) => container.stop()));
       },
     };
   } catch (error) {
+    if (externalPostgresCleanup !== undefined) await externalPostgresCleanup();
     await Promise.allSettled(started.toReversed().map(async (container) => container.stop()));
     throw error;
   }

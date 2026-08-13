@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashmemo.example/schemas/provider-decision-v1.json",
+  "title": "Cashmemo provider decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "provider",
+    "operation",
+    "endpoint",
+    "modelSnapshot",
+    "dataSent",
+    "dataExcluded",
+    "trainingUse",
+    "retention",
+    "deletion",
+    "residency",
+    "failureBehavior",
+    "replacementPath",
+    "dpaLegalOwner",
+    "evidenceSource",
+    "evidenceIssuedAt",
+    "evidenceExpiresAt",
+    "approvalStatus"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cashmemo.provider-decision.v1" },
+    "provider": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
+    "operation": {
+      "enum": [
+        "speech_to_text",
+        "structured_extraction",
+        "email_delivery",
+        "object_storage",
+        "telemetry"
+      ]
+    },
+    "endpoint": { "type": "string", "pattern": "^https://", "maxLength": 512 },
+    "modelSnapshot": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]+$" },
+    "dataSent": { "type": "array", "items": { "$ref": "#/$defs/dataClass" }, "uniqueItems": true },
+    "dataExcluded": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dataClass" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "trainingUse": { "enum": ["disabled_enforced", "not_applicable"] },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "maximumHours"],
+      "properties": {
+        "mode": { "enum": ["zero_data_retention", "service_metadata_only", "not_applicable"] },
+        "maximumHours": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "deletion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "maximumHours"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["automatic_terminal", "provider_api", "support_request", "not_applicable"]
+        },
+        "maximumHours": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "residency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storageRegion", "processingRegionGuaranteed", "limitations"],
+      "properties": {
+        "storageRegion": { "type": ["string", "null"] },
+        "processingRegionGuaranteed": { "type": "boolean" },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z0-9_-]+$" }
+        }
+      }
+    },
+    "failureBehavior": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "fail_closed",
+          "manual_path_available",
+          "retry_bounded",
+          "no_partial_confirmation",
+          "content_free_error"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "replacementPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["port", "fallbackMode"],
+      "properties": {
+        "port": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]+Port$" },
+        "fallbackMode": { "enum": ["manual", "disabled", "alternate_review_required"] }
+      }
+    },
+    "dpaLegalOwner": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.-]{2,127}$" },
+    "evidenceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protectedReference", "sha256"],
+      "properties": {
+        "protectedReference": { "type": "string", "pattern": "^[A-Za-z0-9/_.:-]+$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "evidenceIssuedAt": { "type": "string", "format": "date-time" },
+    "evidenceExpiresAt": { "type": "string", "format": "date-time" },
+    "approvalStatus": { "enum": ["approved", "blocked", "expired", "revoked"] }
+  },
+  "$defs": {
+    "dataClass": {
+      "enum": [
+        "current_audio",
+        "current_text",
+        "locale",
+        "timezone",
+        "currency_registry",
+        "destination_email",
+        "generic_email_body",
+        "opaque_object",
+        "content_free_event"
+      ]
+    }
+  }
+}

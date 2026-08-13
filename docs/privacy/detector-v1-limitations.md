@@ -1,7 +1,6 @@
 # Privacy Detector v1: Scope and Limitations
 
-Version: `privacy-detector-v1`
-Corpus: `corpus-v1`, synthetic fixtures only
+Version: `privacy-detector-v1` Corpus: `corpus-v1`, synthetic fixtures only
 
 ## Supported finite rules
 

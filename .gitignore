@@ -1,5 +1,10 @@
 node_modules/
 .pnpm-store/
+.cache/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
 out/
 dist/
 build/

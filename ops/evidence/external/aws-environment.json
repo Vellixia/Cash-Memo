@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "cashmemo.external-blocker.v1",
+  "status": "BLOCKED_EXTERNAL",
+  "region": "ap-southeast-1",
+  "missingSafeNames": [
+    "AWS_ACCOUNT_ID",
+    "DNS_NAME",
+    "TLS_CERTIFICATE_ARN",
+    "ROUTE53_ZONE_ID",
+    "GITHUB_OIDC_PROVIDER_ARN",
+    "PROTECTED_WORKFLOW_IDENTITY"
+  ],
+  "containsCredentials": false,
+  "approved": false
+}
+

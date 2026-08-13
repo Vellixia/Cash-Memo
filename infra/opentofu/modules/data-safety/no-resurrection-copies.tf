@@ -37,15 +37,15 @@ locals {
         }
       },
       {
-        Sid    = "DenySnapshotSharing"
-        Effect = "Deny"
-        Action = ["rds:ModifyDBSnapshotAttribute"]
+        Sid      = "DenySnapshotSharing"
+        Effect   = "Deny"
+        Action   = ["rds:ModifyDBSnapshotAttribute"]
         Resource = "*"
       },
       {
-        Sid    = "DenyUnregisteredBackupCopies"
-        Effect = "Deny"
-        Action = ["backup:CopyIntoBackupVault", "backup:StartCopyJob", "backup:StartRestoreJob"]
+        Sid      = "DenyUnregisteredBackupCopies"
+        Effect   = "Deny"
+        Action   = ["backup:CopyIntoBackupVault", "backup:StartCopyJob", "backup:StartRestoreJob"]
         Resource = "*"
         Condition = {
           StringNotEquals = {
