@@ -98,6 +98,14 @@ export class TextExtractionService {
       ruleSetVersion: "privacy-detector-v1",
     });
     if (privacy.decision !== "allow") throw new TextExtractionError("PRIVACY_BOUNDARY_BLOCKED");
+    const persistencePrivacy = await this.privacy.evaluateText({
+      boundary: "server_draft_persistence",
+      content: input.text,
+      ruleSetVersion: "privacy-detector-v1",
+    });
+    if (persistencePrivacy.decision !== "allow") {
+      throw new TextExtractionError("PRIVACY_BOUNDARY_BLOCKED");
+    }
 
     const providerResult = await boundedExtract(this.extraction, input);
     const owned = await withAccountTransaction(this.pool, accountId, async (transaction) => {

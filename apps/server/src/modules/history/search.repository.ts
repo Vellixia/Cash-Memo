@@ -167,7 +167,7 @@ export class SearchRepository {
       const result = await this.privacy.evaluateText({
         boundary: "search_execution",
         content: input.query,
-        ruleSetVersion: "privacy-rules-v1",
+        ruleSetVersion: "privacy-detector-v1",
       });
       if (result.decision !== "allow") {
         throw new SearchRepositoryError("PRIVACY_BOUNDARY_BLOCKED");

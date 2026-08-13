@@ -3,6 +3,12 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 const API = "http://localhost:3000";
 const MAILPIT = "http://localhost:8025";
 const SYNTHETIC_PASSWORD = "Acceptance-Password-1!";
+const RUN_SCOPE = crypto.randomUUID().slice(0, 8);
+
+function scopedEmail(email: string): string {
+  const separator = email.indexOf("@");
+  return `${email.slice(0, separator)}+${RUN_SCOPE}${email.slice(separator)}`;
+}
 
 async function signupAndVerify(
   request: APIRequestContext,
@@ -62,8 +68,9 @@ async function signupVerifyAndLogin(
   email: string,
   password: string,
 ): Promise<string> {
-  await signupAndVerify(request, email, password);
-  return loginAndGetCookie(request, email, password);
+  const isolatedEmail = scopedEmail(email);
+  await signupAndVerify(request, isolatedEmail, password);
+  return loginAndGetCookie(request, isolatedEmail, password);
 }
 
 async function reauthenticateForPurge(request: APIRequestContext, cookie: string): Promise<string> {

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { detectTextV1 } from "@cashmemo/privacy-rules";
-
 import type { AssistedCaptureApiPort, AssistedDraftView } from "../../app/journal-api.js";
+import { evaluateBrowserPrivacy } from "../../privacy/privacy-boundary.js";
 import { AssistedDraftReview } from "./AssistedDraftReview.js";
 import { CapabilityStatus } from "../degraded/CapabilityStatus.js";
 import { IndexedDbDraftStorage, RecoverableDraftStore } from "../degraded/recoverable-draft.js";
@@ -39,7 +38,7 @@ export function NaturalLanguageCapture({
 
   async function extract() {
     setState("checking");
-    const result = detectTextV1(text);
+    const result = evaluateBrowserPrivacy("typed_text_ai_transmission", text);
     if (result.decision === "block_match") {
       setState("blocked");
       return;
@@ -78,11 +77,13 @@ export function NaturalLanguageCapture({
         onChange={(event) => {
           const value = event.target.value;
           setText(value);
-          void store.save({
-            idempotencyKey: retryIdentity.current,
-            sourceText: value,
-            status: "editing",
-          });
+          if (evaluateBrowserPrivacy("device_draft_persistence", value).decision === "allow") {
+            void store.save({
+              idempotencyKey: retryIdentity.current,
+              sourceText: value,
+              status: "editing",
+            });
+          }
         }}
         value={text}
       />

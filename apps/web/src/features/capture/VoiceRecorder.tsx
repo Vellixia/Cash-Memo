@@ -105,6 +105,7 @@ export function VoiceRecorder({ api }: { readonly api: AssistedCaptureApiPort })
   return (
     <section data-testid="voice-recorder">
       <h3>Voice-assisted draft</h3>
+      <p>Do not speak bank credentials, card numbers, PINs, OTPs, or other sensitive data.</p>
       <ProviderConsent checked={consent} mode="voice" onChange={setConsent} />
       <p data-testid="recording-limit">Recording limit: 60 seconds.</p>
       <p aria-live="polite">

@@ -330,7 +330,7 @@ export class LabelsService {
     const evaluation = await this.privacy.evaluateText({
       boundary: "label_persistence",
       content: input,
-      ruleSetVersion: "privacy-rules-v1",
+      ruleSetVersion: "privacy-detector-v1",
     });
     if (evaluation.decision !== "allow") {
       throw new LabelServiceError("PRIVACY_BOUNDARY_BLOCKED");

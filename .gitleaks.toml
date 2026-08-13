@@ -25,6 +25,22 @@ condition = "OR"
 paths = ['''pnpm-lock\.yaml''']
 
 [[allowlists]]
+description = "Build outputs are scanned through their authoritative source and image stages"
+condition = "OR"
+paths = ['''(?:^|/)dist/''']
+
+[[allowlists]]
+description = "Versioned synthetic detector corpus intentionally contains prohibited-data examples"
+condition = "OR"
+paths = ['''(?:^|/)packages/privacy-rules/fixtures/corpus-v1\.json$''']
+
+[[allowlists]]
+description = "Canonical public all-zero synthetic test identifier"
+condition = "OR"
+regexTarget = "match"
+regexes = ['''00000000-0000-7000-8000-000000000001''']
+
+[[allowlists]]
 description = "Locally generated, git-ignored HTTPS material is checked by the tracked-file guard"
 condition = "OR"
 paths = ['''(?:^|/)\.secrets/local-dev/(?:localhost|cashmemo-local-ca)\.(?:key|crt)$''']

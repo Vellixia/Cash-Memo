@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -9,7 +11,7 @@ import { IdentityService } from "../../src/modules/identity/identity.service.js"
 import { applyMigrations } from "./support/postgres-migrations.js";
 import { startTestEnvironment, type TestEnvironment } from "./support/test-environment.js";
 
-const TEST_SECRET = "cashmemo-identity-boundary-secret-v1";
+const TEST_SECRET = "synthetic-fixture-identity-boundary-v1";
 const IDEMPOTENCY_HMAC_KEY = Buffer.alloc(32, 17);
 
 const delivery: BetterAuthDeliveryCallbacks = {
@@ -164,7 +166,7 @@ describe("identity service with dedicated identity role", { concurrent: false },
     await expect(
       identity.signUp({
         email: "identity-signup@example.test",
-        idempotencyKey: "0198a6d8-1a30-7c55-a5b1-a3f27f8234f1",
+        idempotencyKey: randomUUID(),
         password: "Synthetic-Password-1!",
       }),
     ).resolves.toEqual({
@@ -184,7 +186,7 @@ describe("identity service with dedicated identity role", { concurrent: false },
   it("persists user and credential account through identity role", async () => {
     await identity.signUp({
       email: "persist-check@example.test",
-      idempotencyKey: "0198a6d8-2a30-7c55-a5b1-a3f27f8234f2",
+      idempotencyKey: randomUUID(),
       password: "Synthetic-Password-2!",
     });
 
@@ -218,14 +220,14 @@ describe("identity service with dedicated identity role", { concurrent: false },
     const email = "duplicate-check@example.test";
     await identity.signUp({
       email,
-      idempotencyKey: "0198a6d8-3a30-7c55-a5b1-a3f27f8234f3",
+      idempotencyKey: randomUUID(),
       password: "Synthetic-Password-3!",
     });
 
     await expect(
       identity.signUp({
         email,
-        idempotencyKey: "0198a6d8-4a30-7c55-a5b1-a3f27f8234f4",
+        idempotencyKey: randomUUID(),
         password: "Synthetic-Password-4!",
       }),
     ).resolves.toEqual({

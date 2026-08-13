@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -14,7 +16,7 @@ import {
   type TestEnvironment,
 } from "../../apps/server/tests/integration/support/test-environment.js";
 
-const TEST_SECRET = "cashmemo-isolation-test-secret-v1";
+const TEST_SECRET = "synthetic-fixture-isolation-secret-v1";
 const IDEMPOTENCY_HMAC_KEY = Buffer.alloc(32, 17);
 
 const delivery: BetterAuthDeliveryCallbacks = {
@@ -188,7 +190,7 @@ describe("US1 two-account isolation", { concurrent: false }, () => {
   it("proves signup cannot provide a route to product-data access", async () => {
     await identityA.signUp({
       email: "isolation-signup@example.test",
-      idempotencyKey: "0198a6d8-cc00-7c55-a5b1-a3f27f8234c1",
+      idempotencyKey: randomUUID(),
       password: "Isolation-Pass-C1!",
     });
 

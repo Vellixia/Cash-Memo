@@ -353,23 +353,23 @@
 
 **Purpose**: Structural Constitution 2.0.0 enforcement across every boundary and complete security/isolation matrix.
 
-- [ ] T202 [P] Enumerate and test device draft, server draft, typed provider, transcript persistence/AI, note, label, search, support, and evidence boundary matrix in `tests/privacy/boundary-matrix.spec.ts` (FR-074–FR-077)
-- [ ] T203 Implement browser/server boundary adapters so detector matches block before each covered persistence/query/provider operation in `apps/server/src/modules/privacy/privacy-boundary.service.ts` and `apps/web/src/privacy/privacy-boundary.ts` (FR-075)
-- [ ] T204 Implement allowlist-only logger/metric/trace/client-diagnostic APIs with fixed enums and no general serializer in `apps/server/src/adapters/telemetry/safe-telemetry.ts` and `apps/web/src/privacy/safe-client-diagnostics.ts` (FR-078, FR-079)
-- [ ] T205 [P] Build seeded privacy-canary scanner for logs, traces, metrics, errors, URLs, evidence, job rows, client reports, and provider captures in `packages/test-support/src/privacy/canary-scanner.ts` (FR-078, FR-104; SC-016)
-- [ ] T206 Run success/failure/retry/invalid/export/deletion/crash canaries through every declared diagnostic channel in `tests/privacy/diagnostic-channels.spec.ts` (FR-078, FR-079; SC-016)
-- [ ] T207 [P] Add static OpenAPI/DB/UI/email/copy scan proving zero dedicated prohibited fields/solicitation and adjacent guidance in `tests/privacy/interface-surface.spec.ts` (FR-073, FR-074; SC-017)
-- [ ] T208 Publish versioned detector precision/recall, languages, false-positive/false-negative limits, and forbidden completeness claims in `docs/privacy/detector-v1-limitations.md` (FR-076, FR-077; SC-017)
-- [ ] T209 Test and document explicit raw-voice-to-approved-STT-before-text-detection limitation and minimization in `tests/privacy/voice-boundary.spec.ts` and `docs/privacy/voice-processing.md` (FR-076, FR-086)
-- [ ] T210 Create prohibited-persisted-content incident procedure with containment, user correction/deletion, provider review, evidence protection, and governance approval in `ops/runbooks/privacy-incident.md` (FR-090)
-- [ ] T211 [P] Execute full endpoint/RLS/FK/S3/audio/deletion IDOR matrix, missing/forged context, pool reset, and maintenance-role separation in `tests/security/cross-user-isolation.spec.ts` (FR-010, FR-060, FR-081, FR-082; SC-015)
-- [ ] T212 [P] Test session fixation/rotation/revocation, CSRF/origin, cookie flags, reset/verification replay, enumeration timing/shape, and token telemetry exclusion in `tests/security/authentication.spec.ts` (FR-001–FR-003, FR-008)
-- [ ] T213 Implement and test account/global rate/spend controls for auth, capture, extraction, search, export, and deletion without cross-user leakage in `apps/server/src/modules/operations/abuse-controls.ts` (FR-087)
-- [ ] T214 [P] Test malicious schemas/provider output, oversized text/audio, MIME spoofing, SQL/search metacharacters, ZIP/CSV injection, and Unicode controls in `tests/security/untrusted-inputs.spec.ts` (FR-080)
-- [ ] T215 Implement and verify CSRF/origin enforcement, CSP, HSTS, frame/referrer/content-type headers, and secure download policy in `apps/server/src/adapters/http/security-boundary.ts`
-- [ ] T216 Integrate dependency/image/IaC/SBOM/license/secret scans as blocking security gates in `.github/workflows/security.yml` (FR-083, FR-116)
-- [ ] T217 Run privacy suite and write only scanned aggregate evidence to `ops/evidence/privacy/privacy-gate.json` (FR-073–FR-086; SC-016, SC-017)
-- [ ] T218 Run security/isolation suite and write content-safe evidence to `ops/evidence/security/security-gate.json` (SC-015)
+- [x] T202 [P] Enumerate and test device draft, server draft, typed provider, transcript persistence/AI, note, label, search, support, and evidence boundary matrix in `tests/privacy/boundary-matrix.spec.ts` (FR-074–FR-077)
+- [x] T203 Implement browser/server boundary adapters so detector matches block before each covered persistence/query/provider operation in `apps/server/src/modules/privacy/privacy-boundary.service.ts` and `apps/web/src/privacy/privacy-boundary.ts` (FR-075)
+- [x] T204 Implement allowlist-only logger/metric/trace/client-diagnostic APIs with fixed enums and no general serializer in `apps/server/src/adapters/telemetry/safe-telemetry.ts` and `apps/web/src/privacy/safe-client-diagnostics.ts` (FR-078, FR-079)
+- [x] T205 [P] Build seeded privacy-canary scanner for logs, traces, metrics, errors, URLs, evidence, job rows, client reports, and provider captures in `packages/test-support/src/privacy/canary-scanner.ts` (FR-078, FR-104; SC-016)
+- [x] T206 Run success/failure/retry/invalid/export/deletion/crash canaries through every declared diagnostic channel in `tests/privacy/diagnostic-channels.spec.ts` (FR-078, FR-079; SC-016)
+- [x] T207 [P] Add static OpenAPI/DB/UI/email/copy scan proving zero dedicated prohibited fields/solicitation and adjacent guidance in `tests/privacy/interface-surface.spec.ts` (FR-073, FR-074; SC-017)
+- [x] T208 Publish versioned detector precision/recall, languages, false-positive/false-negative limits, and forbidden completeness claims in `docs/privacy/detector-v1-limitations.md` (FR-076, FR-077; SC-017)
+- [x] T209 Test and document explicit raw-voice-to-approved-STT-before-text-detection limitation and minimization in `tests/privacy/voice-boundary.spec.ts` and `docs/privacy/voice-processing.md` (FR-076, FR-086)
+- [x] T210 Create prohibited-persisted-content incident procedure with containment, user correction/deletion, provider review, evidence protection, and governance approval in `ops/runbooks/privacy-incident.md` (FR-090)
+- [x] T211 [P] Execute full endpoint/RLS/FK/S3/audio/deletion IDOR matrix, missing/forged context, pool reset, and maintenance-role separation in `tests/security/cross-user-isolation.spec.ts` (FR-010, FR-060, FR-081, FR-082; SC-015)
+- [x] T212 [P] Test session fixation/rotation/revocation, CSRF/origin, cookie flags, reset/verification replay, enumeration timing/shape, and token telemetry exclusion in `tests/security/authentication.spec.ts` (FR-001–FR-003, FR-008)
+- [x] T213 Implement and test account/global rate/spend controls for auth, capture, extraction, search, export, and deletion without cross-user leakage in `apps/server/src/modules/operations/abuse-controls.ts` (FR-087)
+- [x] T214 [P] Test malicious schemas/provider output, oversized text/audio, MIME spoofing, SQL/search metacharacters, ZIP/CSV injection, and Unicode controls in `tests/security/untrusted-inputs.spec.ts` (FR-080)
+- [x] T215 Implement and verify CSRF/origin enforcement, CSP, HSTS, frame/referrer/content-type headers, and secure download policy in `apps/server/src/adapters/http/security-boundary.ts`
+- [x] T216 Integrate dependency/image/IaC/SBOM/license/secret scans as blocking security gates in `.github/workflows/security.yml` (FR-083, FR-116)
+- [x] T217 Run privacy suite and write only scanned aggregate evidence to `ops/evidence/privacy/privacy-gate.json` (FR-073–FR-086; SC-016, SC-017)
+- [x] T218 Run security/isolation suite and write content-safe evidence to `ops/evidence/security/security-gate.json` (SC-015)
 
 **Checkpoint**: Constitution privacy boundary is structural and tested; no semantic-completeness claim exists.
 

@@ -47,7 +47,7 @@ describe("draft recovery: local/server draft lifecycle (FR-041, FR-048, FR-111)"
 
   it("pending idempotency key is preserved in local draft", () => {
     const draft = {
-      idempotencyKey: "0198a6d8-0000-7c55-a5b1-a3f27f8234f1",
+      idempotencyKey: "00000000-0000-7000-8000-000000000001",
       sourceText: "synthetic expense",
     };
     expect(draft.idempotencyKey).toMatch(

@@ -448,6 +448,7 @@ async function runGate(gate) {
     "privacy-security": async () => {
       await runVitestSuite("privacy");
       await runVitestSuite("security");
+      await runArtifactScript("scripts/verify/write-phase14-gates.ts", "phase14:evidence");
     },
     "typecheck-drift": async () => {
       await runTypecheck();

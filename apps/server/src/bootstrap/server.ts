@@ -5,7 +5,6 @@ import { Pool } from "pg";
 import Fastify from "fastify";
 
 import { canonicalRequestHmac } from "@cashmemo/domain";
-import { FinitePrivacyBoundary } from "@cashmemo/privacy-rules";
 
 import { parseEnvironment } from "./environment.schema.js";
 import { resolveCapabilityMode } from "./capability-mode.js";
@@ -53,6 +52,11 @@ import { ConfirmDraftService } from "../modules/assisted-capture/confirm-draft.s
 import { AudioSweeper } from "../modules/operations/audio-sweeper.js";
 import { BackgroundJobRepository } from "../modules/operations/background-jobs.js";
 import { ContractExportObjectStore } from "../adapters/aws/export-object-store.adapter.js";
+import {
+  allowedOrigins,
+  privateSecurityHeaders,
+  requireSameOrigin,
+} from "../adapters/http/security-boundary.js";
 import { ExportJobService } from "../modules/export/export-job.service.js";
 import { registerExportRoutes } from "../modules/export/export.controller.js";
 import { ContractDeletionSuppressionPort } from "../modules/deletion/deletion-suppression.port.js";
@@ -61,6 +65,8 @@ import { AccountPurgeWorker } from "../modules/deletion/account-purge.worker.js"
 import { AccountDeletionService } from "../modules/deletion/account-deletion.service.js";
 import { registerAccountDeletionRoutes } from "../modules/deletion/account-deletion.controller.js";
 import { ProviderDeletionService } from "../modules/deletion/provider-deletion.service.js";
+import { PrivacyBoundaryService } from "../modules/privacy/privacy-boundary.service.js";
+import { AbuseControls, abuseOperationForRequest } from "../modules/operations/abuse-controls.js";
 
 void dirname(fileURLToPath(import.meta.url));
 
@@ -148,7 +154,8 @@ async function main() {
 
   const sessions = new SessionService({ auth, pool: runtimePool });
   const onboarding = new OnboardingService({ pool: runtimePool });
-  const privacy = new FinitePrivacyBoundary();
+  const privacy = new PrivacyBoundaryService();
+  const abuseControls = new AbuseControls(Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"));
   const labels = new LabelsService({
     idempotencyHmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
     pool: runtimePool,
@@ -286,13 +293,45 @@ async function main() {
   });
 
   // CORS — production uses APP_ORIGIN only; local dev also allows HTTP/HTTPS localhost
-  const allowedOrigins =
-    env.APP_ENV === "local"
-      ? [env.APP_ORIGIN, "http://localhost:5173", "https://localhost:5173"]
-      : [env.APP_ORIGIN];
+  const securityEnvironment = { appOrigin: env.APP_ORIGIN, environment: env.APP_ENV } as const;
+  const configuredOrigins = allowedOrigins(securityEnvironment);
   await app.register(import("@fastify/cors"), {
     credentials: true,
-    origin: allowedOrigins,
+    origin: [...configuredOrigins],
+  });
+
+  app.addHook("onRequest", async (request, reply) => {
+    const originRequired = env.APP_ENV === "production" || env.APP_ENV === "staging";
+    if (
+      (originRequired || request.headers.origin !== undefined) &&
+      requireSameOrigin({
+        configuration: securityEnvironment,
+        method: request.method,
+        origin: request.headers.origin,
+      }) === "blocked"
+    ) {
+      await reply.code(403).send({ messageCode: "ORIGIN_NOT_ALLOWED" });
+    }
+  });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    for (const [name, value] of Object.entries(
+      privateSecurityHeaders(env.APP_ORIGIN.startsWith("https://")),
+    )) {
+      if (!reply.hasHeader(name)) void reply.header(name, value);
+    }
+    return payload;
+  });
+  app.addHook("preHandler", async (request, reply) => {
+    const operation = abuseOperationForRequest(request.method, request.url);
+    if (operation === null) return;
+    const opaquePrincipal = request.headers.cookie ?? request.ip;
+    const decision = abuseControls.check(operation, opaquePrincipal);
+    if (!decision.allowed) {
+      if (decision.retryAfterSeconds !== null) {
+        void reply.header("Retry-After", String(decision.retryAfterSeconds));
+      }
+      await reply.code(429).send({ messageCode: decision.code });
+    }
   });
 
   const suspendedJournalPrefixes = [
@@ -797,6 +836,15 @@ async function main() {
         reply.code(400).send({ messageCode: "VALIDATION_ERROR" });
         return;
       }
+      const privacyDecision = await privacy.evaluateText({
+        boundary: "memo_note_persistence",
+        content: body.note ?? "",
+        ruleSetVersion: "privacy-detector-v1",
+      });
+      if (privacyDecision.decision !== "allow") {
+        reply.code(422).send({ messageCode: "PRIVACY_BOUNDARY_BLOCKED" });
+        return;
+      }
       const requestHmac = canonicalRequestHmac({
         hmacKey: Buffer.from(env.AUTH_TOKEN_HMAC_KEY, "utf8"),
         operation: "memo_create",
@@ -929,6 +977,15 @@ async function main() {
       note: string | null;
     };
     try {
+      const privacyDecision = await privacy.evaluateText({
+        boundary: "memo_note_persistence",
+        content: body.note ?? "",
+        ruleSetVersion: "privacy-detector-v1",
+      });
+      if (privacyDecision.decision !== "allow") {
+        reply.code(422).send({ messageCode: "PRIVACY_BOUNDARY_BLOCKED" });
+        return;
+      }
       const memo = await withAccountTransaction(runtimePool, ctx.accountId, async (tx) => {
         return updateMoneyMemo(
           tx,

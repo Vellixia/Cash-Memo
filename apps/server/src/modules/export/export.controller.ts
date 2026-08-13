@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
+import { secureDownloadHeaders } from "../../adapters/http/security-boundary.js";
 import type { SessionService } from "../identity/session.service.js";
 import { ExportJobServiceError, type ExportJobService } from "./export-job.service.js";
 
@@ -159,16 +160,7 @@ function registerExportRoutes(
     try {
       const exportId = (request.params as { exportId: string }).exportId;
       const stream = await options.exports.download(session.accountId, exportId);
-      await reply
-        .headers({
-          "Content-Disposition": `attachment; filename="cashmemo-export-${new Date()
-            .toISOString()
-            .slice(0, 10)}.zip"`,
-          "Content-Type": "application/zip",
-          "X-Content-Type-Options": "nosniff",
-        })
-        .code(200)
-        .send(stream);
+      await reply.headers(secureDownloadHeaders("cashmemo-export.zip")).code(200).send(stream);
     } catch (error) {
       sendExportError(reply, error);
     }

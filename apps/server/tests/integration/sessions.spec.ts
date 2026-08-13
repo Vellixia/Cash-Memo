@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -11,13 +13,17 @@ import { IdentityService } from "../../src/modules/identity/identity.service.js"
 import { applyMigrations } from "./support/postgres-migrations.js";
 import { startTestEnvironment, type TestEnvironment } from "./support/test-environment.js";
 
-const TEST_SECRET = "cashmemo-session-test-secret-v1";
+const TEST_SECRET = "cashmemo-session-test-secret-v1-0000";
 const IDEMPOTENCY_HMAC_KEY = Buffer.alloc(32, 17);
 const SEVEN_DAYS_MS = BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+let deliveredResetToken: string | null = null;
 const delivery: BetterAuthDeliveryCallbacks = {
-  sendPasswordReset: () => Promise.resolve(),
+  sendPasswordReset: (input) => {
+    deliveredResetToken = input.token;
+    return Promise.resolve();
+  },
   sendVerification: () => Promise.resolve(),
 };
 
@@ -73,10 +79,7 @@ describe("session lifecycle and ReauthGrant", { concurrent: false }, () => {
   async function createVerifiedUser(email: string, password: string): Promise<string> {
     await identity.signUp({
       email,
-      idempotencyKey: `0198a6d8-0000-7c55-a5b1-${email
-        .slice(0, 12)
-        .replace(/[^a-f0-9]/g, "0")
-        .padStart(12, "0")}`,
+      idempotencyKey: randomUUID(),
       password,
     });
     const userResult = await migrationPool.query<{ id: string }>(
@@ -173,11 +176,8 @@ describe("session lifecycle and ReauthGrant", { concurrent: false }, () => {
     await loginUser(email, "Session-Pass-4!");
 
     await identity.requestPasswordReset({ email });
-    const resetRows = await migrationPool.query<{ value: string }>(
-      `SELECT value FROM verification_tokens WHERE identifier IS NOT NULL ORDER BY created_at DESC LIMIT 1`,
-    );
-    const resetToken = resetRows.rows[0]?.value;
-    if (resetToken === undefined) throw new Error("reset token not found");
+    const resetToken = deliveredResetToken;
+    if (resetToken === null) throw new Error("reset token not found");
 
     await identity.completePasswordReset({ newPassword: "Session-Pass-5!", token: resetToken });
 
