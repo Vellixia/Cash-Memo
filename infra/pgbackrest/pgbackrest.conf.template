@@ -1,7 +1,7 @@
 [global]
 repo1-type=s3
 repo1-s3-endpoint=${RUSTFS_SECONDARY_HOST}
-repo1-s3-bucket=${RUSTFS_SECONDARY_BUCKET}
+repo1-s3-bucket=${PGBACKREST_REPOSITORY_BUCKET}
 repo1-s3-key=${RUSTFS_SECONDARY_ACCESS_KEY}
 repo1-s3-key-secret=${RUSTFS_SECONDARY_SECRET_KEY}
 repo1-s3-region=${RUSTFS_SECONDARY_REGION}

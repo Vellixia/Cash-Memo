@@ -1,31 +1,34 @@
 {
   "schemaVersion": "cashmemo-pgbackrest-jobs-v1",
-  "imageIdentity": "PGBACKREST_IMAGE_DIGEST_REQUIRED",
+  "imageIdentity": "ghcr.io/vellixia/cashmemo-pgbackrest@sha256:REQUIRED",
   "jobs": [
     {
       "id": "repository-check",
       "schedule": "*/15 * * * *",
-      "arguments": ["--stanza=cashmemo", "check"]
+      "arguments": ["check"]
     },
     {
       "id": "differential-backup",
       "schedule": "17 1 * * 1-6",
-      "arguments": ["--stanza=cashmemo", "--type=diff", "backup"]
+      "arguments": ["backup-diff"]
     },
     {
       "id": "full-backup",
       "schedule": "17 1 * * 0",
-      "arguments": ["--stanza=cashmemo", "--type=full", "backup"]
+      "arguments": ["backup-full"]
     },
     {
       "id": "repository-expire",
       "schedule": "47 2 * * *",
-      "arguments": ["--stanza=cashmemo", "expire"]
+      "arguments": ["expire"]
     }
   ],
   "walArchiving": {
     "postgresqlArchiveMode": "on",
-    "archiveCommand": "pgbackrest --stanza=cashmemo archive-push %p",
+    "archiveCommand": "node /usr/local/lib/cashmemo/pgbackrest-entrypoint.mjs archive-push %p",
+    "requiresPgBackRestClientInsidePostgreSQLRuntime": true,
+    "existingPostgreSQLImageIncludesClient": false,
+    "deploymentStatus": "BLOCKED_POSTGRES_ARCHIVE_CLIENT_COLOCATION",
     "proofRequired": true
   }
 }

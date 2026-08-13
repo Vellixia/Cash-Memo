@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.12
 ARG BASE_IMAGE=node:24.14.0-bookworm-slim@sha256:d8e448a56fc63242f70026718378bd4b00f8c82e78d20eefb199224a4d8e33d8
+ARG RELEASE_SHA=0000000000000000000000000000000000000000
+ARG BUILD_VERSION=0.0.0
 FROM ${BASE_IMAGE} AS build
 
 ARG PGBACKREST_VERSION=2.59.0
@@ -15,6 +17,8 @@ RUN apt-get update \
     && DESTDIR=/tmp/root ninja -C /tmp/pgbackrest/build install
 
 FROM ${BASE_IMAGE} AS runtime
+ARG RELEASE_SHA
+ARG BUILD_VERSION
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates libbz2-1.0 liblz4-1 libpq5 libssh2-1 libssl3 libxml2 libyaml-0-2 libzstd1 \
     && rm -rf /var/lib/apt/lists/* \
@@ -22,6 +26,15 @@ RUN apt-get update \
     && useradd --system --uid 10002 --gid pgbackrest --home-dir /nonexistent --shell /usr/sbin/nologin pgbackrest \
     && install -d -o pgbackrest -g pgbackrest /etc/pgbackrest /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest
 COPY --from=build /tmp/root/usr/local/bin/pgbackrest /usr/local/bin/pgbackrest
+COPY --chown=pgbackrest:pgbackrest infra/pgbackrest/entrypoint.mjs /usr/local/lib/cashmemo/pgbackrest-entrypoint.mjs
+LABEL org.opencontainers.image.title="cashmemo-pgbackrest" \
+      org.opencontainers.image.revision="${RELEASE_SHA}" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      dev.cashmemo.pgbackrest.version="2.59.0" \
+      dev.cashmemo.runtime.uid="10002" \
+      dev.cashmemo.runtime.root-filesystem="read-only-required"
 USER 10002:10002
-ENTRYPOINT ["pgbackrest"]
+VOLUME ["/tmp", "/var/lib/pgbackrest", "/var/spool/pgbackrest"]
+ENTRYPOINT ["node", "/usr/local/lib/cashmemo/pgbackrest-entrypoint.mjs"]
+HEALTHCHECK --interval=60s --timeout=15s --start-period=30s --retries=3 CMD ["node", "/usr/local/lib/cashmemo/pgbackrest-entrypoint.mjs", "health"]
 CMD ["version"]
