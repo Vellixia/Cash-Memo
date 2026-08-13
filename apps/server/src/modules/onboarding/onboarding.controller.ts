@@ -1,9 +1,9 @@
 import type { OnboardingService } from "./onboarding.service.js";
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 
 export interface OnboardingControllerDeps {
   onboarding: OnboardingService;
-  sessions: SessionService;
+  sessions: SessionAuthenticationPort;
 }
 
 export function createOnboardingController(deps: Readonly<OnboardingControllerDeps>) {

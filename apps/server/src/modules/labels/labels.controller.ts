@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 import {
   LabelServiceError,
   type CategoryKind,
@@ -12,7 +12,7 @@ import {
 
 export interface LabelControllerOptions {
   readonly labels: LabelsService;
-  readonly sessions: SessionService;
+  readonly sessions: SessionAuthenticationPort;
 }
 
 function requestHeaders(request: FastifyRequest): Headers {
@@ -26,7 +26,7 @@ function requestHeaders(request: FastifyRequest): Headers {
 async function accountId(
   request: FastifyRequest,
   reply: FastifyReply,
-  sessions: SessionService,
+  sessions: SessionAuthenticationPort,
 ): Promise<string | null> {
   const context = await sessions.authenticate(requestHeaders(request));
   if (context !== null) return context.accountId;

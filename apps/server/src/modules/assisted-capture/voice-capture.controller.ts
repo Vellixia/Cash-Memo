@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { SessionService } from "../identity/session.service.js";
-import { getDraft, updateDraft } from "../draft/draft.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
+import { getDraft, updateDraft } from "../draft/application/ports/draft-store.port.js";
 import type { Pool } from "pg";
 import { TextExtractionError, type TextExtractionService } from "./text-extraction.service.js";
 import type { SupportedAudioMediaType } from "./provider-ports.js";
@@ -12,7 +12,7 @@ import { DraftConfirmationError, type ConfirmDraftService } from "./confirm-draf
 interface Options {
   readonly pool: Pool;
   readonly confirmation: ConfirmDraftService;
-  readonly sessions: SessionService;
+  readonly sessions: SessionAuthenticationPort;
   readonly text: TextExtractionService;
   readonly voice: VoiceCaptureService;
 }
@@ -25,7 +25,11 @@ function headers(request: FastifyRequest): Headers {
   return result;
 }
 
-async function owner(request: FastifyRequest, reply: FastifyReply, sessions: SessionService) {
+async function owner(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  sessions: SessionAuthenticationPort,
+) {
   const session = await sessions.authenticate(headers(request));
   if (session !== null) return session.accountId;
   await reply.code(401).send({ messageCode: "UNAUTHENTICATED" });

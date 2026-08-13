@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 import { privateNoStore } from "./current-month.controller.js";
 import type { MonthlyReviewView } from "./monthly-review.service.js";
 
@@ -12,7 +12,7 @@ interface MonthlyReviewReader {
 
 interface MonthlyReviewControllerOptions {
   readonly monthlyReview: MonthlyReviewReader;
-  readonly sessions: Pick<SessionService, "authenticate">;
+  readonly sessions: Pick<SessionAuthenticationPort, "authenticate">;
 }
 
 const CANONICAL_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/u;

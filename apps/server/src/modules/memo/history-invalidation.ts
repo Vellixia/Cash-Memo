@@ -1,5 +1,5 @@
 import type { AccountTransaction } from "../../adapters/postgres/transaction-context.js";
-import { incrementHistoryListVersionInTransaction } from "../history/history-list-state.repository.js";
+import { incrementHistoryListVersionInTransaction } from "../history/application/ports/history-invalidation.port.js";
 
 export async function invalidateHistoryOnCreate(
   tx: AccountTransaction,

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import { canonicalRequestHmac } from "@cashmemo/domain";
-import { APIError } from "better-auth/api";
+import { APIError } from "better-auth";
 import type { Pool, PoolClient } from "pg";
 
 import {

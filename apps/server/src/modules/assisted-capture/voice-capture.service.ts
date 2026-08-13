@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
 import { withAccountTransaction } from "../../adapters/postgres/transaction-context.js";
-import { createDraft } from "../draft/draft.service.js";
+import { createDraft } from "../draft/application/ports/draft-store.port.js";
 import { requireProviderConsent, requireVoiceLimitationDisclosure } from "./consent-policy.js";
 import type { SttPort, SupportedAudioMediaType } from "./provider-ports.js";
 import { type TemporaryAudioService } from "./temporary-audio.service.js";

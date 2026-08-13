@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 import type { PrivacyBoundaryPort } from "@cashmemo/privacy-rules";
 
 import { withAccountTransaction } from "../../adapters/postgres/transaction-context.js";
-import { createDraft, type ComposeDraftView } from "../draft/draft.service.js";
+import { createDraft, type ComposeDraftView } from "../draft/application/ports/draft-store.port.js";
 import { validateExtractionOutput } from "./extraction-validation.js";
 import type { ExtractionPort, ExtractionResult } from "./provider-ports.js";
 

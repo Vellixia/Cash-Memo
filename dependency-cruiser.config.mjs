@@ -104,6 +104,10 @@ const config = {
     exclude: { path: "(?:^|/)(?:dist|build|coverage|generated)(?:/|$)" },
     tsConfig: { fileName: "tsconfig.base.json" },
     tsPreCompilationDeps: true,
+    enhancedResolveOptions: {
+      conditionNames: ["import", "require", "node", "default", "types"],
+      exportsFields: ["exports"],
+    },
   },
 };
 

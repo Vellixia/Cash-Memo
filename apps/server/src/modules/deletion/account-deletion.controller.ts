@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 import {
   AccountDeletionServiceError,
   type AccountDeletionService,
@@ -10,7 +10,7 @@ import {
 
 interface AccountDeletionControllerOptions {
   readonly deletions: AccountDeletionService;
-  readonly sessions: Pick<SessionService, "authenticate" | "consumeReauthGrant">;
+  readonly sessions: Pick<SessionAuthenticationPort, "authenticate" | "consumeReauthGrant">;
 }
 
 function headers(request: FastifyRequest): Headers {

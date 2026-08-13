@@ -1,4 +1,4 @@
-import type { TemporaryAudioService } from "../assisted-capture/temporary-audio.service.js";
+import type { AudioLifecyclePort } from "../assisted-capture/application/ports/audio-lifecycle.port.js";
 
 export interface AudioSweepResult {
   readonly cleanupFailures: number;
@@ -6,14 +6,14 @@ export interface AudioSweepResult {
 }
 
 export class AudioSweeper {
-  private readonly audio: TemporaryAudioService;
+  private readonly audio: AudioLifecyclePort;
   private readonly alert: (code: "AUDIO_DELETE_FAILED") => void;
   private readonly now: () => Date;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(options: {
     readonly alert?: (code: "AUDIO_DELETE_FAILED") => void;
-    readonly audio: TemporaryAudioService;
+    readonly audio: AudioLifecyclePort;
     readonly now?: () => Date;
   }) {
     this.alert = options.alert ?? (() => undefined);

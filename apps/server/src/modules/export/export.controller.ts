@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { secureDownloadHeaders } from "../../adapters/http/security-boundary.js";
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 import { ExportJobServiceError, type ExportJobService } from "./export-job.service.js";
 
 interface ExportControllerOptions {
   readonly exports: ExportJobService;
-  readonly sessions: Pick<SessionService, "authenticate" | "consumeReauthGrant">;
+  readonly sessions: Pick<SessionAuthenticationPort, "authenticate" | "consumeReauthGrant">;
   readonly workerId?: string;
 }
 

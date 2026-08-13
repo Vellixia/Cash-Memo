@@ -14,7 +14,7 @@ import {
   mapMoneyMemoRow,
   type MoneyMemoInput,
   type MoneyMemoView,
-} from "../memo/money-memo.service.js";
+} from "../memo/application/ports/money-memo.port.js";
 
 export class DraftConfirmationError extends Error {
   constructor(

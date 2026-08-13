@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 
 import type { Pool } from "pg";
 
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 import {
   queryFirstPage,
   queryContinuation,
@@ -16,7 +16,7 @@ import { SearchRepositoryError, type SearchRepository } from "./search.repositor
 
 export interface HistoryControllerOptions {
   pool: Pool;
-  sessions: SessionService;
+  sessions: SessionAuthenticationPort;
   cursorCodec: CursorCodecOptions;
   searchRepository?: SearchRepository;
   traversalOptions: VersionedTraversalOptions;

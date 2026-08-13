@@ -14,7 +14,7 @@ import type { Pool, QueryResultRow } from "pg";
 
 import type { ExportObjectStore } from "../../adapters/rustfs/export-object-store.adapter.js";
 import { withAccountTransaction } from "../../adapters/postgres/transaction-context.js";
-import type { BackgroundJobRepository } from "../operations/background-jobs.js";
+import type { BackgroundJobPort } from "../operations/application/ports/background-job.port.js";
 import {
   serializeExportV1,
   type ExportCategory,
@@ -48,7 +48,7 @@ interface ExportRequest {
 }
 
 interface ExportJobServiceOptions {
-  readonly backgroundJobs: BackgroundJobRepository;
+  readonly backgroundJobs: BackgroundJobPort;
   readonly hmacKey: Buffer;
   readonly now?: () => Date;
   readonly objectReferenceKey: Buffer;
@@ -171,7 +171,7 @@ async function readStream(stream: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 class ExportJobService {
-  private readonly backgroundJobs: BackgroundJobRepository;
+  private readonly backgroundJobs: BackgroundJobPort;
   private readonly hmacKey: Buffer;
   private readonly now: () => Date;
   private readonly objectReferenceKey: Buffer;

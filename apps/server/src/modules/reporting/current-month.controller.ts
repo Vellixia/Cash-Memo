@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { SessionService } from "../identity/session.service.js";
+import type { SessionAuthenticationPort } from "../identity/application/ports/session-authentication.port.js";
 import type { CurrentMonthOverview } from "./current-month.service.js";
 
 interface CurrentMonthReader {
@@ -11,7 +11,7 @@ interface CurrentMonthReader {
 
 interface CurrentMonthControllerOptions {
   readonly currentMonth: CurrentMonthReader;
-  readonly sessions: Pick<SessionService, "authenticate">;
+  readonly sessions: Pick<SessionAuthenticationPort, "authenticate">;
 }
 
 function requestHeaders(request: FastifyRequest): Headers {
