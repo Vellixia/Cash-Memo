@@ -50,8 +50,8 @@ updates:
         update-types: [version-update:semver-major, version-update:semver-minor]
     labels: [dependencies, docker]
 
-  - package-ecosystem: terraform
-    directory: /infra/aws
+  - package-ecosystem: docker
+    directory: /infra/pgbackrest
     schedule:
       interval: weekly
       day: monday
@@ -64,4 +64,20 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [version-update:semver-major, version-update:semver-minor]
-    labels: [dependencies, opentofu]
+    labels: [dependencies, docker]
+
+  - package-ecosystem: docker
+    directory: /infra/dokploy
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Asia/Jakarta
+    open-pull-requests-limit: 3
+    groups:
+      patch-updates:
+        update-types: [patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major, version-update:semver-minor]
+    labels: [dependencies, docker]

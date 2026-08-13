@@ -85,7 +85,7 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: ["chromium-playwright-1.62.1"],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: [
         "controlled-provider-faults",
         "controlled-network-faults",

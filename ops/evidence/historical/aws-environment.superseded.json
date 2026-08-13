@@ -2,6 +2,13 @@
   "supersededBy": "docker-dokploy-self-hosted-architecture-2026-08-13",
   "schemaVersion": "cashmemo.external-blocker.v1",
   "status": "BLOCKED_EXTERNAL",
+  "classification": "historical-not-current-proof",
+  "historicalArtifacts": [
+    "ops/evidence/operations/deletion-restore-readiness.json",
+    "ops/evidence/operations/deletion-restore-readiness.manifest.json",
+    "ops/evidence/stories/us8-integration.json",
+    "ops/evidence/stories/us8-integration.manifest.json"
+  ],
   "region": "ap-southeast-1",
   "missingSafeNames": [
     "AWS_ACCOUNT_ID",

@@ -12,11 +12,12 @@ Apply deterministic per-principal and coarse global controls. Do not expose acco
 another user's status. Counters contain no IP, email, memo, amount, search, audio, transcript, or
 provider payload.
 
-## S3/KMS, role, or policy drift
+## RustFS/pgBackRest, role, or policy drift
 
-Block promotion. Verify public-access blocks, KMS principal boundaries,
-runtime/worker/migration/restore separation, GitHub OIDC subject, and break-glass inactivity. Rotate
-compromised grants through approved workflow. Do not use break-glass for normal operations.
+Block promotion. Verify private endpoints, encrypted-storage/repository policy, versioning,
+runtime/worker/migration/restore/deploy separation, protected workflow identity, and break-glass
+inactivity. Rotate compromised grants through approved workflow. Do not use break-glass for normal
+operations.
 
 ## Deletion and backup security
 

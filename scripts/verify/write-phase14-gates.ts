@@ -94,7 +94,7 @@ async function writeGate(input: {
       environment: {
         browserDeviceVersions: [],
         databaseEngineVersion: "18.4",
-        ecsTaskDefinition: null,
+        runtimeArtifact: null,
         featureFlags: ["finite-privacy-boundaries", "allowlist-diagnostics", "forced-rls"],
         migrationVersion: "0006.phase11-operations",
         normalLoadProfile: null,

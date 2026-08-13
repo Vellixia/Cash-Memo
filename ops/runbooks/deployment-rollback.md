@@ -2,16 +2,16 @@
 
 ## Trigger and evidence
 
-Trigger on ECS circuit-breaker rollback, failed migration verification, failed synthetic health, or
-core error burn. Record incident ID, build SHA, image digest, schema version, fixed status codes,
+Trigger on Dokploy health rollback, failed migration verification, failed synthetic health, or core
+error burn. Record incident ID, build SHA, image digest, schema version, fixed status codes,
 durations, and artifact hashes only.
 
 ## Decision
 
 1. Stop promotion. Keep previous immutable digest available.
 2. Run `node scripts/deploy/rollback-or-safe-forward.mjs <content-safe-manifest.json>`.
-3. `ROLLBACK_SAFE`: update ECS service to previous task definition, wait stable, then run core
-   synthetic verification.
+3. `ROLLBACK_SAFE`: bind both API and worker to the previous immutable image digest, wait healthy,
+   then run core synthetic verification.
 4. `SAFE_FORWARD_REQUIRED`: keep current schema, deploy reviewed corrective image using same gated
    workflow. Never run destructive down migration.
 5. `BLOCKED_MANUAL_ESCALATION`: disable affected capability where safe, fail core writes closed if

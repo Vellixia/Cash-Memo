@@ -13,7 +13,7 @@ const scenarios: readonly Scenario[] = [
   {
     capability: "core",
     expected: "authoritative reads/writes fail closed",
-    fixtureId: "rds-unavailable",
+    fixtureId: "postgresql-unavailable",
     runbook: "ops/runbooks/core-journal-outage.md",
   },
   {
@@ -36,14 +36,14 @@ const scenarios: readonly Scenario[] = [
   },
   {
     capability: "telemetry",
-    expected: "Telemetry failure must not block healthy core journal operations",
+    expected: "Telemetry outage must not change journal authority",
     fixtureId: "collector-network-loss",
-    runbook: "ops/runbooks/ses-rds-telemetry-outages.md",
+    runbook: "ops/runbooks/self-hosted-service-outages.md",
   },
   {
     capability: "lifecycle",
-    expected: "Ledger write failure blocks hard deletion",
-    fixtureId: "ledger-kms-denied",
+    expected: "Ledger write failure or ambiguity blocks hard deletion",
+    fixtureId: "ledger-storage-policy-denied",
     runbook: "ops/runbooks/secrets-migrations-lifecycle.md",
   },
   {

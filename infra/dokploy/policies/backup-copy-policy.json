@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "cashmemo-backup-copy-policy-v1",
+  "productionIndependentFailureDomainRequired": true,
+  "unregisteredCopyAllowed": false,
+  "declaredClasses": [
+    "pgbackrest_full_backup",
+    "pgbackrest_differential_backup",
+    "pgbackrest_incremental_backup",
+    "wal_archive",
+    "local_repository",
+    "secondary_object_version",
+    "manual_operator_copy",
+    "volume_snapshot",
+    "replica",
+    "temporary_restore_copy"
+  ],
+  "inventoryFailureDecision": "retain_suppression_alert_retry",
+  "timeOnlyCleanupAllowed": false
+}

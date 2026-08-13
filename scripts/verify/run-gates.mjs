@@ -21,11 +21,11 @@ const acceptanceFiles = {
 };
 
 const externalEvidence = {
-  aws: "ops/evidence/external/aws-environment.json",
+  cloudflareEmail: "ops/evidence/external/cloudflare-email-production-approval.json",
+  dokploy: "ops/evidence/external/dokploy-environment.json",
   load: "ops/evidence/external/load-profile-approval.json",
   openai: "ops/evidence/external/openai-zdr-approval.json",
   owners: "ops/owners.yaml",
-  ses: "ops/evidence/external/ses-production-approval.json",
 };
 
 class GateFailure extends Error {
@@ -331,19 +331,12 @@ async function initializeLocalEnvironment() {
     ["PASSWORD_PEPPER", localSecret()],
     ["EVIDENCE_HMAC_KEY", localSecret()],
     ["DELETION_SUPPRESSION_HMAC_KEY", localSecret()],
-    ["AWS_REGION", "local"],
-    ["EXPORT_BUCKET", "cashmemo-local-exports"],
-    ["EVIDENCE_BUCKET", "cashmemo-local-evidence"],
-    ["DELETION_LEDGER_BUCKET", "cashmemo-local-deletion-ledger"],
-    [
-      "KMS_EXPORT_KEY_ARN",
-      "arn:aws:kms:local:000000000000:key/00000000-0000-4000-8000-000000000001",
-    ],
-    [
-      "KMS_EVIDENCE_KEY_ARN",
-      "arn:aws:kms:local:000000000000:key/00000000-0000-4000-8000-000000000002",
-    ],
-    ["SES_FROM_ADDRESS", "mailpit@cashmemo.test"],
+    ["SECRET_DELIVERY_MODE", "injected_environment"],
+    ["OBJECT_STORAGE_MODE", "contract"],
+    ["BACKUP_MODE", "contract"],
+    ["EMAIL_PROVIDER", "mailpit"],
+    ["EMAIL_FROM_ADDRESS", "mailpit@cashmemo.test"],
+    ["MAILPIT_API_URL", "http://127.0.0.1:8025"],
     ["ASSISTED_CAPTURE_MODE", "disabled"],
     ["STT_MODEL_SNAPSHOT", "gpt-4o-mini-transcribe-2025-12-15"],
     ["EXTRACTION_MODEL_SNAPSHOT", "gpt-5.4-mini-2026-03-17"],
@@ -399,7 +392,7 @@ async function runRealProviders() {
 async function runProtectedSuite(suite) {
   const policy = {
     operations: {
-      evidence: [externalEvidence.aws, externalEvidence.owners],
+      evidence: [externalEvidence.dokploy, externalEvidence.owners],
       flag: "CASHMEMO_OPERATIONAL_TESTS",
       names: ["PRODUCTION_BASE_URL"],
     },

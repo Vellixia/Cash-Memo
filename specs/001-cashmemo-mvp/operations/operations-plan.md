@@ -153,7 +153,8 @@ Quarterly drills alternate representative failure points, including backups pred
 
 ## Deployment and Migration
 
-- OpenTofu plans are reviewed; production apply requires protected workflow and plan digest.
+- Docker/Dokploy definitions are reviewed; the protected publish workflow emits exact image
+  digests and a non-deploying handoff artifact. A separate approved Dokploy pass owns mutation.
 - Image is pinned by digest, non-root, read-only root filesystem, minimal capabilities, SBOM attached.
 - One-shot migration task uses a separate role and advisory lock. API/worker versions check compatible schema at startup and fail closed.
 - Expand/contract changes maintain prior-release compatibility through rollback window. Destructive schema cleanup follows proven migration/backfill and backup-retention analysis.

@@ -2,14 +2,14 @@
 
 ## Scope
 
-RDS failure, Better Auth failure, migration mismatch, ECS failure, and ALB failure. Core outage
-differs from provider degradation: authoritative reads/writes fail closed; device drafts may remain
-recoverable but never become authoritative.
+PostgreSQL failure, Better Auth failure, migration mismatch, Cashmemo API/worker failure, and
+application-ingress failure. Core outage differs from provider degradation: authoritative
+reads/writes fail closed; device drafts may remain recoverable but never become authoritative.
 
 ## Detect and assess
 
-- Signals: core availability/error burn, ALB unhealthy targets, ECS circuit breaker, RDS events,
-  migration compatibility failure.
+- Signals: core availability/error burn, Dokploy health failures, PostgreSQL events, migration
+  compatibility failure.
 - Record only operation code, component, coarse state, build, environment, duration, and opaque
   incident ID.
 - Confirm scope using synthetic health and DB connection/role checks. Never query or copy user
@@ -18,11 +18,12 @@ recoverable but never become authoritative.
 ## Contain and recover
 
 1. Stop release/promotion and suspend incompatible tasks.
-2. For ALB/ECS failure, restore previous compatible immutable task definition.
+2. For API/worker health failure, restore the previous compatible immutable image digest for both
+   roles.
 3. For migration mismatch, use deployment rollback/safe-forward runbook; no automatic destructive
    rollback.
-4. For RDS failure, follow backup/restore runbook in isolated network and reconcile suppression
-   before release.
+4. For PostgreSQL failure, follow backup/restore runbook in isolated network and reconcile
+   suppression before release.
 5. For auth failure, deny protected access; never create anonymous/shared fallback.
 
 ## Validate and close

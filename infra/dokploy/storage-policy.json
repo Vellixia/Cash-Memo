@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "cashmemo-storage-policy-v1",
+  "primary": {
+    "private": true,
+    "versioningRequired": true,
+    "classes": ["exports", "content-safe-evidence"],
+    "rawAudioAllowed": false
+  },
+  "secondary": {
+    "private": true,
+    "versioningRequired": true,
+    "classes": ["pgbackrest-repository", "deletion-suppression-ledger"],
+    "rawAudioAllowed": false,
+    "deletionLedgerLifecycleTtlAllowed": false
+  },
+  "developmentIndependentFailureDomain": false,
+  "productionIndependentFailureDomainRequired": true
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "cashmemo-pgbackrest-jobs-v1",
+  "imageIdentity": "PGBACKREST_IMAGE_DIGEST_REQUIRED",
+  "jobs": [
+    {
+      "id": "repository-check",
+      "schedule": "*/15 * * * *",
+      "arguments": ["--stanza=cashmemo", "check"]
+    },
+    {
+      "id": "differential-backup",
+      "schedule": "17 1 * * 1-6",
+      "arguments": ["--stanza=cashmemo", "--type=diff", "backup"]
+    },
+    {
+      "id": "full-backup",
+      "schedule": "17 1 * * 0",
+      "arguments": ["--stanza=cashmemo", "--type=full", "backup"]
+    },
+    {
+      "id": "repository-expire",
+      "schedule": "47 2 * * *",
+      "arguments": ["--stanza=cashmemo", "expire"]
+    }
+  ],
+  "walArchiving": {
+    "postgresqlArchiveMode": "on",
+    "archiveCommand": "pgbackrest --stanza=cashmemo archive-push %p",
+    "proofRequired": true
+  }
+}

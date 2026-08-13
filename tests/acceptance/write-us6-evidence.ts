@@ -103,7 +103,7 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: ["chromium-playwright-1.62.1"],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: ["account-first-search", "gin-simple-search", "version-bound-traversal"],
       migrationVersion: "0005.search-projection",
       normalLoadProfile: null,

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "cashmemo-backup-alert-policy-v1",
+  "failClosedSignals": [
+    "pgbackrest_check_failed",
+    "wal_archive_stale",
+    "backup_age_rpo_risk",
+    "inventory_stale_or_incomplete",
+    "inventory_unavailable_or_unverifiable",
+    "unregistered_copy_detected",
+    "restore_drill_missed",
+    "suppression_cleanup_blocked",
+    "production_secondary_same_failure_domain"
+  ],
+  "rpoHours": 24,
+  "rtoHours": 8
+}

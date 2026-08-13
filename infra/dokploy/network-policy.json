@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "cashmemo-dokploy-network-policy-v1",
+  "applicationIngress": ["cashmemo-api:3000"],
+  "privateOnly": [
+    "cashmemo-worker",
+    "postgresql",
+    "rustfs-primary",
+    "rustfs-secondary",
+    "pgbackrest"
+  ],
+  "forbiddenPublicServices": [
+    "cashmemo-worker",
+    "rustfs-primary",
+    "rustfs-secondary",
+    "pgbackrest"
+  ],
+  "forbiddenDuplicateServices": ["postgresql", "infisical", "otel-collector", "openobserve"],
+  "objectStoreConsoleEnabled": false,
+  "wildcardCorsAllowed": false
+}

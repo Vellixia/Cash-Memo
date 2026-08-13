@@ -13,7 +13,7 @@ The architecture makes authoritative Money Memos structurally distinct from draf
 
 ## Technical Context
 
-**Language/Version**: TypeScript 6.x in strict mode on Node.js 24 LTS; SQL for PostgreSQL 18; OpenAPI 3.1; OpenTofu HCL  
+**Language/Version**: TypeScript 6.x in strict mode on Node.js 24 LTS; SQL for PostgreSQL 18; OpenAPI 3.1; Docker Compose for Dokploy handoff
 **Primary Dependencies**: React 19.2, Vite 8, React Router, TanStack Query, React Hook Form, Zod, Dexie, `vite-plugin-pwa`, NestJS 11 with Fastify, Better Auth, Drizzle ORM, OpenAI JavaScript SDK, OpenTelemetry  
 **Storage**: PostgreSQL 18 for product and job state; browser IndexedDB for the user's same-device draft replica; encrypted container-local ephemeral space only when an STT adapter requires a temporary file; private RustFS Primary S3-compatible storage for expiring exports/approved evidence; separate RustFS Secondary for encrypted pgBackRest/WAL and content-free deletion-suppression records  
 **Testing**: Vitest, fast-check, Testcontainers/PostgreSQL, Playwright, axe-core, k6, OpenAPI schema validation, real-provider smoke/contract suites, restore drills  

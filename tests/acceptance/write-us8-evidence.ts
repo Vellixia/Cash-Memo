@@ -15,7 +15,7 @@ const manifest = resolve(directory, "us8-integration.manifest.json");
 const paths = [
   "apps/server/src/modules/export/export-v1.serializer.ts",
   "apps/server/src/modules/export/export-job.service.ts",
-  "apps/server/src/adapters/aws/export-object-store.adapter.ts",
+  "apps/server/src/adapters/rustfs/export-object-store.adapter.ts",
   "apps/server/src/modules/deletion/deletion-suppression.port.ts",
   "apps/server/src/modules/deletion/memo-purge.worker.ts",
   "apps/server/src/modules/deletion/account-purge.worker.ts",
@@ -38,7 +38,7 @@ const fixture = "synthetic-us8-contract-integration-v1";
 const checks = [
   ["us8.storage-mode-contract-integration", 1],
   ["us8.suppression-mode-contract-integration", 1],
-  ["us8.real-aws-restore-deletion-closure-open", 1],
+  ["us8.real-pgbackrest-restore-deletion-closure-open", 1],
   ["us8.acceptance-scenarios", 4],
   ["us8.export-deterministic-mismatches", 0],
   ["us8.cross-currency-conversion-paths", 0],
@@ -77,7 +77,7 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: ["chromium-playwright-1.62.1"],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: [
         "contract-export-storage",
         "contract-deletion-suppression",

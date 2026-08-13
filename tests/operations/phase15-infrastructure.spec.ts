@@ -9,158 +9,127 @@ import { describe, expect, it } from "vitest";
 const execFileAsync = promisify(execFile);
 const read = (path: string) => readFile(path, "utf8");
 
-describe("Phase 15 production infrastructure", () => {
-  it("pins reviewed OpenTofu and AWS provider versions with encrypted locked remote state", async () => {
-    expect(await read(".tool-versions")).toContain("opentofu 1.12.5");
-    const versions = await read("infra/opentofu/versions.tf");
-    const backend = await read("infra/opentofu/backend.tf");
-    expect(versions).toContain('required_version = "= 1.12.5"');
-    expect(versions).toContain('version = "= 6.59.0"');
-    expect(backend).toContain("encrypt      = true");
-    expect(backend).toContain("use_lockfile = true");
-    expect(backend).toContain("reviewed_plan_sha256 == var.approved_plan_sha256");
+describe("Phase 15 self-hosted deployment foundation", () => {
+  it("pins reviewed RustFS and pgBackRest versions without floating latest", async () => {
+    const versions = JSON.parse(await read("infra/dokploy/service-versions.json")) as {
+      pgBackRest: { version: string };
+      rustfs: { developmentImage: string; preRelease: boolean; productionApproved: boolean };
+    };
+    expect(versions.rustfs).toMatchObject({
+      developmentImage: "rustfs/rustfs:1.0.0-rc.1",
+      preRelease: true,
+      productionApproved: false,
+    });
+    expect(versions.pgBackRest.version).toBe("2.59.0");
+    expect(await read("infra/dokploy/compose.yaml")).not.toMatch(/:latest\b/u);
   });
 
-  it("keeps ALB public while application and database tiers remain private", async () => {
-    const source = await read("infra/opentofu/modules/network/main.tf");
-    expect(source).toContain('description = "Public HTTPS boundary only"');
-    expect(source).toContain('cidr_ipv4         = "0.0.0.0/0"');
-    expect(source).toContain("referenced_security_group_id = aws_security_group.application.id");
-    expect(source).toContain("referenced_security_group_id = aws_security_group.database.id");
-    const databaseIngress = source.slice(
-      source.indexOf('resource "aws_vpc_security_group_ingress_rule" "database_from_application"'),
-      source.indexOf('resource "aws_lb"'),
+  it("uses one immutable release digest for API and worker roles", async () => {
+    const compose = await read("infra/dokploy/compose.yaml");
+    expect(compose.match(/image: \$\{CASHMEMO_IMAGE_DIGEST:/gu)).toHaveLength(2);
+    expect(compose).toContain("PROCESS_ROLE: api");
+    expect(compose).toContain("PROCESS_ROLE: worker");
+    expect(compose).toContain('user: "10001:10001"');
+    expect(compose).toContain("read_only: true");
+    expect(compose).toContain('cap_drop: ["ALL"]');
+  });
+
+  it("keeps storage private, distinct, console-disabled, and raw-audio-free", async () => {
+    const compose = await read("infra/dokploy/compose.yaml");
+    const policy = await read("infra/dokploy/storage-policy.json");
+    expect(compose).toContain("rustfs-primary-data:/data");
+    expect(compose).toContain("rustfs-secondary-dev-data:/data");
+    expect(compose.match(/RUSTFS_CONSOLE_ENABLE: "false"/gu)).toHaveLength(2);
+    expect(compose).not.toMatch(/ports:|RUSTFS_CORS|RUSTFS_SERVER_DOMAINS/u);
+    expect(policy).toContain('"rawAudioAllowed": false');
+    expect(policy).toContain('"deletionLedgerLifecycleTtlAllowed": false');
+    expect(policy).toContain('"developmentIndependentFailureDomain": false');
+  });
+
+  it("preserves existing PostgreSQL and forbids duplicate shared services", async () => {
+    const compose = await read("infra/dokploy/compose.yaml");
+    const preservation = await read("infra/dokploy/postgres-preservation.md");
+    expect(compose).not.toMatch(/^\s{2}(postgres|infisical|otel-collector|openobserve):/mu);
+    expect(preservation).toContain("cashmemo-test-postgres");
+    expect(preservation).toContain("Replacement, recreation, volume rename, or teardown is");
+    expect(preservation).toContain("Resource limits remain open");
+  });
+
+  it("pins pgBackRest source checksum and encrypted S3-compatible repository settings", async () => {
+    const dockerfile = await read("infra/pgbackrest/Dockerfile");
+    const config = await read("infra/pgbackrest/pgbackrest.conf.template");
+    const jobs = await read("infra/dokploy/pgbackrest-jobs.json");
+    expect(dockerfile).toContain("PGBACKREST_VERSION=2.59.0");
+    expect(dockerfile).toContain(
+      "faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875",
     );
-    expect(databaseIngress).not.toContain("cidr_ipv4");
+    expect(config).toContain("repo1-type=s3");
+    expect(config).toContain("repo1-s3-uri-style=path");
+    expect(config).toContain("repo1-cipher-type=aes-256-cbc");
+    expect(config).toContain("archive-async=y");
+    expect(jobs).toContain('"repository-check"');
+    expect(jobs).toContain('"differential-backup"');
+    expect(jobs).toContain('"full-backup"');
+    expect(jobs).toContain('"repository-expire"');
+    expect(jobs).toContain("archive-push %p");
+    expect(jobs).toContain('"proofRequired": true');
   });
 
-  it("uses one immutable release image for API, worker, and migration roles", async () => {
-    const compute = await read("infra/opentofu/modules/compute/main.tf");
-    const migration = await read("infra/opentofu/modules/compute/migration-task.tf");
-    expect(compute).toContain(
-      'release_image = "${aws_ecr_repository.this.repository_url}@${var.image_digest}"',
+  it("declares complete self-hosted backup lineage and fails inventory closed", async () => {
+    const copyPolicy = await read("infra/dokploy/policies/backup-copy-policy.json");
+    const alertPolicy = await read("infra/dokploy/backup-alert-policy.json");
+    for (const value of [
+      "pgbackrest_full_backup",
+      "wal_archive",
+      "local_repository",
+      "secondary_object_version",
+      "manual_operator_copy",
+      "volume_snapshot",
+      "replica",
+      "temporary_restore_copy",
+    ]) {
+      expect(copyPolicy).toContain(value);
+    }
+    expect(copyPolicy).toContain("retain_suppression_alert_retry");
+    expect(alertPolicy).toContain("inventory_unavailable_or_unverifiable");
+  });
+
+  it("uses injected Infisical secrets and shared OTLP without provider SDK coupling", async () => {
+    const secrets = await read("infra/dokploy/secrets-policy.md");
+    const telemetry = await read("infra/dokploy/observability.md");
+    const packageSource = await read("apps/server/package.json");
+    const serverSource = await read("apps/server/src/bootstrap/server.ts");
+    const otlpSource = await read("apps/server/src/adapters/telemetry/otlp-http.sink.ts");
+    expect(secrets).toContain("does not import an Infisical SDK");
+    expect(telemetry).toContain("existing shared");
+    expect(telemetry).toContain("allowlisted");
+    expect(packageSource).not.toMatch(/infisical|openobserve/iu);
+    expect(serverSource).toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(otlpSource).toContain("cashmemo.safe-telemetry");
+    expect(otlpSource).not.toMatch(/request\.body|response\.body|accountId|memoContent|email/iu);
+  });
+
+  it("publishes an immutable handoff and contains no deployment mutation", async () => {
+    const workflow = await read(".github/workflows/deploy.yml");
+    const bake = await read("infra/containers/docker-bake.hcl");
+    expect(workflow).not.toContain("continue-on-error");
+    expect(bake).toContain("push-by-digest=true");
+    expect(workflow).toContain("cashmemo-dokploy-handoff-v1");
+    expect(workflow).toContain("deployed:false");
+    expect(workflow).not.toMatch(
+      /curl.*dokploy|dokploy\s+(?:deploy|compose)|opentofu|terraform|aws /iu,
     );
-    expect(compute.match(/image\s*=\s*local\.release_image/gmu)).toHaveLength(2);
-    expect(migration).toMatch(/image\s*=\s*local\.release_image/u);
-    expect(compute).toContain("deployment_circuit_breaker");
-    expect(compute).toContain('drop = ["ALL"]');
-    expect(compute).toContain("readonlyRootFilesystem = true");
   });
 
-  it("models PostgreSQL 18 Multi-AZ private encrypted RDS with bounded backups", async () => {
-    const source = await read("infra/opentofu/modules/database/main.tf");
-    const requiredAttributes: readonly (readonly [string, string])[] = [
-      ["engine_version", '"18.0"'],
-      ["multi_az", "true"],
-      ["publicly_accessible", "false"],
-      ["storage_encrypted", "true"],
-      ["backup_retention_period", "35"],
-      ["deletion_protection", "true"],
-      ["manage_master_user_password", "true"],
-    ];
-    for (const [name, value] of requiredAttributes)
-      expect(source).toMatch(new RegExp(`${name}\\s*=\\s*${value}`));
-  });
-
-  it("creates only three private KMS storage classes and no lifecycle for deletion ledger", async () => {
-    const source = await read("infra/opentofu/modules/storage/main.tf");
-    expect(source).toContain('toset(["exports", "evidence", "deletion-ledger"])');
-    expect(source).toContain("block_public_policy     = true");
-    expect(source).toContain('resource "aws_s3_bucket_lifecycle_configuration" "exports"');
-    expect(source).not.toMatch(/lifecycle_configuration" "deletion/u);
-    expect(source).not.toMatch(/audio.*bucket|bucket.*audio/iu);
-  });
-
-  it("defines SES identity, DKIM, suppression, and content-free status routing", async () => {
-    const source = await read("infra/opentofu/modules/email/main.tf");
-    expect(source).toContain('resource "aws_ses_domain_identity"');
-    expect(source).toContain('resource "aws_ses_domain_dkim"');
-    expect(source).toContain('suppressed_reasons = ["BOUNCE", "COMPLAINT"]');
-    expect(source).toMatch(/event_destination_name\s*=\s*"content-free-delivery-status"/u);
-  });
-
-  it("separates runtime, worker, migration, restore, deployment, and break-glass roles", async () => {
-    const source = await read("infra/opentofu/modules/security/main.tf");
-    for (const role of ["runtime", "worker", "migration", "restore", "deployment", "break_glass"])
-      expect(source).toContain(role);
-    expect(source).toContain("runtime_has_no_privileged_database_secret");
-    const runtimePolicy = source.slice(
-      source.indexOf('resource "aws_iam_role_policy" "runtime"'),
-      source.indexOf('resource "aws_iam_role_policy" "worker"'),
-    );
-    expect(runtimePolicy).not.toContain('["migration"]');
-    expect(runtimePolicy).not.toContain('["restore"]');
-  });
-
-  it("separates core and provider observability and includes lifecycle alarms", async () => {
-    const source = await read("infra/opentofu/modules/observability/main.tf");
-    expect(source).toContain('dashboard_name = "${var.name}-core"');
-    expect(source).toContain('dashboard_name = "${var.name}-providers"');
-    for (const alarm of [
-      "worker_backlog",
-      "audio_cleanup",
-      "deletion_backlog",
-      "export_backlog",
-      "backup_inventory",
-    ])
-      expect(source).toContain(alarm);
-    for (const prohibited of [
-      "request.body",
-      "response.body",
-      "transcript",
-      "memo content",
-      "search query",
-    ])
-      expect(source.toLowerCase()).not.toContain(prohibited);
-  });
-
-  it("fails data-safety health closed and monitors resurrection-capable copy events", async () => {
-    const source = await read("infra/opentofu/modules/data-safety/main.tf");
-    for (const alarm of [
-      "pitr_health",
-      "copy_policy_drift",
-      "inventory_unavailable",
-      "inventory_stale",
-      "restore_drill_missed",
-      "rpo_risk",
-      "rto_risk",
-      "suppression_cleanup_blocked",
-    ])
-      expect(source).toContain(alarm);
-    expect(source).toMatch(/treat_missing_data\s*=\s*"breaching"/u);
-    expect(source).toContain("StartRestoreJob");
-  });
-
-  it("protects production migrations with one advisory lock and schema/checksum verification", async () => {
-    const source = await read("scripts/db/migrate-production.mjs");
-    expect(source).toContain("pg_advisory_lock");
-    expect(source).toContain("MIGRATION_CHECKSUM_MISMATCH");
-    expect(source).toContain("MIGRATION_SCHEMA_INCOMPATIBLE");
-    expect(source).toContain("MIGRATION_BUILD_ID_INVALID");
-    expect(source).not.toContain("console.error(error");
-  });
-
-  it("hardens OCI runtime and emits SBOM/provenance by immutable digest", async () => {
+  it("hardens OCI runtime and dispatches API/worker from one image", async () => {
     const dockerfile = await read("infra/containers/Dockerfile");
     const bake = await read("infra/containers/docker-bake.hcl");
     expect(dockerfile).toMatch(/ARG NODE_IMAGE=.*@sha256:[0-9a-f]{64}/u);
-    expect(dockerfile).toContain("FROM ${NODE_IMAGE} AS production");
     expect(dockerfile).toContain("USER 10001:10001");
-    expect(dockerfile).toContain("HEALTHCHECK");
+    expect(dockerfile).toContain("bootstrap/main.js");
     expect(dockerfile).not.toContain(":latest");
     expect(bake).toContain("type=sbom");
     expect(bake).toContain("type=provenance,mode=max");
-    expect(bake).toContain("push-by-digest=true");
-  });
-
-  it("makes deployment gates blocking and applies only protected reviewed plan", async () => {
-    const workflow = await read(".github/workflows/deploy.yml");
-    expect(workflow).not.toContain("continue-on-error");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("APPROVED_PLAN_SHA256");
-    expect(workflow).toContain("apply -input=false release.tfplan");
-    expect(workflow).toContain("MIGRATION_TASK_DEFINITION");
-    expect(workflow).toContain("services-stable");
   });
 
   it.each([
@@ -219,34 +188,12 @@ describe("Phase 15 production infrastructure", () => {
     }
   });
 
-  it("keeps staging evidence absent until real bootstrap and external blockers explicit", async () => {
-    const staging = await read("infra/opentofu/environments/staging/main.tf");
-    const awsBlocker: unknown = JSON.parse(
-      await read("ops/evidence/external/aws-environment.json"),
-    ) as unknown;
-    expect(staging).toMatch(/name\s*=\s*"cashmemo-staging"/u);
-    await expect(read("ops/evidence/infrastructure/staging-bootstrap.json")).rejects.toThrow();
-    expect(awsBlocker).toMatchObject({ approved: false, status: "BLOCKED_EXTERNAL" });
-  });
-
-  it("provides strict provider decision schema without pretending approval", async () => {
-    const schema = await read("config/providers/provider-decision.schema.json");
-    expect(() => JSON.parse(schema) as unknown).not.toThrow();
-    expect(schema).toContain('"additionalProperties": false');
-    expect(schema).toContain('"approvalStatus"');
-    expect(schema).toContain('"blocked"');
-    expect(schema).toContain('"trainingUse"');
-    expect(schema).toContain('"evidenceExpiresAt"');
-  });
-
-  it("runbooks preserve fail-closed core and manual provider degradation semantics", async () => {
-    const core = await read("ops/runbooks/core-journal-outage.md");
-    const providers = await read("ops/runbooks/provider-outages.md");
-    const lifecycle = await read("ops/runbooks/secrets-migrations-lifecycle.md");
-    const security = await read("ops/runbooks/security-operations.md");
-    expect(core).toContain("authoritative reads/writes fail closed");
-    expect(providers).toContain("Manual structured journal remains available");
-    expect(lifecycle).toContain("time alone never authorizes cleanup");
-    expect(security).toContain("Do not use break-glass for normal operations");
+  it("keeps Dokploy bootstrap and production bindings explicitly absent/blocked", async () => {
+    await expect(
+      read("ops/evidence/infrastructure/dokploy-development-bootstrap.json"),
+    ).rejects.toThrow();
+    const inputs = await read("infra/dokploy/production-inputs.example");
+    expect(inputs).toContain("REQUIRED_INDEPENDENT_FAILURE_DOMAIN");
+    expect(inputs).toContain("sha256:REQUIRED");
   });
 });

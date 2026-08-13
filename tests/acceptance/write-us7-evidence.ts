@@ -143,7 +143,7 @@ const result = await writer.write({
     environment: {
       browserDeviceVersions: ["chromium-playwright-1.62.1"],
       databaseEngineVersion: "18.4",
-      ecsTaskDefinition: null,
+      runtimeArtifact: null,
       featureFlags: [
         "currency-partition-first",
         "reporting-timezone-calendar-month",

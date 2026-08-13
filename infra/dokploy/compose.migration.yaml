@@ -1,0 +1,15 @@
+services:
+  cashmemo-migration:
+    image: ${CASHMEMO_IMAGE_DIGEST:?immutable Cashmemo image digest required}
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    env_file: ["${CASHMEMO_MIGRATION_ENV_FILE:?injected migration environment required}"]
+    command: ["node", "scripts/db/migrate-production.mjs"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    networks: [dokploy-network]
+
+networks:
+  dokploy-network:
+    external: true

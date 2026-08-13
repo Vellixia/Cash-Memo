@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "cashmemo-dokploy-service-versions-v1",
+  "reviewedAt": "2026-08-13",
+  "cashmemoImage": {
+    "identity": "digest-required-at-deploy",
+    "mutableTagAllowed": false
+  },
+  "postgresql": {
+    "preserveExistingService": "cashmemo-test-postgres",
+    "version": "18.4-alpine"
+  },
+  "rustfs": {
+    "developmentImage": "rustfs/rustfs:1.0.0-rc.1",
+    "preRelease": true,
+    "productionApproved": false,
+    "source": "https://github.com/rustfs/rustfs/releases/tag/1.0.0-rc.1"
+  },
+  "pgBackRest": {
+    "sourceSha256": "faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875",
+    "version": "2.59.0"
+  },
+  "sharedServices": {
+    "infisical": "reuse-existing",
+    "openObserve": "reuse-existing",
+    "otelCollector": "reuse-existing"
+  }
+}
