@@ -1,14 +1,13 @@
 # Quickstart Plan: Cashmemo MVP
 
-This document defines the repeatable implementation-time bootstrap and verification experience. Commands refer to planned files/directories from `plan.md`; this planning run does not create or execute application code.
+This document defines the repeatable implementation-time bootstrap and verification experience for the selected Docker + Dokploy architecture. Repository commands do not mutate Dokploy unless a task explicitly identifies the separate approved deployment pass.
 
 ## Toolchain Baseline
 
 - Node.js 24 LTS pinned by `.tool-versions` or equivalent;
 - Corepack with a pinned pnpm release and frozen lockfile;
-- Docker/Colima or Docker Desktop for PostgreSQL/Mailpit/local AWS-compatible fakes;
-- OpenTofu pinned for infrastructure plans;
-- AWS CLI v2 for controlled staging/production operations;
+- access to the approved external development PostgreSQL/Mailpit/contract-provider environment; local Docker is not required;
+- Docker-compatible OCI definitions for the later Dokploy deployment pass;
 - Playwright-managed browser binaries;
 - `git`, `jq`, `curl`, and `openssl`.
 
@@ -22,7 +21,6 @@ Implementation should expose these commands:
 corepack enable
 pnpm install --frozen-lockfile
 pnpm env:check
-pnpm local:up
 pnpm db:migrate
 pnpm db:seed:synthetic
 pnpm dev
@@ -32,11 +30,11 @@ Expected local services:
 
 | Service | Local role | Data rule |
 |---|---|---|
-| PostgreSQL 18 | real relational constraints/RLS/migrations | synthetic data only; disposable volume |
+| PostgreSQL 18 | existing private development service; real relational constraints/RLS/migrations | synthetic data only; preserve existing volume/service |
 | Mailpit | verification/reset delivery | local synthetic addresses only |
 | local object adapter | export contract tests | no raw audio; disposable |
 | fake STT/AI adapters | ordinary deterministic development | provider-port contract; cannot close real-provider evidence |
-| OpenTelemetry collector | signal allowlist testing | local sink plus seeded-canary scanner |
+| shared OpenTelemetry collector | signal allowlist testing | configured OTLP endpoint plus seeded-canary scanner; no duplicate stack |
 
 The app starts at one HTTPS-capable local origin (development certificate) so cookies, recording permission, PWA manifest, and service worker boundaries resemble production. HTTP-only fallback may be allowed for unit work but cannot close PWA/auth acceptance.
 
@@ -46,19 +44,24 @@ Planned `.env.example` lists names and safe descriptions only. No real value bel
 
 ```text
 APP_ENV, APP_ORIGIN, BUILD_VERSION
-DATABASE_URL
+DATABASE_URL, AUTH_DATABASE_URL
 AUTH_SESSION_SECRET, AUTH_TOKEN_HMAC_KEY, PASSWORD_PEPPER
 EVIDENCE_HMAC_KEY, DELETION_SUPPRESSION_HMAC_KEY
-AWS_REGION, EXPORT_BUCKET, EVIDENCE_BUCKET, DELETION_LEDGER_BUCKET
-KMS_EXPORT_KEY_ARN, KMS_EVIDENCE_KEY_ARN
-SES_FROM_ADDRESS
+OBJECT_STORAGE_MODE
+RUSTFS_PRIMARY_ENDPOINT, RUSTFS_PRIMARY_REGION
+RUSTFS_PRIMARY_ACCESS_KEY, RUSTFS_PRIMARY_SECRET_KEY, RUSTFS_EXPORT_BUCKET, RUSTFS_EVIDENCE_BUCKET
+RUSTFS_SECONDARY_ENDPOINT, RUSTFS_SECONDARY_REGION
+RUSTFS_SECONDARY_ACCESS_KEY, RUSTFS_SECONDARY_SECRET_KEY
+PGBACKREST_REPOSITORY_BUCKET, DELETION_LEDGER_NAMESPACE
+EMAIL_PROVIDER, EMAIL_FROM_ADDRESS, MAILPIT_API_URL
+CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_EMAIL_API_TOKEN, CLOUDFLARE_EMAIL_BASE_URL
 OPENAI_API_KEY, OPENAI_PROJECT_ID, OPENAI_BASE_URL
 STT_MODEL_SNAPSHOT, EXTRACTION_MODEL_SNAPSHOT
 PROVIDER_DECISION_VERSION, CURRENCY_REGISTRY_VERSION
 OTEL_EXPORTER_OTLP_ENDPOINT
 ```
 
-Local secrets are generated into an ignored developer file by `pnpm env:init:local`; CI/staging/production secrets come from protected stores. `pnpm env:check` validates presence and format without printing values.
+Development secrets are injected through an ignored developer environment or the approved runtime. Staging/production secrets are injected from the existing shared Infisical service; the application has no Infisical SDK dependency. `pnpm env:check` validates names and format without printing values. Production-equivalent startup fails closed when required storage, backup, email, or OTLP configuration is absent.
 
 ## Development Modes
 
@@ -136,7 +139,7 @@ Real-provider runs require:
 - outbound capture proxy that proves allowlisted payload shape without storing content;
 - OpenAI ZDR/no-training administrative evidence;
 - exact model snapshots from the plan;
-- AWS SES controlled inbox/domain;
+- Cloudflare Email Service controlled inbox/domain and approved scoped token;
 - teardown/retention check after the run.
 
 The command aborts before sending content if approval/config versions do not match. It never falls back to a default OpenAI project.
@@ -147,7 +150,7 @@ The command aborts before sending content if approval/config versions do not mat
 
 ## Deletion/Restore Verification
 
-`pnpm test:operations` must create synthetic individual memo and account purges, verify durable `money_memo`/`account` deletion tokens before hard deletion, restore a pre-purge backup in isolation, and prove exact suppression. It then advances beyond `removal_not_before_at` and exercises every cleanup blocker: open automated recovery window, prohibited/manual/final/copied/replicated snapshot detection, AWS Backup recovery point, active isolated restore copy, and unavailable inventory. Each blocker must retain token/key version, alert, and retry. Only a clean full-lineage inventory may remove the token. No S3 lifecycle expiration is accepted as evidence.
+`pnpm test:operations` must create synthetic individual memo and account purges, verify durable `money_memo`/`account` deletion tokens before hard deletion, restore a pre-purge pgBackRest backup in isolation, inspect restored state, and prove exact suppression. It then advances beyond `removal_not_before_at` and exercises every cleanup blocker: active pgBackRest/WAL recovery window, local repository, Secondary object versions, manual/operator/volume copy, replica, active isolated restore copy, and stale/incomplete/unavailable/unverifiable inventory. Each blocker must retain token/key version, alert, and retry. Only a current complete full-lineage inventory may remove the token. No object lifecycle expiration is accepted as evidence.
 
 ## PWA Verification
 
@@ -172,11 +175,11 @@ Test commands write content-safe results to `ops/evidence/` only through a typed
 ## Environment Promotion
 
 ```text
-clean CI build → integration/privacy/security gates
-→ deploy immutable digest to staging
+clean CI build → integration/privacy/security gates → immutable digest/SBOM handoff
+→ separate approved Dokploy pass deploys same digest as API + Worker
 → migration verify → real-provider/browser/performance/operations evidence
 → mandatory hook/analyze review → role approvals
-→ production migration task → ECS deployment circuit breaker
+→ production one-shot migration → Dokploy health/rollback policy
 → synthetic core/provider smoke → promote or rollback/safe-forward
 ```
 
@@ -187,7 +190,7 @@ Production promotion uses the same image digest tested in staging. Feature flags
 Local reset and staging teardown commands must:
 
 - require exact environment identity and a typed confirmation;
-- reject production account IDs/regions;
+- reject production Dokploy environment/resource identifiers;
 - print resolved resource identifiers but no secret/content;
 - avoid broad paths, globs, or unresolved variables;
 - produce a content-free operation record.

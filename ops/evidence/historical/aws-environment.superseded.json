@@ -1,4 +1,5 @@
 {
+  "supersededBy": "docker-dokploy-self-hosted-architecture-2026-08-13",
   "schemaVersion": "cashmemo.external-blocker.v1",
   "status": "BLOCKED_EXTERNAL",
   "region": "ap-southeast-1",
@@ -13,4 +14,3 @@
   "containsCredentials": false,
   "approved": false
 }
-

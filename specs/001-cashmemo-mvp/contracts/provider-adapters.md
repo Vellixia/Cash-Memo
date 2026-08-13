@@ -161,7 +161,7 @@ TransactionalEmailV1 {
 }
 ```
 
-Templates contain no journal, amount, label, transcript, export, deletion detail, IP, or diagnostic value. AWS SES message content is not copied to telemetry. Bounce/complaint processing maps destination to an internal HMAC before operational use.
+Templates contain no journal, amount, label, transcript, export, deletion detail, IP, or diagnostic value. Cloudflare Email Service message content and API errors are not copied to telemetry. Delivery/bounce processing maps destination to an internal HMAC before operational use and exposes only fixed outcome classes.
 
 ### Output
 
@@ -180,7 +180,7 @@ ObjectClass = "export_package" | "acceptance_evidence" |
               "deletion_suppression" | "deletion_evidence";
 ```
 
-Every operation requires object class, account HMAC/scope, KMS key policy, maximum expiry, and expected checksum. Export reads are server-side streams after session/recent-auth checks; raw S3 URLs are not part of the product API.
+Every operation requires object class, account HMAC/scope, approved encrypted-storage policy, maximum expiry, and expected checksum. Export reads are application-mediated streams after session/recent-auth checks; raw RustFS/S3-compatible URLs are not part of the product API. Provider calls use transient credentials and private endpoints.
 
 ### Deletion suppression record
 
@@ -207,9 +207,9 @@ HMAC-SHA-256(suppression_key,
   UTF8(entity_type) || UTF8(":") || canonical_uuid_text(immutable_entity_id))
 ```
 
-The adapter accepts no raw ID in a stored body/key, email, amount, note, label, account metadata, or journal value. Caller derives token in protected memory, writes it idempotently before irreversible live deletion, and clears raw ID material. S3 lifecycle cannot delete suppression records. Only the privileged backup-verification use case may issue removal after `removalNotBeforeAt` and successful full-lineage inventory; unavailable/failed verification cannot call delete.
+The adapter accepts no raw ID in a stored body/key, email, amount, note, label, account metadata, or journal value. Caller derives token in protected memory, writes it idempotently before irreversible live deletion, and clears raw ID material. RustFS lifecycle cannot delete suppression records. Only the privileged backup-verification use case may issue removal after `removalNotBeforeAt` and successful current/complete full-lineage inventory; stale/incomplete/unavailable/unverifiable proof cannot call delete.
 
-Feature 001 denies manual/final/copied/shared snapshots, retained automated backups, AWS Backup recovery points, and replicated backups through infrastructure policy. Verifier still inventories these classes plus active isolated restore copies. A detected or unverifiable artifact returns `blocked`, retains the record, alerts, and retries.
+Deployment policy denies unregistered pgBackRest repositories, manual/operator/volume backup copies, replicas, and restore copies. The verifier inventories pgBackRest backup sets and WAL, local repositories, Secondary RustFS object versions, permitted manual copies, replicas, and active isolated restore copies. A capable, stale, incomplete, unavailable, or unverifiable artifact returns `blocked`, retains the record, alerts, and retries.
 
 ## Provider Error Mapping
 

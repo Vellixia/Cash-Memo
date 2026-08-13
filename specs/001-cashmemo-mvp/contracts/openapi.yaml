@@ -1015,7 +1015,7 @@ paths:
         - { $ref: '#/components/parameters/ReauthGrant' }
       responses:
         '200':
-          description: Same-origin authenticated stream; internal S3 URL is never exposed.
+          description: Same-origin authenticated stream; internal object-store URL is never exposed.
           headers:
             Content-Disposition:
               schema: { type: string, example: 'attachment; filename="cashmemo-export-2026-08-09.zip"' }

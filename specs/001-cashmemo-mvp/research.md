@@ -57,7 +57,7 @@ Versions below are planning baselines. Implementation must pin exact package/mod
 
 ## ADR-003 — Authentication
 
-**Decision**: Choose session-storage option A. Embed Better Auth with its PostgreSQL adapter and use Better Auth's supported database-backed core schema and session-token semantics unchanged. Use verified email/password, Argon2id, a signed non-persisted email-verification token, hashed password-reset identifiers, Better Auth database sessions, AWS SES, and Cashmemo session-bound recent-reauthentication grants. Do not claim Better Auth hashes its core session token at rest and do not build a token-hashing lookup adapter.
+**Decision**: Choose session-storage option A. Embed Better Auth with its PostgreSQL adapter and use Better Auth's supported database-backed core schema and session-token semantics unchanged. Use verified email/password, Argon2id, a signed non-persisted email-verification token, hashed password-reset identifiers, Better Auth database sessions, Cloudflare Email Service in production, Mailpit in development, and Cashmemo session-bound recent-reauthentication grants. Do not claim Better Auth hashes its core session token at rest and do not build a token-hashing lookup adapter.
 
 **Database principal topology**: Better Auth receives a dedicated PostgreSQL Pool using the `cashmemo_identity` credential (configured via `AUTH_DATABASE_URL`). This is the same PostgreSQL database but a separate database principal/connection pool. The boundary is:
 
@@ -85,11 +85,11 @@ account-owned application/domain tables
 **Exact policy**:
 
 - Verification required before the first journal session. Better Auth 1.6.26 signs a 24-hour email-verification token without creating a verification-table row; a successful replay produces no second verification transition. Resend behavior is enumeration-safe.
-- Reset link expires after one hour, is single-use, and successful reset revokes all sessions. PostgreSQL-backed `verification.storeIdentifier = "hashed"` stores the reset identifier as Better Auth's deterministic SHA-256/base64url output, not the raw reset token. Better Auth stores the internal user UUID in core `value` and atomically deletes the row on successful or expired consumption. This UUID is accepted authentication metadata protected by RDS controls; it is not a token, journal content, telemetry, or evidence.
+- Reset link expires after one hour, is single-use, and successful reset revokes all sessions. PostgreSQL-backed `verification.storeIdentifier = "hashed"` stores the reset identifier as Better Auth's deterministic SHA-256/base64url output, not the raw reset token. Better Auth stores the internal user UUID in core `value` and atomically deletes the row on successful or expired consumption. This UUID is accepted authentication metadata protected by PostgreSQL/storage controls; it is not a token, journal content, telemetry, or evidence.
 - Supported `modelName`/`fields` mappings retain plural snake-case physical names. Better Auth's boolean `users.email_verified` is the only verification authority. The required `users.name` is always the server-side non-personal value `Cashmemo account`, never requested, email-derived, displayed, or treated as Profile data; `image` remains null. Credential-only flows keep all OAuth token columns null.
 - Better Auth's current official schema stores a core `token` field that is also used as the session cookie. `expiresIn=7 days`, `updateAge=1 hour`, database storage, and disabled cookie cache/secondary/stateless storage preserve supported lookup, refresh, and revocation behavior. An accepted request can extend `expiresAt`, but never later than seven days after that use.
 - Cashmemo middleware checks `createdAt + 30 days` on every protected request and invokes supported revocation when reached. Better Auth internal freshness is disabled; password verification plus a separate ten-minute `ReauthGrant` gates Cashmemo-sensitive operations. This keeps recent authentication in application authorization without replacing Better Auth's session lifecycle.
-- Database compromise could expose active bearer tokens because default hashing is not claimed. Mitigations are encrypted RDS/storage/backups, least-privilege session-table access, no token telemetry/error/evidence output, bounded expiry, supported revocation, and new Better Auth sessions after transitions that require token replacement. An isolated compatibility test must prove all configured expiry/revocation/reset behavior against the pinned Better Auth version before implementation proceeds; it does not prototype custom token hashing.
+- Database compromise could expose active bearer tokens because default hashing is not claimed. Mitigations are encrypted PostgreSQL storage/pgBackRest repositories, least-privilege session-table access, no token telemetry/error/evidence output, bounded expiry, supported revocation, and new Better Auth sessions after transitions that require token replacement. An isolated compatibility test must prove all configured expiry/revocation/reset behavior against the pinned Better Auth version before implementation proceeds; it does not prototype custom token hashing.
 - Recent authentication means password re-verification within ten minutes for FR-088 operations.
 - Email delivery events contain only provider message identifiers and coarse status; destination emails do not enter app telemetry.
 
@@ -143,17 +143,17 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 | Supabase Auth | Integrated Postgres/RLS | Adds a platform control plane and generated API surface when only embedded auth is needed |
 | Custom auth from primitives | Maximum control | Password, reset, verification, enumeration, and session edge cases are high-risk; a reviewed library plus project policy is safer |
 
-**Sources**: [Better Auth session table, expiry, freshness, and revocation](https://better-auth.com/docs/concepts/session-management), [Better Auth database schema extensions](https://better-auth.com/docs/concepts/database), [Better Auth session options](https://better-auth.com/docs/reference/options), [Better Auth email verification/reset](https://better-auth.com/docs/concepts/email), [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html), [Amazon SES data protection](https://docs.aws.amazon.com/ses/latest/dg/data-protection.html)
+**Sources**: [Better Auth session table, expiry, freshness, and revocation](https://better-auth.com/docs/concepts/session-management), [Better Auth database schema extensions](https://better-auth.com/docs/concepts/database), [Better Auth session options](https://better-auth.com/docs/reference/options), [Better Auth email verification/reset](https://better-auth.com/docs/concepts/email), [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html), [Cloudflare Email Service REST API](https://developers.cloudflare.com/email-service/api/send-emails/rest-api/)
 
 ## ADR-004 — Primary Persistence and Migrations
 
-**Decision**: PostgreSQL 18 on RDS Multi-AZ; Drizzle ORM for typed queries and reviewed generated SQL migrations; forced row-level security as defense in depth.
+**Decision**: PostgreSQL 18 in the private Dokploy network; Drizzle ORM for typed queries and reviewed generated SQL migrations; forced row-level security as defense in depth. The verified development PostgreSQL 18.4 service and its persistent volume are preserved rather than recreated.
 
 **Why it fits**:
 
 - Transactions cover memo plus idempotency result atomically.
 - Exact integer/numeric aggregation, range constraints, unique normalized label keys, JSON metadata where bounded, full-text search, row-level security, and `SKIP LOCKED` jobs fit one mature database.
-- RDS supplies encrypted storage, Multi-AZ failover, automated backup/PITR, metrics, and a tested 0–35 day retention control.
+- PostgreSQL deployment supplies private persistent storage and forced RLS; pgBackRest supplies encrypted full/differential backup, WAL archiving, and target-time restore with a tested maximum 35-day recovery policy.
 - Drizzle stays close to SQL and can produce auditable migrations. The runtime role cannot own tables or bypass RLS.
 
 **Alternatives**:
@@ -166,7 +166,7 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 | SQLite/libSQL | Simple local operation | Production multi-user concurrency, HA, RLS, backup/restore, and background leases require more machinery |
 | Prisma | Mature ORM/tooling | Drizzle exposes exact SQL and migration review with less runtime abstraction; either is viable, but one is enough |
 
-**Sources**: [PostgreSQL 18 data types](https://www.postgresql.org/docs/18/datatype.html), [PostgreSQL row security](https://www.postgresql.org/docs/18/ddl-rowsecurity.html), [PostgreSQL text-search indexes](https://www.postgresql.org/docs/18/textsearch-indexes.html), [Drizzle PostgreSQL](https://orm.drizzle.team/docs/get-started-postgresql), [Drizzle migrations](https://orm.drizzle.team/docs/migrations), [RDS backup retention](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.BackupRetention.html)
+**Sources**: [PostgreSQL 18 data types](https://www.postgresql.org/docs/18/datatype.html), [PostgreSQL row security](https://www.postgresql.org/docs/18/ddl-rowsecurity.html), [PostgreSQL text-search indexes](https://www.postgresql.org/docs/18/textsearch-indexes.html), [Drizzle PostgreSQL](https://orm.drizzle.team/docs/get-started-postgresql), [Drizzle migrations](https://orm.drizzle.team/docs/migrations), [pgBackRest user guide](https://pgbackrest.org/user-guide.html)
 
 ## ADR-005 — Money and Currency Registry
 
@@ -198,13 +198,13 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 
 ## ADR-007 — Temporary Audio
 
-**Decision**: Stream a maximum 60-second/10 MiB recording into bounded process memory; use encrypted task-local ephemeral storage only when the adapter requires a file. Never store raw audio in S3, PostgreSQL, browser persistence, backups, or evidence.
+**Decision**: Stream a maximum 60-second/10 MiB recording into bounded process memory; use encrypted container-local ephemeral storage only when the adapter requires a file. Never store raw audio in RustFS, PostgreSQL, browser persistence, backups, or evidence.
 
 **Why it fits**:
 
 - The shortest lifecycle is safer than object storage and gives the lifecycle owner immediate delete control.
 - Fargate ephemeral storage is encrypted; task destruction eliminates crash remnants. An independent minute sweeper plus hard `expires_at` handles abandoned active tasks.
-- S3 lifecycle rules are day-granularity, so they cannot enforce a one-hour hard boundary by themselves.
+- Object-store lifecycle rules are not terminal-path deletion authority and cannot enforce the one-hour raw-audio boundary.
 
 **Supported inputs**: `audio/webm` Opus, `audio/ogg` Opus, `audio/mp4`/M4A, WAV, and MP3 after content sniffing. Unsupported/transcoded formats fail explicitly; server-side transcoding is avoided unless provider compatibility tests prove a concrete need.
 
@@ -212,12 +212,12 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 
 | Alternative | Reason rejected |
 |---|---|
-| S3 temporary bucket | Lifecycle granularity cannot prove one-hour deletion; backups/versioning/failed deletes enlarge evidence surface |
+| Object-store temporary bucket | Lifecycle cannot prove one-hour deletion; backups/versioning/failed deletes enlarge evidence surface |
 | PostgreSQL blob | Places raw audio in primary backups and transaction logs |
 | Browser upload retention/retry queue | Leaves raw audio durable on device and creates offline-sync semantics |
 | Dedicated media service | Microservice and additional operational boundary are unnecessary for 60-second payloads |
 
-**Sources**: [Fargate task ephemeral storage encryption](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-storage.html), [S3 lifecycle management](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html)
+**Sources**: [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html), [RustFS documentation](https://docs.rustfs.com/)
 
 ## ADR-008 — Speech-to-Text Provider
 
@@ -305,7 +305,7 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 
 ## ADR-012 — Export
 
-**Decision**: Asynchronous database-leased export job; deterministic ZIP with `manifest.json`, JSON, and CSV; private KMS-encrypted S3; five-minute signed delivery after recent auth; package expiry ≤24 hours.
+**Decision**: Asynchronous database-leased export job; deterministic ZIP with `manifest.json`, JSON, and CSV; private versioned RustFS Primary using its S3-compatible API; application-mediated delivery after recent auth; package expiry ≤24 hours.
 
 **Why asynchronous**: State must expose queued/running/ready/failed/expired/canceled, retry safely, generate complete multi-file exports, and avoid request timeout at 10,000 memos. No separate queue is needed.
 
@@ -313,25 +313,25 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 
 ## ADR-013 — Deletion, Backups, and Resurrection Prevention
 
-**Decision**: Explicit row state machines plus leased purge jobs; 35-day RDS automated backup/PITR; scope-specific content-free deletion-suppression ledger outside RDS; 42-day removal floor plus verified backup-lineage destruction; quarterly isolated restore and pre-release re-purge.
+**Decision**: Explicit row state machines plus leased purge jobs; pgBackRest full/differential backup and WAL archiving with a maximum planned 35-day recovery window; scope-specific content-free deletion-suppression ledger in separate RustFS Secondary storage; 42-day removal floor plus verified full-lineage destruction; quarterly isolated restore and pre-release re-purge.
 
 **Why it fits**:
 
 - Live purge and backup aging are distinct guarantees. Removing content from live stores within 24 hours does not falsely claim immediate physical erasure from encrypted backups.
 - A restored database cannot know about deletions that happened after its recovery point. Each irreversible purge therefore writes `HMAC-SHA-256(suppression_key, entity_type || ":" || immutable_entity_id)` before live hard deletion. `money_memo` suppresses one individually purged record; `account` suppresses the entire restored account graph. The ledger supplies missing negative knowledge without raw IDs, email, financial value, or journal metadata.
-- Forty-two days is `removal_not_before_at`, covering the 35-day automated-backup window plus margin. It is not expiry. Removal also requires a successful inventory proving no automated recovery window, manual/final/copied snapshot, retained automated backup, AWS Backup recovery point, replicated backup, or active isolated restore copy can resurrect pre-purge state.
-- Verification failure or unavailable AWS inventory keeps the token, alerts operations, and retries. Cleanup is not complete. Suppression-key versions remain available until all their tokens pass this gate.
-- MVP infrastructure prohibits manual/final snapshots, retained automated backups on database deletion, AWS Backup recovery points, snapshot copy/share, and cross-region backup replication. IAM/policy-as-code and event/inventory monitoring enforce/detect this. Isolated restore copies are permitted only as tagged, inventoried, network-isolated drill/incident resources whose verified destruction gates token removal.
+- Forty-two days is `removal_not_before_at`, covering the maximum planned 35-day pgBackRest recovery window plus margin. It is not expiry. Removal also requires current, complete inventory proving no pgBackRest backup set/WAL, local repository, Secondary object version, manual/operator/volume copy, replica, or active isolated restore copy can resurrect pre-purge state.
+- Stale, incomplete, unavailable, or unverifiable inventory keeps the token, alerts operations, and retries. Cleanup is not complete. Suppression-key versions remain available until all their tokens pass this gate.
+- Deployment policy prohibits unregistered local/manual/operator/volume copies, replicas, and restore copies. Isolated restore copies are permitted only as registered, inventoried, private drill/incident resources whose verified destruction gates token removal. Production backup storage must be in an independent physical failure domain; the same-host development Secondary is only an integration target.
 
-**Object Lock decision**: Do not use Compliance-mode Object Lock for ordinary exports or user content because it can prevent deletion. Governance protection may defend content-free suppression/evidence records from premature removal, but no S3 lifecycle or retain-until timestamp is final cleanup authority; the verifier explicitly removes an eligible token only after backup-lineage proof.
+**Object lifecycle decision**: No object-store lifecycle or retain-until timestamp is final suppression cleanup authority. The privileged verifier explicitly removes an eligible token only after full backup-lineage proof. Ordinary exports keep bounded expiry and every-version cleanup.
 
 **Alternatives**: account-only tokens miss individually purged memos; unlimited unverified tombstones violate minimization; time-only TTL can delete proof while an overlooked copy remains; relying only on DB tombstones fails after restoring an older snapshot; never restoring backups violates RPO/RTO; immediate backup surgery is unsupported/risky.
 
-**Sources**: [RDS backup retention](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.BackupRetention.html), [S3 Object Lock](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html)
+**Sources**: [pgBackRest user guide](https://pgbackrest.org/user-guide.html), [pgBackRest releases](https://pgbackrest.org/release.html), [RustFS releases](https://github.com/rustfs/rustfs/releases)
 
 ## ADR-014 — Observability
 
-**Decision**: OpenTelemetry SDK/collector with project-owned allowlist event APIs and AWS CloudWatch metrics/logs/alarms plus trace storage. No session replay, request-body capture, SQL parameters, provider payload logging, or general analytics SDK.
+**Decision**: OpenTelemetry SDK/collector with project-owned allowlist event APIs and the existing shared collector/OpenObserve deployment. No session replay, request-body capture, SQL parameters, provider payload logging, or general analytics SDK. Cashmemo does not deploy a duplicate telemetry stack or depend directly on an OpenObserve SDK.
 
 **Signals**:
 
@@ -339,15 +339,15 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 - Forbidden: amounts, memo text, transcripts, audio, labels, search/filter values, emails, IPs in app logs, auth tokens, export data, detector inputs/matches/normalizations/derivatives, prompts/responses, raw URLs or queries.
 - Boundary rule: redact/omit before the signal enters the logger/SDK. Collector-side scrubbing is defense in depth, never the primary control.
 
-**Alternatives**: Sentry/PostHog add processors and accidental payload capture without a requirement; raw CloudWatch logging lacks portable instrumentation/trace boundaries; no telemetry cannot meet operations SLOs.
+**Alternatives**: Sentry/PostHog add processors and accidental payload capture without a requirement; raw provider-specific logging lacks portable instrumentation/trace boundaries; no telemetry cannot meet operations SLOs.
 
 **Sources**: [OpenTelemetry security](https://opentelemetry.io/docs/security/), [OpenTelemetry collector configuration security](https://opentelemetry.io/docs/security/config-best-practices/)
 
 ## ADR-015 — Deployment and Infrastructure
 
-**Decision**: AWS `ap-southeast-1`, one ECS Fargate service/image behind ALB, RDS PostgreSQL Multi-AZ, private S3/KMS, SES, Secrets Manager, ECR, CloudWatch/OpenTelemetry, provisioned with OpenTofu. GitHub Actions performs ordered gates, migration task, ECS circuit-breaker deployment, synthetic verification, and rollback/safe-forward.
+**Decision**: Docker + Dokploy with one immutable Cashmemo image digest serving separate API and worker roles, the existing private PostgreSQL 18 service, private RustFS Primary, separate RustFS Secondary, pgBackRest, runtime secrets injected from the existing shared Infisical service, and OTLP sent to the existing shared collector/OpenObserve. GitHub Actions performs ordered gates, image/SBOM/security publication, and produces a protected digest handoff; a separate approved Dokploy pass applies migrations/deployments and performs synthetic verification and rollback/safe-forward.
 
-**Why it fits**: Managed compute/database/storage/email/monitoring meet production-equivalent, backup, restore, secrets, and regional operational needs without Kubernetes. Fargate permits a conventional long-running API plus worker and encrypted ephemeral audio.
+**Why it fits**: The verified development control plane already contains PostgreSQL, Infisical, and OTLP/OpenObserve. Dokploy supports conventional long-running API/worker containers without Kubernetes or independently versioned services. The architecture preserves project-owned ports and makes backup/restore, object storage, secrets, and telemetry boundaries explicit.
 
 **Alternatives**:
 
@@ -355,15 +355,15 @@ With `advanced.database.generateId="uuid"`, Better Auth's supported native Postg
 |---|---|
 | Serverless functions | Audio streaming, bounded temporary files, DB leases, connection behavior, and long deletion/export operations are more complex |
 | Kubernetes | Operational burden and speculative scaling violate MVP simplicity |
-| PaaS bundle (Vercel/Supabase) | Easy start but splits operational ownership, backup/restore evidence, egress, and session/deletion semantics across platforms |
-| Single VM | Simple but weaker repeatability, deploy rollback, isolation, HA, and restore evidence |
+| PaaS bundle (Vercel/Supabase) | Splits operational ownership, backup/restore evidence, egress, and session/deletion semantics across platforms |
+| Unmanaged process deployment | Weaker repeatability, deploy rollback, role isolation, and artifact provenance |
 | Microservices | Constitution conflict and no explicit need |
 
-**Sources**: [ECS deployment circuit breaker](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-circuit-breaker.html), [AWS Secrets Manager with ECS](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/secrets-envvar-secrets-manager.html), [Fargate storage](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-storage.html)
+**Sources**: [Dokploy documentation](https://docs.dokploy.com/), [RustFS releases](https://github.com/rustfs/rustfs/releases), [pgBackRest user guide](https://pgbackrest.org/user-guide.html), [Cloudflare Email Service REST API](https://developers.cloudflare.com/email-service/api/send-emails/rest-api/)
 
 ## ADR-016 — Test Tooling and Evidence
 
-**Decision**: Vitest for unit/contract, fast-check for properties, Testcontainers with real PostgreSQL, Playwright for PWA/browser journeys, axe-core plus manual accessibility, k6 for performance, real OpenAI/SES/AWS integration suites, and scripted restore/deletion drills. Evidence writer accepts only content-safe typed fields and artifact hashes.
+**Decision**: Vitest for unit/contract, fast-check for properties, PostgreSQL integration against the approved external stack, Playwright for PWA/browser journeys, axe-core plus manual accessibility, k6 for performance, real OpenAI/Cloudflare Email/RustFS/pgBackRest/Dokploy integration suites, and scripted restore/deletion drills. Evidence writer accepts only content-safe typed fields and artifact hashes. Local Docker is not required or used by this reconciliation.
 
 **Alternatives**: mock-only tests cannot meet FR-105; a single end-to-end suite is slow and poor at invariants; manual-only evidence is non-repeatable; production financial data is forbidden in tests/evidence.
 
@@ -384,7 +384,7 @@ Implementation must create a versioned decision record for each production provi
 **Launch blockers as of planning**:
 
 - OpenAI production ZDR approval and administrative evidence do not exist in this repository and must be obtained/verified during implementation. This is a known external dependency, not an unresolved architectural assumption.
-- SES production sending authorization/domain verification must be evidenced before real signup acceptance.
+- Cloudflare Email Service production sending authorization/domain verification and scoped token must be evidenced before real signup acceptance.
 - No provider may be silently substituted; a new ADR and privacy gate are mandatory.
 
 ## Known Limitations Classified
@@ -405,4 +405,4 @@ Implementation must create a versioned decision record for each production provi
 
 ## Resolved Questions
 
-All Phase 0 technical questions are resolved. Package patch versions, AWS account identifiers, DNS name, provider credentials, final normal-load concurrency after measurement, and human owner names are deployment configuration/assignment inputs, not product or architecture ambiguities. They must be bound before the corresponding implementation/evidence task closes.
+All Phase 0 technical questions are resolved. Package patch versions, Dokploy resource identities, application hostname/TLS boundary, provider credentials, independent production Secondary identity, final normal-load concurrency after measurement, and human owner names are deployment configuration/assignment inputs, not product or architecture ambiguities. They must be bound before the corresponding implementation/evidence task closes.

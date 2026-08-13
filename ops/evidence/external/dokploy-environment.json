@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "cashmemo.external-blocker.v1",
+  "status": "BLOCKED_EXTERNAL",
+  "architecture": "docker-dokploy-self-hosted-v1",
+  "missingSafeNames": [
+    "CASHMEMO_IMAGE_DIGEST",
+    "CASHMEMO_API_RESOURCE_ID",
+    "CASHMEMO_WORKER_RESOURCE_ID",
+    "RUSTFS_PRIMARY_RESOURCE_ID",
+    "RUSTFS_SECONDARY_RESOURCE_ID",
+    "PGBACKREST_RESOURCE_ID",
+    "INFISICAL_INJECTION_ID",
+    "OTLP_ENDPOINT_ID",
+    "INDEPENDENT_PRODUCTION_SECONDARY_ID"
+  ],
+  "developmentSecondaryIndependentFailureDomain": false,
+  "approved": false,
+  "containsCredentials": false
+}

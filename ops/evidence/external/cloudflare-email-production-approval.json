@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "cashmemo.external-blocker.v1",
+  "status": "BLOCKED_EXTERNAL",
+  "serviceMaturity": "beta",
+  "missingSafeNames": [
+    "APPROVED_ACCOUNT_REFERENCE",
+    "APPROVED_SENDER_DOMAIN_REFERENCE",
+    "SCOPED_TOKEN_REVIEW_REFERENCE",
+    "CONTROLLED_INBOX_RESULT_REFERENCE"
+  ],
+  "approved": false,
+  "containsCredentials": false
+}

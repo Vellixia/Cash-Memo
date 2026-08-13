@@ -2,7 +2,7 @@
 
 ## Service Topology and Ownership
 
-One versioned image serves the PWA/API and starts API or worker roles. One RDS PostgreSQL database is the product datastore. S3 stores only exports, content-safe evidence, and content-free deletion reconciliation records. OpenAI, SES, and AWS services sit behind project-owned adapters.
+One immutable image serves the PWA/API and starts API or worker roles. One private PostgreSQL 18 database is the product datastore. RustFS Primary stores exports and approved content-safe evidence; separate RustFS Secondary stores encrypted pgBackRest/WAL and content-free deletion reconciliation records. OpenAI and Cloudflare Email sit behind project-owned adapters. Existing shared Infisical and OTel/OpenObserve are connected, not duplicated.
 
 Required accountable roles before task closure:
 
@@ -11,7 +11,7 @@ Required accountable roles before task closure:
 | Product/API release | Release owner |
 | Privacy/detectors/providers | Privacy owner |
 | Auth/RLS/application security | Security owner |
-| AWS/deployment/monitoring | SRE owner |
+| Dokploy/deployment/shared monitoring | SRE owner |
 | Database/migration/restore | Data operations owner |
 | STT/AI adapters | Provider integration owner |
 | Accessibility/usability | Accessibility and product research owners |
@@ -30,7 +30,7 @@ Named humans/teams are assigned in tasks/evidence, not guessed in planning.
 | Draft/derived cleanup | inaccessible immediately; live removal ≤24h | lifecycle backlog age | oldest due item ≥6h warning, ≥18h critical |
 | Record/account live purge | ≤24h normal operation after due point | purge state/backlog | any failed stage; oldest due ≥6h warning, ≥18h critical |
 | Export package deletion | ≤24h after cancel/expiry | job/object version reconciliation | oldest due ≥6h warning, ≥18h critical |
-| Suppression cleanup | never before 42d; only after verified absence of every resurrection-capable copy | full RDS/AWS lineage inventory per token | any inventory failure, policy violation, capable copy, or removal failure retains token and alerts |
+| Suppression cleanup | never before 42d; only after verified absence of every resurrection-capable copy | full PostgreSQL/pgBackRest/RustFS/local-copy lineage inventory per token | any stale/incomplete/unavailable/unverifiable inventory, policy violation, capable copy, or removal failure retains token and alerts |
 | Backup RPO/RTO | RPO ≤24h, RTO ≤8h | quarterly isolated drill | backup failure immediate; missed drill critical |
 | Provider retention approval | valid continuously | config/decision version check | mismatch/expiry blocks adapter and launch |
 
@@ -61,10 +61,10 @@ Implementation must create, rehearse, and version:
 1. environment bootstrap and drift detection;
 2. secrets rotation and suspected credential exposure;
 3. migration deploy, migration failure, rollback, and safe-forward;
-4. ECS deployment circuit breaker and release rollback;
+4. Dokploy health rollback and release safe-forward;
 5. core journal outage;
 6. STT outage and AI outage, separately and together;
-7. SES verification/reset outage;
+7. Cloudflare Email verification/reset outage;
 8. PostgreSQL saturation/failover/corruption suspicion;
 9. audio deletion failure/oldest-age alarm;
 10. draft/record/export/account purge backlog or failed stage;
@@ -74,7 +74,7 @@ Implementation must create, rehearse, and version:
 14. deletion reconciliation after restore;
 15. privacy incident for discovered prohibited persisted content;
 16. cross-user isolation/security incident;
-17. S3/KMS/Secrets Manager access failure;
+17. RustFS/pgBackRest/runtime-secret injection failure;
 18. rate-limit/abuse event without account enumeration.
 
 Every runbook declares trigger, user impact, owner/escalation, read-only diagnosis, safe mitigation, rollback, evidence allowed, communications, and closure verification. No runbook asks operators to paste journal content, provider payloads, detector values, or exports into tickets/chat.
@@ -92,7 +92,7 @@ Every runbook declares trigger, user impact, owner/escalation, read-only diagnos
 
 ### Record purge
 
-The state transition makes a record inaccessible immediately. Before hard deletion, the worker derives `HMAC-SHA-256(suppression_key, "money_memo:" || canonical_memo_uuid)`, durably writes the content-free `money_memo` ledger record outside RDS, and verifies that write. If ledger write fails, the memo remains inaccessible in `purging`; hard deletion waits and alerts. After success, the worker deletes memo content, search vector, related drafts/transcripts/AI metadata, export inclusion on future snapshots, and any provider-deletable state. Failed stage remains retryable/escalated and cannot claim completion.
+The state transition makes a record inaccessible immediately. Before hard deletion, the worker derives `HMAC-SHA-256(suppression_key, "money_memo:" || canonical_memo_uuid)`, conditionally writes the content-free `money_memo` ledger record to RustFS Secondary, and verifies body checksum/version durability. If the outcome fails or is ambiguous/unverifiable, the memo remains inaccessible in `purging`; hard deletion waits and alerts. After success, the worker deletes memo content, search vector, related drafts/transcripts/AI metadata, export inclusion on future snapshots, and any provider-deletable state. Failed stage remains retryable/escalated and cannot claim completion.
 
 ### Account purge
 
@@ -100,9 +100,9 @@ After seven-day grace:
 
 1. atomically enter irreversible `purging`, revoke sessions/tokens, and deny journal access;
 2. cancel/delete export packages;
-3. derive `HMAC-SHA-256(suppression_key, "account:" || canonical_account_uuid)`, durably write and verify the content-free `account` ledger record outside RDS; if this fails, remain inaccessible in `purging` and do not hard-delete;
+3. derive `HMAC-SHA-256(suppression_key, "account:" || canonical_account_uuid)`, durably write and verify the content-free `account` ledger record in separate RustFS Secondary storage; if this fails or is ambiguous, remain inaccessible in `purging` and do not hard-delete;
 4. delete drafts, captures, provider state, memos, labels, preferences/profile, credentials/email;
-5. reconcile S3 versions and provider deletion/not-required status;
+5. reconcile RustFS object versions and provider deletion/not-required status;
 6. verify absence through owner-scoped probes;
 7. report live purge and provider pending/confirmed separately;
 8. complete only when every mandatory live stage succeeds.
@@ -111,21 +111,21 @@ Jobs use deterministic dedupe keys and idempotent absence-as-success rules. They
 
 ### Backup interaction
 
-RDS automated backup/PITR retention is set to 35 days maximum. User disclosure distinguishes live purge from encrypted backup aging.
+pgBackRest backup/WAL recoverability is bounded to 35 days maximum by reviewed retention and verified repository inventory. User disclosure distinguishes live purge from encrypted backup aging.
 
-Feature 001 prohibits manual DB snapshots, final snapshots, retained automated backups after database deletion, AWS Backup recovery points for the product database, snapshot share/copy, and cross-region automated-backup replication. Runtime/deploy roles lack these permissions; policy-as-code checks plans; CloudTrail/EventBridge/AWS Config-style controls alert on any violation. Production DB deletion is denied outside a break-glass workflow that uses no final snapshot. A discovered prohibited artifact is resurrection-capable until verified destroyed.
+Deployment policy prohibits unregistered pgBackRest repositories, manual/operator/volume backup copies, replicas, and restore copies. Runtime/deploy roles cannot create unregistered copies; inventory and alert checks block release/cleanup on violations. Production database deletion is denied outside break-glass procedure. A discovered unregistered or unverifiable artifact is resurrection-capable until verified destroyed.
 
 Isolated PITR/restore copies are permitted only for drills/incidents. They carry immutable source-lineage/recovery-time tags, are registered in the restore inventory before access, remain network-isolated until release approval, and are deregistered only after verified destruction. Abandoned copies remain cleanup blockers.
 
-Suppression record contains only `deletion_token`, `entity_type`, suppression-key version, purge time, `removal_not_before_at`, policy version, and content-free verification state. Token is exactly `HMAC-SHA-256(suppression_key, entity_type || ":" || canonical immutable UUID)`. It contains no raw account/memo ID, email, financial value, journal metadata, or content derivative. Separate KMS/HMAC keys and purge/restore roles protect ledger. Forty-two days is minimum removal time, not expiry; no S3 lifecycle deletes ledger objects.
+Suppression record contains only `deletion_token`, `entity_type`, suppression-key version, purge time, `removal_not_before_at`, policy version, and content-free verification state. Token is exactly `HMAC-SHA-256(suppression_key, entity_type || ":" || canonical immutable UUID)`. It contains no raw account/memo ID, email, financial value, journal metadata, or content derivative. Separate injected HMAC keys and purge/restore roles protect the encrypted RustFS Secondary ledger. Forty-two days is minimum removal time, not expiry; no object lifecycle deletes ledger objects.
 
 ### Suppression cleanup verifier
 
 After `removal_not_before_at`, privileged scheduled verification:
 
 1. identifies product DB lineage and purge time from content-free policy metadata;
-2. enumerates RDS automated backup/PITR windows and retained automated backups;
-3. inventories manual/final/copied/shared snapshots, AWS Backup recovery points, cross-region/replicated backups, and policy violations;
+2. enumerates pgBackRest backup sets, WAL recovery windows, and every Secondary object version;
+3. inventories local repositories, manual/operator/volume copies, replicas, restore copies, and policy violations;
 4. inventories every active isolated restore instance/cluster and confirms its source recovery point cannot contain pre-purge data—or requires its verified destruction;
 5. requires authoritative inventory APIs/config checks to succeed and proves every artifact capable of restoring state from before the purge is outside recovery or absent;
 6. only after all checks pass, marks `verified_eligible`, deletes the ledger object with version verification, and records content-free removal evidence;
@@ -135,7 +135,7 @@ Suppression keys cannot rotate out of availability while records under that vers
 
 ## Backup and Restore Procedure
 
-Declared disaster: loss/corruption of primary RDS deployment requiring point-in-time restore in the same AWS region while application artifacts/object storage remain available.
+Declared disaster: loss/corruption of primary PostgreSQL requiring pgBackRest target-time restore from an independent-failure-domain repository while application artifacts and suppression ledger remain available.
 
 1. Declare incident and record content-free recovery target/backup age.
 2. Block public traffic and deploy restore environment in isolated subnets.
@@ -157,14 +157,14 @@ Quarterly drills alternate representative failure points, including backups pred
 - Image is pinned by digest, non-root, read-only root filesystem, minimal capabilities, SBOM attached.
 - One-shot migration task uses a separate role and advisory lock. API/worker versions check compatible schema at startup and fail closed.
 - Expand/contract changes maintain prior-release compatibility through rollback window. Destructive schema cleanup follows proven migration/backfill and backup-retention analysis.
-- ECS circuit breaker rolls back failed health; synthetic post-deploy verifies manual journal first, then providers. Feature flags may disable providers, never privacy/auth/confirmation/deletion controls.
+- Dokploy health policy rolls API and worker back to the previous immutable digest when schema-compatible; synthetic post-deploy verifies manual journal first, then providers. Feature flags may disable providers, never privacy/auth/confirmation/deletion controls.
 - No silent partial release: build/config/migration/provider decision/currency registry versions appear in the content-safe release manifest.
 
 ## Secrets and Access
 
-Secrets Manager/KMS with task roles and least privilege. Separate roles for runtime API, worker purge, migration, restore, CI deploy, and human break-glass. Export bucket paths, deletion ledger, and evidence use separate policies/keys. OpenAI project key is restricted/rotated; no default developer key can run production.
+The existing shared Infisical service injects secrets at runtime with least privilege. Separate capabilities exist for runtime API, worker purge, migration, restore, CI artifact publication, Dokploy deploy, and human break-glass. RustFS Primary paths, Secondary deletion ledger/backup repository, and evidence use separate credentials/namespaces. OpenAI project key is restricted/rotated; no default developer key can run production.
 
-Better Auth's core PostgreSQL `session.token` is supported bearer material, not a Cashmemo-hashed lookup value. Only Better Auth's runtime DB role may read/write it; operators, analytics, evidence, SQL telemetry, support tooling, and general application repositories cannot select it. RDS/storage/backups are encrypted. Session-table exposure is treated as credential exposure requiring supported revoke-all and key/session rotation procedures.
+Better Auth's core PostgreSQL `session.token` is supported bearer material, not a Cashmemo-hashed lookup value. Only Better Auth's identity DB role may read/write it; operators, analytics, evidence, SQL telemetry, support tooling, and general application repositories cannot select it. PostgreSQL storage and pgBackRest repositories are encrypted. Session-table exposure is treated as credential exposure requiring supported revoke-all and key/session rotation procedures.
 
 Secret scans run pre-commit/CI/image. Detection blocks release and starts rotation; test output never prints suspected secret. Break-glass access is time-bound, approved, audited content-free, and reviewed.
 
@@ -181,7 +181,7 @@ Secret scans run pre-commit/CI/image. Detection blocks release and starts rotati
 
 ## Cost Guardrails
 
-Budgets/alarms cover ECS task count, RDS storage/IO/connections, S3 versions, provider tokens/audio, SES volume, and telemetry ingestion. Provider requests have per-account/global rate and spend limits. Cost control may degrade STT/AI explicitly but cannot disable manual capture, deletion, export access to ready packages, privacy checks, or isolation.
+Budgets/alarms cover API/worker health, PostgreSQL storage/IO/connections, RustFS versions, pgBackRest backup/WAL age, provider tokens/audio, Cloudflare email volume, and telemetry ingestion. Provider requests have per-account/global rate and spend limits. Cost control may degrade STT/AI explicitly but cannot disable manual capture, deletion, export access to ready packages, privacy checks, or isolation.
 
 ## Production Acceptance Evidence
 

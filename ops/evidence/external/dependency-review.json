@@ -2,8 +2,15 @@
   "schemaVersion": "cashmemo.external-blocker.v1",
   "status": "BLOCKED_EXTERNAL",
   "baselinePath": "config/release/dependency-baseline.json",
-  "missingSafeNames": ["SECURITY_REVIEW_DATE", "SECURITY_REVIEW_EXPIRY", "MODERATE_FINDING_DISPOSITION"],
+  "missingSafeNames": [
+    "SECURITY_REVIEW_DATE",
+    "SECURITY_REVIEW_EXPIRY",
+    "MODERATE_FINDING_DISPOSITION",
+    "RUSTFS_PRODUCTION_RELEASE_APPROVAL",
+    "RUSTFS_PRODUCTION_IMAGE_DIGEST",
+    "CLOUDFLARE_EMAIL_PRODUCTION_APPROVAL",
+    "INDEPENDENT_SECONDARY_FAILURE_DOMAIN"
+  ],
   "approved": false,
   "containsDependencyPayload": false
 }
-

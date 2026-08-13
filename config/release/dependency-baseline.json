@@ -5,8 +5,13 @@
   "pnpm": "11.13.1",
   "betterAuth": "1.6.26",
   "postgresql": "18",
-  "openTofu": "1.12.5",
-  "awsProvider": "6.59.0",
+  "minioClient": "8.0.7",
+  "rustfsImage": "rustfs/rustfs:1.0.0-rc.1",
+  "rustfsPreRelease": true,
+  "rustfsProductionApproved": false,
+  "pgBackRest": "2.59.0",
+  "pgBackRestSourceSha256": "faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875",
+  "cloudflareEmailService": "rest-api-beta-reviewed-2026-08-13",
   "sttModelSnapshot": "gpt-4o-mini-transcribe-2025-12-15",
   "extractionModelSnapshot": "gpt-5.4-mini-2026-03-17",
   "currencyRegistryVersion": "cldr47-iso4217-2026-01-01-cashmemo-v1",
@@ -18,7 +23,11 @@
   "missingSafeNames": [
     "SECURITY_REVIEW_DATE",
     "SECURITY_REVIEW_EXPIRY",
-    "MODERATE_FINDING_DISPOSITION"
+    "MODERATE_FINDING_DISPOSITION",
+    "RUSTFS_PRODUCTION_RELEASE_APPROVAL",
+    "RUSTFS_PRODUCTION_IMAGE_DIGEST",
+    "CLOUDFLARE_EMAIL_PRODUCTION_APPROVAL",
+    "INDEPENDENT_SECONDARY_FAILURE_DOMAIN"
   ],
   "approved": false
 }

@@ -94,14 +94,14 @@ Required real services:
 
 | Service | Required proof |
 |---|---|
-| Better Auth + RDS PostgreSQL | verified signup/login/reset/revocation using deployed app and real DB; zero core-schema drift; supported session `token` storage/query behavior; email-verification non-persistence/replay/expiry; hashed reset identifier plus consume/replay/expiry/cleanup; OAuth-only fields null; cookie cache/stateless storage disabled; 7d refresh/30d absolute policy tested with controlled clock plus live smoke; no custom token-hashing lookup |
-| AWS SES | verified domain/configuration, real delivery to controlled test inboxes, generic email copy, bounce mapping, no message/user content in app telemetry |
+| Better Auth + PostgreSQL | verified signup/login/reset/revocation using deployed app and real DB; zero core-schema drift; supported session `token` storage/query behavior; email-verification non-persistence/replay/expiry; hashed reset identifier plus consume/replay/expiry/cleanup; OAuth-only fields null; cookie cache/stateless storage disabled; 7d refresh/30d absolute policy tested with controlled clock plus live smoke; no custom token-hashing lookup |
+| Cloudflare Email Service | verified domain/scoped token, real delivery to controlled test inboxes, generic email copy, permanent-bounce/failure mapping, no message/user content in app telemetry |
 | OpenAI STT | pinned model/endpoint accepts all supported browser formats, duration limits/errors map correctly, no training/retention admin evidence, raw audio deleted after each terminal path |
 | OpenAI extraction | pinned snapshot, `store:false`, strict schema, invalid/ambiguous cases, payload-minimization proxy, ZDR admin evidence |
-| RDS | Multi-AZ, migration, PITR backup, monitoring, isolated restore |
-| S3/KMS | export isolation, encrypted write/read, same-origin stream, cancel/expiry version deletion, content-free suppression ledger |
-| ECS/ALB/Secrets Manager | real deployment, health rollback, runtime secrets, encrypted ephemeral storage, task termination audio cleanup |
-| OpenTelemetry/CloudWatch | allowlisted metrics/traces/logs, alerts, seeded-value absence, core/provider status separation |
+| PostgreSQL + pgBackRest | migration, backup/WAL/PITR, monitoring, isolated restored-state inspection |
+| RustFS Primary/Secondary | private export isolation, checksum/head/write/read, application stream, cancel/expiry every-version deletion, content-free suppression ledger |
+| Dokploy + injected Infisical secrets | same immutable digest for API/worker, health rollback, runtime secrets, read-only/non-root runtime, task termination audio cleanup |
+| OpenTelemetry/OpenObserve | allowlisted metrics/traces/logs through shared collector, alerts, seeded-value absence, core/provider status separation |
 
 Mocks/fakes remain useful for failure injection but cannot close these rows. Pass: exact approved provider decision version and evidence hash recorded; no provider gap or expired approval.
 
@@ -141,7 +141,7 @@ Owner: security owner; environment: CI/staging.
 - RLS direct-query tests, missing/forged transaction context, connection-pool context reset, maintenance-role separation;
 - session fixation/rotation/revocation, CSRF/origin, cookie flags, reset replay, verification replay, brute/rate limits, enumeration timing/shape;
 - malicious OpenAPI/provider payloads, oversized strings/audio, MIME spoofing, ZIP/CSV injection, SQL/search metacharacters;
-- dependency/image/IaC/SBOM/secret scans; CSP and security headers; least-privilege IAM/KMS/S3 policies;
+- dependency/image/deployment-policy/SBOM/secret scans; CSP and security headers; least-privilege RustFS/pgBackRest/Dokploy capability policies;
 - export recent-auth and object-key isolation; deletion irreversible-state authorization.
 
 Pass: zero unauthorized read/write/existence leak; zero committed secret; no unresolved CRITICAL/HIGH finding.
@@ -153,7 +153,7 @@ Owner: reliability owner; environment: CI/staging with fault proxy.
 - STT unavailable/timeout/rate limit/invalid response after audio accepted;
 - AI unavailable/timeout/invalid schema/contradictory output after text/transcript preserved;
 - DB deadlock/connection loss before and after commit; lost HTTP response; duplicated job delivery;
-- SES failure, S3 write/read/delete failure, KMS denial, worker crash/lease expiry;
+- Cloudflare email failure, RustFS Primary/Secondary write/read/head/delete failure, pgBackRest repository denial, worker crash/lease expiry;
 - browser network interruption during draft save/audio upload/confirm;
 - continuation after occurrence edit/create/delete/restore/archive/filter-field change; stale cursor returns `RESULTS_CHANGED` with no page, then clean restart completes;
 - process termination while audio exists; sweeper delay; clock advance to expiry;
@@ -163,12 +163,12 @@ Pass: manual core remains operational when accelerator providers fail; no duplic
 
 ### 10. Operational/restore tests
 
-Owner: SRE/operations owner; environment: isolated production-equivalent AWS staging.
+Owner: SRE/operations owner; environment: isolated production-equivalent Dokploy staging with an independent backup failure domain.
 
 - environment bootstrap from empty account/project prerequisites;
-- forward migration, failed migration, rollback/safe-forward, ECS circuit breaker;
+- forward migration, failed migration, rollback/safe-forward, Dokploy health rollback;
 - backup creation, point-in-time restore, session invalidation, exact `money_memo`/`account` token application, re-purge, release checklist;
-- `removal_not_before_at` cleanup tests with automated recovery windows, prohibited manual/final/copied/replicated snapshot policy, AWS Backup inventory, active isolated restore copies, inventory outage, alert/retry, and token/key-version retention;
+- `removal_not_before_at` cleanup tests with pgBackRest backup/WAL recovery windows, local/Secondary/manual/operator/volume/replica inventory, active isolated restore copies, stale/incomplete/unavailable/unverifiable inventory, alert/retry, and token/key-version retention;
 - record/draft/audio/transcript/AI/export/account/provider/backup lifecycle per trigger;
 - quarterly RPO/RTO drill, single-AZ/DB failover, provider outage runbook, purge backlog alert;
 - temporary audio task kill and abandoned-flow expiry; object-version deletion audit;
@@ -178,7 +178,7 @@ Pass: declared RPO/RTO and deletion SLOs achieved; no individually purged memo o
 
 ### 11. Performance/SLO tests
 
-Owner: performance owner; environment: production-equivalent staging, release-sized ECS/RDS, synthetic accounts.
+Owner: performance owner; environment: production-equivalent Dokploy/PostgreSQL staging with approved measured sizing and synthetic accounts.
 
 Normal-load profile: 1,000 DAU assumption, 100 requests/second short burst, 30 sustained core requests/second, 20 concurrent assisted operations, accounts at 10,000 memos with realistic filters/currencies. Revalidate profile from observed pre-launch beta traffic before production claim.
 
@@ -227,7 +227,7 @@ Legend: **A** automated, **R** real-service, **O** operational drill/SLO, **M** 
 | SC-012 | A | deterministic golden dataset, timezone/DST/prior-zero cases |
 | SC-013 | A+R | k6 + browser timings on release-sized staging with 10,000-memo accounts |
 | SC-014 | O | synthetic probe month calculation; core/STT/AI separately reported |
-| SC-015 | A+R | endpoint/RLS/S3/audio/deletion two-account matrix |
+| SC-015 | A+R | endpoint/RLS/object-store/audio/deletion two-account matrix |
 | SC-016 | A+R | seeded canary scan across every diagnostic/evidence channel |
 | SC-017 | A+M | interface/schema static scan + limitation comprehension review |
 | SC-018 | R+O | signed provider decision records and administrative control evidence |
@@ -242,7 +242,7 @@ Legend: **A** automated, **R** real-service, **O** operational drill/SLO, **M** 
 
 ## Production-Equivalent End-to-End Journey
 
-One release-candidate run must use real staging equivalents for auth, SES, RDS, STT, AI, S3, telemetry, and backup controls:
+One release-candidate run must use real staging equivalents for auth, Cloudflare Email, PostgreSQL, STT, AI, RustFS, telemetry, and pgBackRest controls:
 
 ```text
 new account → verification email → login → privacy onboarding/preferences
@@ -280,7 +280,7 @@ testCommandOrProcedureId, startedAt, finishedAt, coarseResult,
 safeFixtureSetVersion, artifactSha256, reviewerRole, reviewedAt
 ```
 
-Environment metadata also records ECS task definition, database engine/migration version, browser/device version, feature flags, and normal-load profile. Artifact bodies are access-controlled, retention-limited, and scanned before acceptance. A content scan failure quarantines the artifact and fails the gate; it is never attached to an issue/support ticket.
+Environment metadata also records immutable image digest and API/worker role definitions, database engine/migration version, RustFS/pgBackRest versions and failure-domain classification, browser/device version, feature flags, and normal-load profile. Artifact bodies are access-controlled, retention-limited, and scanned before acceptance. A content scan failure quarantines the artifact and fails the gate; it is never attached to an issue/support ticket.
 
 ## Requirement Ownership Closure
 

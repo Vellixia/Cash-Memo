@@ -307,7 +307,7 @@ Unique `(user_id, operation, key)`. Creation and result update commit with the d
 | `requested_at` | TIMESTAMPTZ | |
 | `state` | enum | `queued|running|ready|failed|canceled|expired|deleting|deleted` |
 | `snapshot_cutoff` | TIMESTAMPTZ | deterministic inclusion boundary |
-| `object_key_ciphertext` | BYTEA nullable | encrypted opaque S3 reference |
+| `object_key_ciphertext` | BYTEA nullable | encrypted opaque object-store reference |
 | `manifest_sha256` | BYTEA nullable | package integrity, not content in telemetry |
 | `ready_at`, `expires_at`, `deleted_at` | TIMESTAMPTZ nullable | ready expiry ≤24 hours |
 | `failure_class` | enum nullable | content-free |
@@ -363,7 +363,7 @@ Job payload is a strict typed reference, not arbitrary JSON or user content. Wor
 
 ### 20. DeletionSuppressionRecord
 
-Persistent outside resurrection-capable RDS data in a dedicated KMS-encrypted ledger. One record is durably present before one irreversible live purge proceeds.
+Persistent outside the PostgreSQL/pgBackRest resurrection set in a dedicated encrypted RustFS Secondary ledger. One record is durably present and read-after-write verified before one irreversible live purge proceeds.
 
 | Field | Type | Constraints / meaning |
 |---|---|---|
@@ -374,10 +374,10 @@ Persistent outside resurrection-capable RDS data in a dedicated KMS-encrypted le
 | `removal_not_before_at` | TIMESTAMPTZ | exactly `purged_at + 42 days`; minimum only, never automatic expiry |
 | `verification_state` | enum | `not_due|pending|blocked|verified_eligible|removing|removed|remove_failed` |
 | `last_verified_at` | TIMESTAMPTZ nullable | content-free verifier time |
-| `blocking_artifact_classes` | enum array | zero or more of `automated_backup|manual_snapshot|final_snapshot|retained_automated_backup|aws_backup_recovery_point|copied_snapshot|replicated_backup|isolated_restore_copy|inventory_unavailable` |
+| `blocking_artifact_classes` | enum array | zero or more of `pgbackrest_backup|wal_archive|local_repository|secondary_object_version|manual_operator_copy|volume_snapshot|replica|isolated_restore_copy|inventory_stale_incomplete|inventory_unavailable|inventory_unverifiable` |
 | `policy_version`, `created_at`, `updated_at` | TEXT/timestamps | content-free policy and lifecycle metadata |
 
-The ledger contains no raw account ID, Money Memo ID, email, financial value, journal metadata, content hash, matched detector material, counts revealing a journal, or free-form reason. S3 lifecycle does not delete this record. A privileged cleanup verifier deletes only after `removal_not_before_at` and successful backup-lineage proof; failure retains it, alerts, and retries. Suppression-key material remains until every record under its version is removed through this verified path.
+The ledger contains no raw account ID, Money Memo ID, email, financial value, journal metadata, content hash, matched detector material, counts revealing a journal, or free-form reason. Object-store lifecycle does not delete this record. A privileged cleanup verifier deletes only after `removal_not_before_at` and successful current/complete backup-lineage proof; failure retains it, alerts, and retries. Suppression-key material remains until every record under its version is removed through this verified path.
 
 ### 21. CurrencyRegistryVersion
 
@@ -509,16 +509,16 @@ purging → live_purged → provider_pending → complete
 
 | Data class | Live location | Normal terminal trigger | Removal target / maximum | Backup/provider treatment |
 |---|---|---|---|---|
-| Confirmed memo | PostgreSQL | 30-day expiry or immediate purge | inaccessible immediately; live hard delete ≤24h normal ops after durable `money_memo` token | RDS ≤35d; exact memo token suppresses individual resurrection |
+| Confirmed memo | PostgreSQL | 30-day expiry or immediate purge | inaccessible immediately; live hard delete ≤24h normal ops after durable `money_memo` token | pgBackRest recovery window ≤35d; exact memo token suppresses individual resurrection |
 | Recoverable draft/text | PostgreSQL + account-scoped IndexedDB replica | confirm, discard, 7d inactivity expiry | server ≤24h; client cleanup retried and on next app start | server backup ≤35d; restored expired data re-purged |
 | Transcript | Draft source text | confirm, discard, failure, 7d expiry | same as draft; derived unused metadata ≤24h | no separate provider storage under approved controls |
 | AI candidate/metadata | Draft strict candidate fields/provider metadata | confirm, discard, unrecoverable failure, expiry | unchosen derived metadata ≤24h | provider ZDR required |
 | Raw audio | memory/encrypted task-local ephemeral | transcription, cancel, failure, one-hour expiry | terminal target ≤5m; hard maximum 1h | never backed up; STT retention disabled |
-| Export package | private S3 | cancel or ≤24h expiry | inaccessible at terminal state; object delete ≤24h | version purge included; no Object Lock on content |
+| Export package | private RustFS Primary | cancel or ≤24h expiry | inaccessible at terminal state; object delete ≤24h | every version/delete marker purge included; no retention lock on content |
 | Auth/session/token | PostgreSQL | expiry, revoke, reset, account purge | access denied immediately; hard delete ≤24h where applicable | restore invalidates against deletion/session state |
-| Account live data | PostgreSQL/S3 | 7d grace ends | live purge ≤24h normal ops after durable `account` token | RDS ≤35d; account token suppresses restored account graph |
+| Account live data | PostgreSQL/RustFS Primary | 7d grace ends | live purge ≤24h normal ops after durable `account` token | pgBackRest recovery window ≤35d; account token suppresses restored account graph |
 | Provider copy | approved provider | request completion/account purge | ZDR/no-retention or documented deletion confirmation | provider status reported separately |
-| Deletion suppression token | dedicated KMS-encrypted ledger outside RDS | verified backup-lineage destruction after removal floor | retain at least 42d; remove only after all resurrection-capable artifacts verified absent | no raw identity/content; no TTL authority; failed/unavailable verification retains and alerts |
+| Deletion suppression token | encrypted RustFS Secondary ledger outside PostgreSQL/pgBackRest repository | verified full backup-lineage destruction after removal floor | retain at least 42d; remove only after all resurrection-capable artifacts verified absent | no raw identity/content; no TTL authority; stale/incomplete/unavailable/unverifiable proof retains and alerts |
 
 ## RLS and Ownership Policy Pattern
 
@@ -601,7 +601,7 @@ Before a restored database can receive user traffic:
 6. Run RLS isolation, currency registry, deterministic aggregate, deletion non-resurrection, and export ownership checks.
 7. Inventory and tag this isolated restore copy as resurrection-capable while it exists; produce content-safe drill evidence, release network only after all mandatory checks pass, and verify destruction of abandoned/drill copies before any related token cleanup.
 
-Suppression cleanup is a separate privileged flow. It waits until `removal_not_before_at`, inventories the full RDS lineage and AWS backup controls, and proves absence of every pre-purge automated recovery point, manual/final/copied/shared snapshot, retained automated backup, AWS Backup recovery point, cross-region replica, and isolated restore copy. Infrastructure prohibits all such snapshot/replication classes except inventoried isolated restore copies. Inventory failure, policy drift, or any capable artifact sets `blocked`, retains the token and key version, alerts, and retries. A time-based S3 lifecycle never marks cleanup complete.
+Suppression cleanup is a separate privileged flow. It waits until `removal_not_before_at`, inventories the full pgBackRest/PostgreSQL/RustFS lineage, and proves absence or expiry/destruction of every pre-purge backup set, WAL archive, local repository, Secondary object version, manual/operator/volume copy, replica, and isolated restore copy. Deployment policy prohibits unregistered copies/replicas and requires an independent production repository failure domain. Stale, incomplete, unavailable, or unverifiable inventory, policy drift, or any capable artifact sets `blocked`, retains the token and key version, alerts, and retries. A time-based object lifecycle never marks cleanup complete.
 
 ## Model Validation Invariants
 
