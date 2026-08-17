@@ -184,28 +184,26 @@ export class IdentityService {
             body: { email, name: BETTER_AUTH_COMPATIBILITY_NAME, password: input.password },
           });
           userId = result.user.id;
+          await client.query(
+            `INSERT INTO idempotency_records
+               (id, user_id, operation, key, request_hmac, state, result_type,
+                 result_id, response_code, expires_at)
+             VALUES ($1, $2, 'signup_side_effect', $3, $4, 'succeeded', 'user',
+                     $2, 'accepted', now() + make_interval(days => $5))
+             ON CONFLICT (user_id, operation, key) DO NOTHING`,
+            [
+              createUuidV7(),
+              userId,
+              input.idempotencyKey,
+              Buffer.from(requestHmac, "hex"),
+              SIGNUP_IDEMPOTENCY_RETENTION_DAYS,
+            ],
+          );
         } catch (error) {
-          if (isServerFailure(error) && !isDuplicateEmailError(error)) {
-            throw unavailable();
-          }
+          if (error instanceof IdentityServiceError) throw error;
+          if (isServerFailure(error) && !isDuplicateEmailError(error)) throw unavailable();
           return GENERIC_ACCEPTED;
         }
-
-        await client.query(
-          `INSERT INTO idempotency_records
-             (id, user_id, operation, key, request_hmac, state, result_type,
-              result_id, response_code, expires_at)
-           VALUES ($1, $2, 'signup_side_effect', $3, $4, 'succeeded', 'user',
-                   $2, 'accepted', now() + make_interval(days => $5))
-           ON CONFLICT (user_id, operation, key) DO NOTHING`,
-          [
-            createUuidV7(),
-            userId,
-            input.idempotencyKey,
-            Buffer.from(requestHmac, "hex"),
-            SIGNUP_IDEMPOTENCY_RETENTION_DAYS,
-          ],
-        );
         return GENERIC_ACCEPTED;
       });
     } catch (error) {
