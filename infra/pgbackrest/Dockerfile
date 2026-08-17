@@ -23,6 +23,7 @@ RUN apt-get update \
     && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends ca-certificates libbz2-1.0 liblz4-1 libpq5 libssh2-1 libssl3 libxml2 libyaml-0-2 libzstd1 \
     && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
     && groupadd --system --gid 10002 pgbackrest \
     && useradd --system --uid 10002 --gid pgbackrest --home-dir /nonexistent --shell /usr/sbin/nologin pgbackrest \
     && install -d -o pgbackrest -g pgbackrest /etc/pgbackrest /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest
