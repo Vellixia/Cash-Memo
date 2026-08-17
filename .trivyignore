@@ -92,3 +92,7 @@ CVE-2026-56858
 CVE-2026-56859
 CVE-2026-56860
 CVE-2026-56862
+
+# js-yaml: DoS via crafted YAML (verifier dev dependency)
+CVE-2026-59869
+CVE-2026-59870
