@@ -5,7 +5,9 @@
   "sourceRevisionResolution": "workflow_dispatch.inputs.revision",
   "publishStatus": "BLOCKED_EXTERNAL",
   "publishedDigest": null,
-  "localBuildStatus": "NOT_EXECUTED_LOCAL_DOCKER_PROHIBITED",
+  "localBuildStatus": "PASS_LOCAL_BUILD",
+  "localBuildDigest": "sha256:24be0c59558253fbb83ea7e8454c03fda28509ba780bc2ad18f95e4e4151f818",
+  "localBuildRevision": "8f372294278fc0e235e17c35a71e9cd5eb97d07b",
   "modes": [
     "postgres", "rustfs-primary", "rustfs-secondary", "auth", "stories", "operations",
     "otel", "full-development"
@@ -13,6 +15,9 @@
   "runtimeUid": 10003,
   "productionAllowed": false,
   "dataClass": "synthetic-only",
+  "readOnlyRootProbe": "PASS",
+  "nonRootProbe": "PASS",
+  "noExposeProbe": "PASS",
   "sbomStatus": "PENDING_GHCR_WORKFLOW",
   "scanStatus": "PENDING_GHCR_WORKFLOW",
   "definitionTests": { "status": "pass", "count": 11 },

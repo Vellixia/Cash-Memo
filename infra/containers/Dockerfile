@@ -46,7 +46,9 @@ RUN pnpm build
 
 FROM builder AS runtime-dependencies
 
-RUN pnpm --filter @cashmemo/server deploy --prod --legacy /opt/cashmemo-server
+USER root
+RUN install -d -o node -g node /opt/cashmemo-server \
+    && pnpm --filter @cashmemo/server deploy --prod --legacy /opt/cashmemo-server
 
 FROM ${NODE_IMAGE} AS production
 
