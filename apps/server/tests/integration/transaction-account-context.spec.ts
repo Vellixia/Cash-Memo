@@ -23,10 +23,14 @@ describe("transaction-local authenticated-account context", () => {
     adminPool = new Pool({ connectionString: environment.postgres.connectionUri });
     await applyMigrations(adminPool);
     await adminPool.query(
-      `CREATE ROLE cashmemo_http LOGIN PASSWORD '${RUNTIME_PASSWORD}' IN ROLE cashmemo_runtime`,
-    );
-    await adminPool.query(
-      `CREATE ROLE cashmemo_identity_login LOGIN PASSWORD '${IDENTITY_PASSWORD}' IN ROLE cashmemo_identity`,
+      `DO $test_logins$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cashmemo_http') THEN
+           CREATE ROLE cashmemo_http LOGIN PASSWORD '${RUNTIME_PASSWORD}' IN ROLE cashmemo_runtime;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cashmemo_identity_login') THEN
+           CREATE ROLE cashmemo_identity_login LOGIN PASSWORD '${IDENTITY_PASSWORD}' IN ROLE cashmemo_identity;
+         END IF;
+       END $test_logins$`,
     );
     await adminPool.query(
       `INSERT INTO users (id, name, email, email_verified, status)

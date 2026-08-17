@@ -38,6 +38,13 @@ describe("identity service with dedicated identity role", { concurrent: false },
     if (environment.postgres === undefined) throw new Error("PostgreSQL test service missing");
     migrationPool = new Pool({ connectionString: environment.postgres.connectionUri });
     await applyMigrations(migrationPool);
+    await migrationPool.query(
+      `DO $identity_login$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cashmemo_identity_login') THEN
+           CREATE ROLE cashmemo_identity_login LOGIN PASSWORD 'cashmemo-test-identity-only' IN ROLE cashmemo_identity;
+         END IF;
+       END $identity_login$`,
+    );
 
     identityPool = new Pool({
       connectionString: buildIdentityLoginUri(environment.postgres.connectionUri),

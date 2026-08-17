@@ -46,18 +46,6 @@ export async function applyMigrations(pool: Pool): Promise<void> {
     GRANT cashmemo_runtime, cashmemo_worker, cashmemo_migration, cashmemo_restore, cashmemo_identity
     TO CURRENT_USER
   `);
-  await pool.query(`
-    DO $identity_login$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cashmemo_identity_login') THEN
-        CREATE ROLE cashmemo_identity_login LOGIN PASSWORD 'cashmemo-test-identity-only'
-          IN ROLE cashmemo_identity;
-      ELSE
-        ALTER ROLE cashmemo_identity_login LOGIN PASSWORD 'cashmemo-test-identity-only';
-      END IF;
-    END
-    $identity_login$;
-  `);
 }
 
 export async function verifyMigrationChecksums(): Promise<Readonly<Record<string, string>>> {

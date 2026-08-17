@@ -83,6 +83,12 @@ function isServerFailure(error: unknown): boolean {
   return error instanceof APIError && error.statusCode >= 500;
 }
 
+function isDuplicateEmailError(error: unknown): boolean {
+  if (!(error instanceof APIError)) return false;
+  const cause = (error as { cause?: { code?: string } }).cause;
+  return cause?.code === "23505";
+}
+
 function unavailable(): IdentityServiceError {
   return new IdentityServiceError("AUTH_TEMPORARILY_UNAVAILABLE", true);
 }
@@ -179,7 +185,9 @@ export class IdentityService {
           });
           userId = result.user.id;
         } catch (error) {
-          if (isServerFailure(error)) throw unavailable();
+          if (isServerFailure(error) && !isDuplicateEmailError(error)) {
+            throw unavailable();
+          }
           return GENERIC_ACCEPTED;
         }
 
