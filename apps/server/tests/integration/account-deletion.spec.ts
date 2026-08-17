@@ -99,8 +99,8 @@ describe("account deletion lifecycle against real PostgreSQL", { concurrent: fal
   it("keeps existing session state during grace for cancellation/disclosures", async () => {
     await admin.query(
       `INSERT INTO sessions (id, user_id, token, expires_at)
-       VALUES (gen_random_uuid(), $1, 'synthetic-session-token', $2)`,
-      [ACCOUNT, new Date(NOW.getTime() + 86_400_000)],
+       VALUES (gen_random_uuid(), $1, 'synthetic-session-token', now() + interval '1 day')`,
+      [ACCOUNT],
     );
     await service.request(ACCOUNT, crypto.randomUUID());
     expect((await admin.query("SELECT count(*)::int AS count FROM sessions")).rows[0]).toEqual({

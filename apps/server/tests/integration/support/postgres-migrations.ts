@@ -42,6 +42,10 @@ export async function applyMigrationFiles(
 
 export async function applyMigrations(pool: Pool): Promise<void> {
   await applyMigrationFiles(pool, MIGRATION_FILES);
+  await pool.query(`
+    GRANT cashmemo_runtime, cashmemo_worker, cashmemo_migration, cashmemo_restore, cashmemo_identity
+    TO CURRENT_USER
+  `);
 }
 
 export async function verifyMigrationChecksums(): Promise<Readonly<Record<string, string>>> {
