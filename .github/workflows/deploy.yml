@@ -48,8 +48,8 @@ jobs:
       - run: pnpm toolchain:check
       - run: pnpm format:check
       - run: pnpm lint
-      - run: pnpm typecheck
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm architecture:check
       - run: pnpm test:unit
       - run: pnpm test:property
