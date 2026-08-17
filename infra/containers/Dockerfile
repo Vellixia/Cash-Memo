@@ -63,6 +63,7 @@ RUN groupadd --system --gid 10001 cashmemo \
     && apt-get update \
     && apt-get upgrade --yes \
     && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
     && install -d -o cashmemo -g cashmemo /workspace /var/lib/cashmemo/audio /var/lib/cashmemo/work
 
 WORKDIR /workspace
