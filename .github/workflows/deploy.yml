@@ -145,12 +145,28 @@ jobs:
         id: images
         env:
           RELEASE_SHA: ${{ inputs.revision }}
-          BUILDX_BAKE_ENTITLEMENTS_FS: "0"
         run: |
-          docker buildx bake --file infra/containers/docker-bake.hcl artifacts --metadata-file image-metadata.json
-          runtime_digest=$(jq -er '.runtime."containerimage.digest"' image-metadata.json)
-          pgbackrest_digest=$(jq -er '.pgbackrest."containerimage.digest"' image-metadata.json)
-          verifier_digest=$(jq -er '.verifier."containerimage.digest"' image-metadata.json)
+          docker buildx build --push \
+            --file infra/containers/Dockerfile --target production \
+            --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" \
+            --tag "$RUNTIME_IMAGE_NAME:git-$RELEASE_SHA" \
+            --metadata-file runtime-metadata.json \
+            --provenance=true --sbom=true .
+          docker buildx build --push \
+            --file infra/pgbackrest/Dockerfile --target runtime \
+            --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" \
+            --tag "$PGBACKREST_IMAGE_NAME:git-$RELEASE_SHA" \
+            --metadata-file pgbackrest-metadata.json \
+            --provenance=true --sbom=true .
+          docker buildx build --push \
+            --file infra/containers/Verifier.Dockerfile --target verifier \
+            --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" \
+            --tag "$VERIFIER_IMAGE_NAME:git-$RELEASE_SHA" \
+            --metadata-file verifier-metadata.json \
+            --provenance=true --sbom=true .
+          runtime_digest=$(jq -er '.["containerimage.digest"]' runtime-metadata.json)
+          pgbackrest_digest=$(jq -er '.["containerimage.digest"]' pgbackrest-metadata.json)
+          verifier_digest=$(jq -er '.["containerimage.digest"]' verifier-metadata.json)
           for digest in "$runtime_digest" "$pgbackrest_digest" "$verifier_digest"; do
             test "${digest#sha256:}" != "$digest"
           done
