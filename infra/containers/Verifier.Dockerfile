@@ -40,7 +40,9 @@ RUN apt-get update \
 USER 10003:10003
 COPY --chown=verifier:verifier . .
 RUN pnpm build
-RUN rm -rf /workspace/.pnpm-store /root/.local/share/pnpm/store /tmp/*.pnp /workspace/node_modules/.cache
+USER root
+RUN rm -rf /workspace/.pnpm-store /tmp/cashmemo-verifier/.local/share/pnpm/store /opt/pnpm/store /workspace/node_modules/.cache
+USER 10003:10003
 LABEL org.opencontainers.image.title="cashmemo-verifier" \
       org.opencontainers.image.description="Synthetic development and staging verification runner" \
       org.opencontainers.image.revision="${RELEASE_SHA}" \
