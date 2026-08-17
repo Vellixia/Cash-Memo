@@ -60,6 +60,9 @@ ENV NODE_ENV=production \
 
 RUN groupadd --system --gid 10001 cashmemo \
     && useradd --system --uid 10001 --gid cashmemo --home-dir /nonexistent --shell /usr/sbin/nologin cashmemo \
+    && apt-get update \
+    && apt-get upgrade --yes \
+    && rm -rf /var/lib/apt/lists/* \
     && install -d -o cashmemo -g cashmemo /workspace /var/lib/cashmemo/audio /var/lib/cashmemo/work
 
 WORKDIR /workspace

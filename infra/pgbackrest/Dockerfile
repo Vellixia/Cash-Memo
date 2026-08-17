@@ -20,6 +20,7 @@ FROM ${BASE_IMAGE} AS runtime
 ARG RELEASE_SHA
 ARG BUILD_VERSION
 RUN apt-get update \
+    && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends ca-certificates libbz2-1.0 liblz4-1 libpq5 libssh2-1 libssl3 libxml2 libyaml-0-2 libzstd1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10002 pgbackrest \

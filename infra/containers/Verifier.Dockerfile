@@ -32,7 +32,10 @@ COPY --chown=verifier:verifier packages/test-support/package.json packages/test-
 USER 10003:10003
 RUN pnpm install --frozen-lockfile
 USER root
-RUN pnpm exec playwright install --with-deps chromium \
+RUN apt-get update \
+    && apt-get upgrade --yes \
+    && rm -rf /var/lib/apt/lists/* \
+    && pnpm exec playwright install --with-deps chromium \
     && chmod -R a+rX /ms-playwright
 USER 10003:10003
 COPY --chown=verifier:verifier . .
