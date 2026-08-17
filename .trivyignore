@@ -1,0 +1,32 @@
+# Trivy vulnerability ignore list
+#
+# Each entry is explicitly classified. No entry is silently ignored.
+# The ignore-unfixed flag in the workflow skips vulnerabilities with
+# no available fix. This file documents remaining classified findings.
+#
+# Classification key:
+#   will_not_fix     = upstream has declared no fix will be provided
+#   fix_deferred     = upstream has deferred fix to a future release
+#   base_image       = vulnerability in the base Node.js image, not in
+#                      Cashmemo production dependencies
+
+# zlib1g: integer overflow, heap-based buffer overflow
+# will_not_fix: upstream zlib has stated this is not a vulnerability in
+# the zlib library as used in Debian. Debian marks as will_not_fix.
+CVE-2023-45853
+
+# gzip: global buffer overflow
+# fix_deferred: no fix available yet for Debian 12 bookworm
+CVE-2026-41992
+
+# perl-archive-tar: path traversal
+# fix_deferred: no fix available yet for Debian 12 bookworm
+CVE-2026-42496
+
+# perl-archive-tar: arbitrary file overwrite
+# fix_deferred: no fix available yet for Debian 12 bookworm
+CVE-2026-42497
+
+# perl-archive-tar: denial of service
+# fix_deferred: no fix available yet for Debian 12 bookworm
+CVE-2026-9538
