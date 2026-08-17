@@ -6,8 +6,8 @@
   "publishStatus": "BLOCKED_EXTERNAL",
   "publishedDigest": null,
   "localBuildStatus": "PASS_LOCAL_BUILD",
-  "localBuildDigest": "sha256:24be0c59558253fbb83ea7e8454c03fda28509ba780bc2ad18f95e4e4151f818",
-  "localBuildRevision": "8f372294278fc0e235e17c35a71e9cd5eb97d07b",
+  "localBuildDigest": "sha256:8baf0845c687e77dc49132ef12501bbece0c595f6babf59534f56dbe119696be",
+  "localBuildRevision": "dcfbcf4c6b41d4d7927bc2b21569722338acd118",
   "modes": [
     "postgres", "rustfs-primary", "rustfs-secondary", "auth", "stories", "operations",
     "otel", "full-development"
