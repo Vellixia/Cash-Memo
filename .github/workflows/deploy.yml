@@ -146,7 +146,7 @@ jobs:
         env:
           RELEASE_SHA: ${{ inputs.revision }}
         run: |
-          docker buildx bake --file infra/containers/docker-bake.hcl artifacts --metadata-file image-metadata.json
+          docker buildx bake --allow=fs.read=/home/runner/work --file infra/containers/docker-bake.hcl artifacts --metadata-file image-metadata.json
           runtime_digest=$(jq -er '.runtime."containerimage.digest"' image-metadata.json)
           pgbackrest_digest=$(jq -er '.pgbackrest."containerimage.digest"' image-metadata.json)
           verifier_digest=$(jq -er '.verifier."containerimage.digest"' image-metadata.json)
