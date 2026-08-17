@@ -48,7 +48,12 @@ FROM builder AS runtime-dependencies
 
 USER root
 RUN install -d -o node -g node /opt/cashmemo-server \
-    && pnpm --filter @cashmemo/server deploy --prod --legacy /opt/cashmemo-server
+    && pnpm --filter @cashmemo/server deploy --prod --legacy /opt/cashmemo-server \
+    && rm -rf /opt/cashmemo-server/node_modules/.pnpm/esbuild@* \
+              /opt/cashmemo-server/node_modules/.pnpm/@esbuild* \
+              /opt/cashmemo-server/node_modules/.pnpm/drizzle-kit@* \
+              /opt/cashmemo-server/node_modules/.pnpm/vite@* \
+              /opt/cashmemo-server/node_modules/.pnpm/@vitest*
 
 FROM ${NODE_IMAGE} AS production
 
