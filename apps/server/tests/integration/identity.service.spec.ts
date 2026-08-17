@@ -14,6 +14,13 @@ import { startTestEnvironment, type TestEnvironment } from "./support/test-envir
 const TEST_SECRET = "synthetic-fixture-identity-boundary-v1";
 const IDEMPOTENCY_HMAC_KEY = Buffer.alloc(32, 17);
 
+function buildIdentityLoginUri(originalUri: string): string {
+  const url = new URL(originalUri);
+  url.username = "cashmemo_identity_login";
+  url.password = "cashmemo-test-identity-only";
+  return url.toString();
+}
+
 const delivery: BetterAuthDeliveryCallbacks = {
   sendPasswordReset: () => Promise.resolve(),
   sendVerification: () => Promise.resolve(),
@@ -33,7 +40,7 @@ describe("identity service with dedicated identity role", { concurrent: false },
     await applyMigrations(migrationPool);
 
     identityPool = new Pool({
-      connectionString: environment.postgres.connectionUri,
+      connectionString: buildIdentityLoginUri(environment.postgres.connectionUri),
       max: 4,
       options: "-c role=cashmemo_identity",
     });
