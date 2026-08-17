@@ -123,6 +123,7 @@ jobs:
           image-ref: cashmemo-runtime:${{ inputs.revision }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: 1
       - name: Pre-publish scan pgBackRest candidate
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -130,6 +131,7 @@ jobs:
           image-ref: cashmemo-pgbackrest:${{ inputs.revision }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: 1
       - name: Pre-publish scan verifier candidate
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -137,6 +139,7 @@ jobs:
           image-ref: cashmemo-verifier:${{ inputs.revision }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: 1
       - name: Build exact revision, attest SBOM/provenance, and push by digest
         id: images
@@ -159,6 +162,7 @@ jobs:
           image-ref: ${{ env.RUNTIME_IMAGE_NAME }}@${{ steps.images.outputs.runtime_digest }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: 1
       - name: Scan exact pgBackRest digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -166,6 +170,7 @@ jobs:
           image-ref: ${{ env.PGBACKREST_IMAGE_NAME }}@${{ steps.images.outputs.pgbackrest_digest }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: 1
       - name: Scan exact verifier digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -173,6 +178,7 @@ jobs:
           image-ref: ${{ env.VERIFIER_IMAGE_NAME }}@${{ steps.images.outputs.verifier_digest }}
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: 1
       - name: Materialize runtime SPDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0

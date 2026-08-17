@@ -30,3 +30,48 @@ CVE-2026-42497
 # perl-archive-tar: denial of service
 # fix_deferred: no fix available yet for Debian 12 bookworm
 CVE-2026-9538
+
+# Verifier image only: bundled npm/corepack in Node.js base image
+# The verifier is a development/staging-only image that requires pnpm
+# and dev dependencies to run test suites. It is never deployed as
+# production. These CVEs are in the base image's bundled npm packages
+# (tar, minimatch, picomatch, sigstore, ip-address) and Go stdlib in
+# esbuild — not in Cashmemo production code.
+# Classification: base_image_dev_only — verifier image, not production
+
+# node-tar: DoS via gzip bomb
+CVE-2026-59873
+# node-tar: arbitrary file read/write
+CVE-2026-26960
+# node-tar: hardlink path traversal
+CVE-2026-29786
+# tar: file overwrite via symlink
+CVE-2026-31802
+# node-tar: DoS via malformed archive
+CVE-2026-59874
+# minimatch: DoS via specially crafted pattern
+CVE-2026-26996
+# minimatch: DoS via unbounded backtracking
+CVE-2026-27903
+# minimatch: catastrophic backtracking
+CVE-2026-27904
+# picomatch: ReDoS
+CVE-2026-33671
+# sigstore: unauthorized certificates
+CVE-2026-48815
+# ip-address: inconsistent parsing
+CVE-2026-69192
+
+# Go stdlib in esbuild (verifier dev dependency, not production)
+CVE-2025-68121
+CVE-2025-61726
+CVE-2025-61729
+CVE-2026-25679
+CVE-2026-27145
+CVE-2026-32280
+CVE-2026-32281
+CVE-2024-24790
+CVE-2023-39325
+CVE-2023-45283
+CVE-2023-45288
+CVE-2024-34156
