@@ -30,7 +30,7 @@ COPY --chown=verifier:verifier packages/domain/package.json packages/domain/pack
 COPY --chown=verifier:verifier packages/privacy-rules/package.json packages/privacy-rules/package.json
 COPY --chown=verifier:verifier packages/test-support/package.json packages/test-support/package.json
 USER 10003:10003
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --store-dir=/tmp/pnpm-store && rm -rf /tmp/pnpm-store
 USER root
 RUN apt-get update \
     && apt-get upgrade --yes \
@@ -40,8 +40,6 @@ RUN apt-get update \
 USER 10003:10003
 COPY --chown=verifier:verifier . .
 RUN pnpm build
-USER root
-RUN rm -rf /workspace/.pnpm-store /tmp/cashmemo-verifier/.local/share/pnpm/store /opt/pnpm/store /workspace/node_modules/.cache
 USER 10003:10003
 LABEL org.opencontainers.image.title="cashmemo-verifier" \
       org.opencontainers.image.description="Synthetic development and staging verification runner" \
