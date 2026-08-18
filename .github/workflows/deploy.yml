@@ -69,7 +69,6 @@ jobs:
         with:
           ref: ${{ inputs.revision }}
           persist-credentials: false
-      - uses: docker/setup-buildx-action@f7ce87c1d6bead3e36075b2ce75da1f6cc28aaca # v3.9.0
       - name: Resolve repository-owned GHCR names
         run: |
           owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
@@ -146,27 +145,21 @@ jobs:
         env:
           RELEASE_SHA: ${{ inputs.revision }}
         run: |
-          docker buildx build --push \
+          docker build --push \
             --file infra/containers/Dockerfile --target production \
             --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" \
-            --tag "$RUNTIME_IMAGE_NAME:git-$RELEASE_SHA" \
-            --metadata-file runtime-metadata.json \
-            --provenance=true --sbom=true .
-          docker buildx build --push \
+            --tag "$RUNTIME_IMAGE_NAME:git-$RELEASE_SHA" .
+          docker build --push \
             --file infra/pgbackrest/Dockerfile --target runtime \
             --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" \
-            --tag "$PGBACKREST_IMAGE_NAME:git-$RELEASE_SHA" \
-            --metadata-file pgbackrest-metadata.json \
-            --provenance=true --sbom=true .
-          docker buildx build --push \
+            --tag "$PGBACKREST_IMAGE_NAME:git-$RELEASE_SHA" .
+          docker build --push \
             --file infra/containers/Verifier.Dockerfile --target verifier \
             --build-arg RELEASE_SHA="$RELEASE_SHA" --build-arg BUILD_VERSION="git-$RELEASE_SHA" \
-            --tag "$VERIFIER_IMAGE_NAME:git-$RELEASE_SHA" \
-            --metadata-file verifier-metadata.json \
-            --provenance=true --sbom=true .
-          runtime_digest=$(jq -er '.["containerimage.digest"]' runtime-metadata.json)
-          pgbackrest_digest=$(jq -er '.["containerimage.digest"]' pgbackrest-metadata.json)
-          verifier_digest=$(jq -er '.["containerimage.digest"]' verifier-metadata.json)
+            --tag "$VERIFIER_IMAGE_NAME:git-$RELEASE_SHA" .
+          runtime_digest=$(docker inspect "$RUNTIME_IMAGE_NAME:git-$RELEASE_SHA" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')
+          pgbackrest_digest=$(docker inspect "$PGBACKREST_IMAGE_NAME:git-$RELEASE_SHA" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')
+          verifier_digest=$(docker inspect "$VERIFIER_IMAGE_NAME:git-$RELEASE_SHA" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')
           for digest in "$runtime_digest" "$pgbackrest_digest" "$verifier_digest"; do
             test "${digest#sha256:}" != "$digest"
           done
