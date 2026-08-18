@@ -140,6 +140,8 @@ jobs:
           ignore-unfixed: true
           trivyignores: .trivyignore
           exit-code: 1
+      - name: Free disk space before push build
+        run: docker system prune -af --volumes
       - name: Build exact revision, attest SBOM/provenance, and push by digest
         id: images
         env:
@@ -166,6 +168,8 @@ jobs:
           echo "runtime_digest=$runtime_digest" >> "$GITHUB_OUTPUT"
           echo "pgbackrest_digest=$pgbackrest_digest" >> "$GITHUB_OUTPUT"
           echo "verifier_digest=$verifier_digest" >> "$GITHUB_OUTPUT"
+      - name: Free disk space between scans
+        run: docker image prune -af
       - name: Scan exact runtime digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
