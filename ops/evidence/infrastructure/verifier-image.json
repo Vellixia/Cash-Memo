@@ -3,11 +3,11 @@
   "artifact": "verifier",
   "repository": "ghcr.io/vellixia/cashmemo-verifier",
   "sourceRevisionResolution": "workflow_dispatch.inputs.revision",
-  "publishStatus": "BLOCKED_EXTERNAL",
-  "publishedDigest": null,
-  "localBuildStatus": "PASS_LOCAL_BUILD",
-  "localBuildDigest": "sha256:8baf0845c687e77dc49132ef12501bbece0c595f6babf59534f56dbe119696be",
-  "localBuildRevision": "dcfbcf4c6b41d4d7927bc2b21569722338acd118",
+  "publishStatus": "PUBLISHED",
+  "publishedDigest": "sha256:33d9b87be06d384e9112c054a07a6341d533eb949bf815fdfaf3f015f45beb7e",
+  "publishedRevision": "fc34c431f7a6f73f5fd874cffd7d4bb96a0168fe",
+  "workflowRunId": "32084971057",
+  "sbomSha256": "15c94f698c56fdb4ecb5187de5f3ff4a64673ce9d9d06a7bb64e092ff3597515",
   "modes": [
     "postgres", "rustfs-primary", "rustfs-secondary", "auth", "stories", "operations",
     "otel", "full-development"
@@ -18,8 +18,7 @@
   "readOnlyRootProbe": "PASS",
   "nonRootProbe": "PASS",
   "noExposeProbe": "PASS",
-  "sbomStatus": "PENDING_GHCR_WORKFLOW",
-  "scanStatus": "PENDING_GHCR_WORKFLOW",
+  "scanStatus": "PASS",
   "definitionTests": { "status": "pass", "count": 11 },
   "contentSafety": "aggregate-metadata-only"
 }
