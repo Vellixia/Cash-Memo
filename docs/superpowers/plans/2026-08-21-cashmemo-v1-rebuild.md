@@ -16,9 +16,9 @@ canonical `apps/web` and `apps/api`, remove legacy implementation, merge, then p
 cutover separately.
 
 **Tech Stack:** Rust, Axum, Tokio, Tower, tower-http, Serde, SQLx, rust_decimal, Argon2id, tracing,
-PostgreSQL; Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui/Base UI, React Hook Form, Zod,
-TanStack Query, Axios, Orval; Vitest, React Testing Library, Playwright; Docker, GitHub Actions,
-Dokploy/Traefik, pgBackRest.
+aws-sdk-s3, PostgreSQL; Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui/Base UI, React Hook
+Form, Zod, TanStack Query, Axios, Orval; Vitest, React Testing Library, Playwright, testcontainers,
+Mailpit, and Bats for tests; Docker, GitHub Actions, Dokploy/Traefik, pgBackRest.
 
 **Spec:** `docs/superpowers/specs/2026-08-21-cashmemo-v1-rebuild-design.md`
 
@@ -33,8 +33,11 @@ Dokploy/Traefik, pgBackRest.
   Cashmemo V1 identity metadata; unknown non-empty targets fail closed.
 - Store money as PostgreSQL `NUMERIC(20,4)`, Rust `Decimal`, and JSON decimal strings. Reject
   unsupported scale before SQL. Never use floating point for authoritative money work.
-- Support only configured ISO 4217 currencies with exponent `0..=4`; never combine currencies and
-  never silently round.
+- `currencies(code, display_name, exponent, enabled)` is the authoritative currency registry.
+  Production seed initially enables only reviewed IDR, USD, and EUR rows. Exponent 3/4 tests use
+  fixtures or disabled entries and never silently expand production support.
+- Support only enabled registry currencies with exponent `0..=4`; never combine currencies and never
+  silently round.
 - Passwords are 15–128 Unicode code points, at most 512 UTF-8 bytes, accept spaces/Unicode, have no
   composition rules, and are never truncated.
 - Every financial query is explicitly scoped by authenticated `user_id`; composite ownership foreign
@@ -74,9 +77,10 @@ v1/api/
   src/{lib.rs,main.rs,app.rs,config.rs,error.rs,openapi.rs}
   src/bin/export_openapi.rs
   src/db/{mod.rs,migrate.rs,target_guard.rs}
-  src/http/{mod.rs,auth.rs,cache.rs,origin.rs,request_id.rs,rate_limit.rs}
+  src/http/{mod.rs,cache.rs,origin.rs,request_id.rs,rate_limit.rs}
   src/{currency,money,time}.rs
-  src/auth/{mod.rs,model.rs,password.rs,service.rs,routes.rs,email.rs}
+  src/auth/{mod.rs,model.rs,password.rs,service.rs,routes.rs}
+  src/auth/email/{mod.rs,smtp.rs}
   src/onboarding/{mod.rs,service.rs,routes.rs}
   src/wallets/{mod.rs,service.rs,routes.rs}
   src/categories/{mod.rs,service.rs,routes.rs}
@@ -85,21 +89,41 @@ v1/api/
   src/recurring/{mod.rs,service.rs,processor.rs,routes.rs}
   src/reporting/{mod.rs,query.rs,routes.rs}
   src/accounts/{mod.rs,deletion.rs,routes.rs}
-  migrations/*.sql
-  tests/{support,auth,ownership,money,wallets,categories,transactions,history,budgets,recurring,reporting,account_deletion,migrations}.rs
+  src/receipts/{mod.rs,s3.rs,replay.rs}
+  migrations/{0001_v1_identity,0002_core_schema,0003_auth_constraints,0004_onboarding,0005_history_indexes,0006_recurring_constraints,0007_account_deletion}.sql
+  tests/{auth,ownership,money,onboarding,wallets,categories,transactions,history,budgets,recurring,reporting,account_deletion,deletion_receipts,deletion_receipt_replay,migrations,http_safety,operations,openapi}.rs
+  tests/support/mod.rs
 v1/web/
   app/{layout.tsx,page.tsx,manifest.ts}
-  app/(public)/** app/(auth)/** app/app/**
-  components/{app-shell,money,forms,ui}/**
-  features/{auth,onboarding,wallets,categories,transactions,budgets,recurring,dashboard,settings}/**
-  lib/{api,auth,query,format,validation}/**
-  generated/api/**
-  tests/** e2e/** public/sw.js
+  app/(public)/{login,register,verify-email,forgot-password,reset-password}/page.tsx
+  app/(auth)/{layout.tsx,deletion/page.tsx,onboarding/page.tsx}
+  app/(auth)/app/{layout.tsx,page.tsx,wallets/page.tsx,categories/page.tsx,budgets/page.tsx,recurring/page.tsx,settings/page.tsx}
+  app/(auth)/app/transactions/{page.tsx,new/page.tsx,[id]/page.tsx,trash/page.tsx}
+  app/(auth)/app/settings/{sessions/page.tsx,delete-account/page.tsx}
+  components/app-shell/{app-shell.tsx,bottom-nav.tsx,sidebar.tsx}
+  components/money/{amount.tsx,currency-group.tsx}
+  components/ui/{button.tsx,dialog.tsx,form-field.tsx,input.tsx}
+  features/auth/{forms.tsx,use-session.ts}
+  features/onboarding/{onboarding-flow.tsx,use-onboarding.ts}
+  features/wallets/{wallet-form.tsx,wallet-list.tsx}
+  features/categories/{category-form.tsx,category-list.tsx}
+  features/transactions/{form.tsx,history.tsx,filters.tsx,trash.tsx,query-keys.ts}
+  features/budgets/{budget-form.tsx,budget-list.tsx,budget-progress.tsx}
+  features/recurring/{recurring-form.tsx,recurring-list.tsx}
+  features/dashboard/{dashboard.tsx,monthly-summary.tsx,recent-transactions.tsx}
+  features/settings/{preferences-form.tsx,session-controls.tsx,account-deletion.tsx}
+  lib/{api/axios.ts,auth/session.ts,query/provider.tsx}
+  lib/validation/{auth.ts,wallet.ts,category.ts,transaction.ts}
+  generated/api/                  Orval-owned generated files
+  tests/{auth,cache-policy,onboarding,wallets,categories,transaction-form,history,trash,dashboard,budgets,recurring,settings,accessibility}.spec.tsx
+  e2e/{auth-onboarding,transactions,history-trash,budgets-recurring,account-deletion,cache-isolation}.spec.ts
+  e2e/support/mailbox.ts
+  public/{sw.js,icons/icon-192.png,icons/icon-512.png}
   package.json next.config.ts orval.config.ts playwright.config.ts vitest.config.ts
 openapi/cashmemo-v1.json           deterministic Rust-generated contract
-infra/v1/{api.Dockerfile,web.Dockerfile,dokploy-compose.yml,env.example,traefik.md}
+infra/v1/{api.Dockerfile,web.Dockerfile,dokploy-compose.yml,test-compose.yml,env.example,traefik.md}
 infra/backup/{pgbackrest.conf.example,restore-runbook.md}
-scripts/{verify-v1-db-target.sh,preservation-audit.sh,verify-restore.sh}
+scripts/{verify-v1-db-target.sh,preservation-audit.sh,production-replacement-gate.sh,verify-restore.sh,replay-deletion-receipts.sh,apply-approved-legacy-removal.sh}
 .github/workflows/v1-ci.yml
 ```
 
@@ -109,7 +133,8 @@ Final canonical paths after the repository-replacement task:
 apps/api                           promoted from v1/api
 apps/web                           promoted from v1/web
 openapi/cashmemo-v1.json           retained
-infra/v1/**                        retained and renamed only where canonical naming requires it
+infra/v1/{api.Dockerfile,web.Dockerfile,dokploy-compose.yml,test-compose.yml,env.example,traefik.md}
+                                    retained and renamed only where canonical naming requires it
 legacy implementation             removed after preservation decision and full verification
 ```
 
@@ -130,7 +155,7 @@ legacy implementation             removed after preservation decision and full v
 - PostgreSQL backup/restore, receipt retention, rollback, preservation gate: Task 21.
 - PostgreSQL integration tests, frontend tests, CI quality gates: Tasks 2–13, 19, and 22.
 - Parallel verification, merge readiness, canonical replacement, production readiness separation:
-  Tasks 23–25.
+  Tasks 23–26.
 
 ---
 
@@ -150,9 +175,8 @@ legacy implementation             removed after preservation decision and full v
 - Produces: `AppConfig::from_env() -> Result<AppConfig, ConfigError>`,
   `build_app(AppState) -> Router`, and
   `assert_v1_migration_target(&PgPool) -> Result<TargetState, TargetError>`.
-- Produces CLI commands: `cashmemo-api serve`, `cashmemo-api migrate`,
-  `cashmemo-api process-recurring`, `cashmemo-api purge-trash`, `cashmemo-api purge-accounts`,
-  `cashmemo-api cleanup-auth-tokens`.
+- Produces CLI commands `cashmemo-api serve` and `cashmemo-api migrate`; later owning tasks add each
+  scheduled/recovery command when its implementation exists.
 
 - [ ] **Step 1: Add PostgreSQL integration harness and failing target-guard tests**
 
@@ -183,7 +207,7 @@ with `('cashmemo','v1')`. Guard queries `pg_catalog.pg_tables`; it allows zero u
 V1 identity, and rejects every other non-empty target before `sqlx::migrate!()`.
 
 ```rust
-pub enum Command { Serve, Migrate, ProcessRecurring, PurgeTrash, PurgeAccounts, CleanupAuthTokens }
+pub enum Command { Serve, Migrate }
 pub enum TargetState { Empty, CashmemoV1 }
 ```
 
@@ -207,13 +231,16 @@ git commit -m "build: bootstrap isolated Cashmemo V1 API"
 
 - Create: `v1/api/migrations/0002_core_schema.sql`
 - Create: `v1/api/src/{currency.rs,money.rs,time.rs}`
+- Modify: `v1/api/src/app.rs`
 - Create: `v1/api/tests/{money.rs,ownership.rs}`
 
 **Interfaces:**
 
-- Produces: `CurrencyCode`, `CurrencyCatalog::require_supported(&str)`,
-  `Money::parse_for_currency(&str, CurrencyCode)`, `UserTimezone`, and core table keys/constraints
-  used by all domain tasks.
+- Produces: `CurrencyCode`,
+  `CurrencyRepository::require_enabled(&PgPool, &CurrencyCode) -> Result<CurrencyDefinition, CurrencyError>`,
+  `Money::parse_for_exponent(&str, u32)`, `UserTimezone`, and core table keys/constraints used by
+  all domain tasks.
+- Produces `GET /api/v1/currencies`, returning only enabled registry rows ordered by code.
 - `Money::decimal() -> Decimal`; serialization returns a JSON string preserving exact value.
 
 - [ ] **Step 1: Write failing exactness, scale, range, and timezone tests**
@@ -221,14 +248,12 @@ git commit -m "build: bootstrap isolated Cashmemo V1 API"
 ```rust
 #[test]
 fn rejects_excess_scale_without_rounding() {
-    let idr = CurrencyCode::try_from("IDR").unwrap();
-    assert_eq!(Money::parse_for_currency("1.1", idr).unwrap_err(), MoneyError::ExcessScale);
+    assert_eq!(Money::parse_for_exponent("1.1", 0).unwrap_err(), MoneyError::ExcessScale);
 }
 
 #[test]
 fn preserves_four_digit_currency_exactly() {
-    let clf = CurrencyCode::try_from("CLF").unwrap();
-    assert_eq!(Money::parse_for_currency("12.3456", clf).unwrap().to_string(), "12.3456");
+    assert_eq!(Money::parse_for_exponent("12.3456", 4).unwrap().to_string(), "12.3456");
 }
 ```
 
@@ -243,23 +268,24 @@ Expected: FAIL because currency, money, time, and schema constraints are absent.
 
 - [ ] **Step 3: Implement configured currency catalog and core relational schema**
 
-Create tables and enums specified in Sections 11–12: `users`, `sessions`, `auth_tokens`, `wallets`,
-`categories`, `transactions`, `budgets`, `recurring_rules`, `recurring_occurrences`. Use
-`NUMERIC(20,4)`, positive amounts, immutable currency relationships, `TIMESTAMPTZ`, composite unique
-keys `(user_id,id)`, composite ownership FKs, partial active-category name uniqueness, and required
-lifecycle checks.
+Create tables and enums specified in Sections 11–12: `currencies`, `users`, `sessions`,
+`auth_tokens`, `wallets`, `categories`, `transactions`, `budgets`, `recurring_transactions`,
+`recurring_occurrences`. Use `NUMERIC(20,4)`, positive amounts, immutable currency relationships,
+`TIMESTAMPTZ`, composite unique keys `(user_id,id)`, composite ownership FKs, partial
+active-category name uniqueness, and required lifecycle checks.
 
 ```rust
-pub struct CurrencyDefinition { pub code: &'static str, pub exponent: u32 }
-pub const SUPPORTED: &[CurrencyDefinition] = &[
-    CurrencyDefinition { code: "IDR", exponent: 0 },
-    CurrencyDefinition { code: "USD", exponent: 2 },
-    CurrencyDefinition { code: "EUR", exponent: 2 },
-    CurrencyDefinition { code: "JPY", exponent: 0 },
-    CurrencyDefinition { code: "KWD", exponent: 3 },
-    CurrencyDefinition { code: "CLF", exponent: 4 },
-];
+pub struct CurrencyDefinition {
+    pub code: CurrencyCode,
+    pub display_name: String,
+    pub exponent: u32,
+    pub enabled: bool,
+}
 ```
+
+Seed IDR, USD, and EUR with `enabled=true`. Exponent 3/4 integration tests insert transaction-scoped
+fixture currencies or use reviewed disabled rows, then prove disabled currencies cannot be selected.
+Rust validates code shape; PostgreSQL owns display name, exponent, and enabled state.
 
 - [ ] **Step 4: Verify constraints against real PostgreSQL**
 
@@ -270,7 +296,7 @@ Expected: PASS, including cross-user FK rejection and active/Trash field consist
 - [ ] **Step 5: Commit**
 
 ```bash
-git add v1/api/migrations/0002_core_schema.sql v1/api/src/currency.rs v1/api/src/money.rs v1/api/src/time.rs v1/api/tests
+git add v1/api/migrations/0002_core_schema.sql v1/api/src/currency.rs v1/api/src/money.rs v1/api/src/time.rs v1/api/src/app.rs v1/api/tests
 git commit -m "feat: define V1 money and ownership schema"
 ```
 
@@ -284,9 +310,12 @@ git commit -m "feat: define V1 money and ownership schema"
 
 **Interfaces:**
 
-- Produces canonical error envelope `{ error: { code, message, field_errors?, request_id } }`.
+- Produces canonical error envelope
+  `{ error: { code: string, message: string, fields?: Record<string,string[]>, request_id: string } }`.
 - Produces `RequestId`, exact-origin middleware, `Cache-Control: no-store`, and endpoint-class rate
   limit layers.
+- Produces `/api/v1/health/live` and `/api/v1/health/ready` before OpenAPI generation; live checks
+  process liveness and ready checks required dependencies including PostgreSQL.
 - Maps authentication, authorization, hidden absence, validation, conflict, throttling, and
   unexpected failures consistently to `401`, `403`, opaque `404`, `422`, `409`, `429`, and
   content-free `500` responses carrying the canonical request ID.
@@ -302,6 +331,9 @@ async fn canonical_request_id_is_returned_in_header_and_error() { /* validated i
 
 #[tokio::test]
 async fn auth_limit_returns_429_without_persistent_attempt_rows() { /* bounded in-memory limiter */ }
+
+#[tokio::test]
+async fn health_contract_uses_versioned_live_and_ready_paths() { /* legacy /health and /ready => 404 */ }
 ```
 
 - [ ] **Step 2: Run focused tests**
@@ -335,15 +367,18 @@ git commit -m "feat: enforce V1 HTTP safety boundaries"
 
 **Files:**
 
-- Create: `v1/api/src/auth/{mod.rs,model.rs,password.rs,email.rs,service.rs,routes.rs}`
+- Create: `v1/api/src/auth/{mod.rs,model.rs,password.rs,service.rs,routes.rs}`
+- Create: `v1/api/src/auth/email/{mod.rs,smtp.rs}`
 - Create: `v1/api/migrations/0003_auth_constraints.sql`
-- Modify: `v1/api/src/{app.rs,config.rs}`
+- Modify: `v1/api/src/{app.rs,config.rs,main.rs}`
 - Create: `v1/api/tests/auth.rs`
 
 **Interfaces:**
 
-- Produces `/api/v1/auth/register`, `/verify-email`, `/verification/resend`, `/login`, `/logout`,
-  `/sessions/current`, `/sessions/revoke-all`, `/password-reset/request`, `/password-reset/consume`.
+- Produces `/api/v1/auth/register`, `/api/v1/auth/verify-email`, `/api/v1/auth/verification/resend`,
+  `/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/v1/auth/sessions/current`,
+  `/api/v1/auth/sessions/revoke-all`, `/api/v1/auth/password-reset/request`, and
+  `/api/v1/auth/password-reset/consume`.
 - Produces `AuthSession { user_id: Uuid, access: Full | DeletionOnly, session_id: Uuid }` extractor.
 
 - [ ] **Step 1: Write failing auth integration tests**
@@ -381,10 +416,12 @@ passwords/tokens.
 
 - [ ] **Step 4: Verify auth behavior and session revocation**
 
-Before verification, implement the configured transactional-email adapter in `email.rs`; tests use
-an in-memory fake through the same trait. Implement `cleanup-auth-tokens --batch-size N` to delete
-expired or consumed tokens in bounded `(expires_at,id)` order. Schedule it at least daily so
-expired/consumed token cleanup completes within 24 hours.
+Before verification, implement `SmtpEmailSender` in `auth/email/smtp.rs`; unit tests use an
+in-memory fake through the same trait. SMTP configuration works with production provider settings
+and development/test Mailpit without adding any verification-bypass endpoint. Implement
+`cleanup-auth-tokens --batch-size N` to delete expired or consumed tokens in bounded
+`(expires_at,id)` order. Schedule it at least daily so expired/consumed token cleanup completes
+within 24 hours.
 
 Run: `cargo test -p cashmemo-api --test auth && cargo test -p cashmemo-api`
 
@@ -393,7 +430,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add v1/api/src/auth v1/api/migrations/0003_auth_constraints.sql v1/api/src/app.rs v1/api/src/config.rs v1/api/tests/auth.rs
+git add v1/api/src/auth v1/api/migrations/0003_auth_constraints.sql v1/api/src/app.rs v1/api/src/config.rs v1/api/src/main.rs v1/api/tests/auth.rs
 git commit -m "feat: implement V1 authentication"
 ```
 
@@ -461,7 +498,9 @@ git commit -m "feat: add idempotent V1 onboarding"
 
 **Interfaces:**
 
-- Produces wallet CRUD/archive endpoints and `WalletBalance { currency, amount, as_of }`.
+- Produces `GET|POST /api/v1/wallets`, `GET|PATCH|DELETE /api/v1/wallets/{id}`,
+  `POST /api/v1/wallets/{id}/archive`, `POST /api/v1/wallets/{id}/restore`, and
+  `WalletBalance { currency, amount, as_of }`.
 - Wallet currency is immutable; opening balance is wallet state, not synthetic income.
 
 - [ ] **Step 1: Write failing wallet behavior and ownership tests**
@@ -511,15 +550,18 @@ git commit -m "feat: implement V1 wallets"
 
 **Interfaces:**
 
-- Produces category list/create/rename/archive/restore endpoints.
+- Produces `GET|POST /api/v1/categories`, `PATCH|DELETE /api/v1/categories/{id}`,
+  `POST /api/v1/categories/{id}/archive`, and `POST /api/v1/categories/{id}/restore`; DELETE is
+  available only for an unreferenced category.
 - Active names use trimmed, Unicode case-insensitive comparison via stored `normalized_name`;
   existing transaction references survive archive.
 
 - [ ] **Step 1: Write failing category tests**
 
 Test expense/income kind, `1..=80` post-trim code points, normalized active-name uniqueness, rename,
-archive/restore collision, ownership isolation, history references, and uniform seeded/custom
-behavior.
+archive/restore collision, ownership isolation, history references, hard deletion of an unreferenced
+category, blocked hard deletion when any transaction/budget reference exists, and uniform
+seeded/custom behavior.
 
 - [ ] **Step 2: Run category tests**
 
@@ -537,9 +579,9 @@ pub fn normalize_category_name(input: &str) -> Result<(String, String), Validati
 }
 ```
 
-Use a partial unique index on `(user_id, kind, normalized_name) WHERE archived_at IS NULL`. Reject
-archive only when it would make required new-entry selection impossible; never alter historical
-transactions.
+Use a partial unique index on `(user_id, kind, normalized_name) WHERE archived_at IS NULL`. Archive
+does not alter historical transactions. Hard delete requires no transaction, budget, or recurring
+reference and remains explicitly user-scoped.
 
 - [ ] **Step 4: Verify category tests**
 
@@ -559,13 +601,17 @@ git commit -m "feat: implement V1 categories"
 **Files:**
 
 - Create: `v1/api/src/transactions/{mod.rs,service.rs,routes.rs}`
-- Modify: `v1/api/src/app.rs`
+- Modify: `v1/api/src/{app.rs,main.rs}`
 - Create: `v1/api/tests/transactions.rs`
 
 **Interfaces:**
 
-- Produces create/read/update, `DELETE /transactions/{id}`, `POST /transactions/{id}/restore`, and
-  `DELETE /transactions/{id}/permanent`.
+- Produces `POST /api/v1/transactions`, `GET|PATCH /api/v1/transactions/{id}`,
+  `DELETE /api/v1/transactions/{id}`, `POST /api/v1/transactions/{id}/restore`, and
+  `DELETE /api/v1/transactions/{id}/permanent`.
+- Produces `GET /api/v1/transactions/entry-defaults` returning
+  `{ last_used_wallet_id: UUID | null }`, computed from the authenticated user's most recently used
+  still-active wallet; frontend never infers it from history.
 - Transaction direction comes from `INCOME | EXPENSE`; amount remains positive. Delete sets
   `deleted_at` and `purge_after`; restore clears both.
 
@@ -575,6 +621,9 @@ Cover exact money validation before SQL, wallet-derived currency, category kind,
 points, current-local `occurred_at` default, edit preserving instant, duplicated `user_id` composite
 ownership, 30-day Trash, restore, explicit permanent purge, budget/report exclusion, and cross-user
 opaque `404` behavior.
+
+Also test entry defaults for no transactions, most-recent use, archived-wallet exclusion, and strict
+cross-user scoping.
 
 ```rust
 assert_eq!(deleted.purge_after, deleted.deleted_at + Duration::days(30));
@@ -596,8 +645,9 @@ callers can invalidate affected aggregates.
 - [ ] **Step 4: Add bounded Trash purge command**
 
 `purge-trash --batch-size N` deletes only rows where
-`deleted_at IS NOT NULL AND purge_after <= now()`, ordered by `(purge_after,id)`. Preserve any
-`recurring_occurrences` row by nullable `generated_transaction_id` with `ON DELETE SET NULL`.
+`deleted_at IS NOT NULL AND purge_after <= now()`, ordered by `(purge_after,id)`. A generated
+transaction owns nullable unique `transactions.recurring_occurrence_id`; deleting it removes only
+that transaction and leaves its immutable `recurring_occurrences` row intact.
 
 - [ ] **Step 5: Verify transaction lifecycle**
 
@@ -608,7 +658,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add v1/api/src/transactions v1/api/src/app.rs v1/api/tests/transactions.rs v1/api/tests/ownership.rs
+git add v1/api/src/transactions v1/api/src/app.rs v1/api/src/main.rs v1/api/tests/transactions.rs v1/api/tests/ownership.rs
 git commit -m "feat: implement V1 transaction lifecycle"
 ```
 
@@ -677,7 +727,7 @@ git commit -m "feat: add V1 transaction history queries"
 
 **Interfaces:**
 
-- Produces monthly budget CRUD and `GET /api/v1/reports/budgets?month=YYYY-MM`.
+- Produces monthly budget CRUD and canonical `GET /api/v1/reports/budget-summary?month=YYYY-MM`.
 - Budget uniqueness: `(user_id, category_id, currency, month)`; `month` is calendar `DATE`
   constrained to first day.
 
@@ -712,21 +762,33 @@ git add v1/api/src/budgets v1/api/src/app.rs v1/api/tests/budgets.rs
 git commit -m "feat: implement monthly category budgets"
 ```
 
-### Task 11: Implement Recurring Rules and Idempotent Bounded Processing
+### Task 11: Implement Recurring Transactions and Idempotent Bounded Processing
 
 **Files:**
 
 - Create: `v1/api/src/recurring/{mod.rs,service.rs,processor.rs,routes.rs}`
 - Create: `v1/api/migrations/0006_recurring_constraints.sql`
-- Modify: `v1/api/src/app.rs`
+- Modify: `v1/api/src/{app.rs,main.rs}`
+- Modify: `v1/api/src/wallets/service.rs`, `v1/api/src/categories/service.rs`
+- Modify: `v1/api/tests/{wallets.rs,categories.rs}`
 - Create: `v1/api/tests/recurring.rs`
 
 **Interfaces:**
 
-- Produces recurring rule CRUD, pause/resume, and CLI
-  `process-recurring --batch-size N --max-occurrences-per-rule N`.
+- Produces `GET|POST /api/v1/recurring-transactions`,
+  `GET|PATCH|DELETE /api/v1/recurring-transactions/{id}`,
+  `POST /api/v1/recurring-transactions/{id}/pause`,
+  `POST /api/v1/recurring-transactions/{id}/resume`, and CLI
+  `process-recurring --batch-size N --max-occurrences-per-recurring-transaction N`.
 - `recurring_occurrences` is immutable idempotency history with unique
-  `(recurring_rule_id, scheduled_for)` and at most one nullable generated transaction link.
+  `(recurring_transaction_id, scheduled_for)`.
+- `transactions.recurring_occurrence_id` is a unique nullable FK to `recurring_occurrences.id`.
+  There is no reverse transaction pointer on `recurring_occurrences`.
+- Ownership remains composite: occurrences carry `user_id`; transaction FK
+  `(user_id, recurring_occurrence_id)` targets `(user_id, id)` and the nullable occurrence ID is
+  unique, so an occurrence generates at most one transaction without weakening user isolation.
+- Wallet/category archive responses use `ArchiveResult { paused_recurring_count: u64 }`; restore
+  never reports or performs automatic resume.
 
 - [ ] **Step 1: Write failing cadence and idempotency tests**
 
@@ -735,6 +797,10 @@ selecting first cadence date on/after current local date without historical back
 post-activation catch-up, pause/resume, timezone change affecting only future conversion, concurrent
 workers, repeated runs, Trash/permanent transaction deletion not regenerating occurrence, and
 cross-user ownership.
+
+Also test wallet/category archive atomically pauses every active `recurring_transactions` row that
+uses it. Restoring that wallet/category does not resume any paused recurrence. Concurrent archive
+and processing cannot generate a transaction after the archive wins its lock.
 
 - [ ] **Step 2: Run recurring tests**
 
@@ -750,14 +816,19 @@ pub fn first_due_on_or_after(start: NaiveDate, today: NaiveDate, cadence: Cadenc
 pub fn next_due(after: NaiveDate, anchor_day: u32, cadence: Cadence) -> NaiveDate;
 ```
 
-Generated transaction is ordinary after creation. Editing a rule never rewrites prior occurrence or
-transaction rows.
+Generated transaction is ordinary after creation. Editing a recurring transaction never rewrites
+prior occurrence or transaction rows.
 
 - [ ] **Step 4: Implement atomic occurrence generation**
 
-Within one DB transaction, claim due rules with `FOR UPDATE SKIP LOCKED`, insert occurrence with
-`ON CONFLICT DO NOTHING`, insert at most one transaction for newly inserted occurrence, and advance
-`next_due_date`. Stop at both global batch size and per-rule bound; later runs continue catch-up.
+Within one DB transaction, claim due recurring transactions with `FOR UPDATE SKIP LOCKED`, insert an
+occurrence carrying `recurring_transaction_id` with `ON CONFLICT DO NOTHING`, then insert at most
+one transaction carrying that occurrence ID and advance `next_due_date`. Stop at both global batch
+size and per-recurring-transaction bound; later runs continue catch-up.
+
+Extend wallet/category archive services in this task: lock the owned wallet/category, archive it,
+and set every matching active recurring transaction to paused in the same PostgreSQL transaction.
+Restore changes only the wallet/category archive field; it never resumes recurrence.
 
 - [ ] **Step 5: Verify concurrency and retry behavior**
 
@@ -768,7 +839,7 @@ Expected: PASS; every scheduled local date has one occurrence and at most one ge
 - [ ] **Step 6: Commit**
 
 ```bash
-git add v1/api/src/recurring v1/api/migrations/0006_recurring_constraints.sql v1/api/src/app.rs v1/api/tests/recurring.rs
+git add v1/api/src/recurring v1/api/src/wallets/service.rs v1/api/src/categories/service.rs v1/api/migrations/0006_recurring_constraints.sql v1/api/src/app.rs v1/api/src/main.rs v1/api/tests/recurring.rs v1/api/tests/wallets.rs v1/api/tests/categories.rs
 git commit -m "feat: add idempotent recurring transactions"
 ```
 
@@ -823,17 +894,33 @@ git commit -m "feat: add V1 monthly reporting"
 **Files:**
 
 - Create: `v1/api/src/accounts/{mod.rs,deletion.rs,routes.rs}`
+- Create: `v1/api/src/receipts/{mod.rs,s3.rs}`
 - Create: `v1/api/migrations/0007_account_deletion.sql`
+- Modify: `v1/api/Cargo.toml`
 - Modify: `v1/api/src/auth/{model.rs,service.rs,routes.rs}`
 - Modify: `v1/api/src/{app.rs,config.rs,main.rs}`
 - Create: `v1/api/tests/account_deletion.rs`
+- Create: `v1/api/tests/deletion_receipts.rs`
+- Create: `infra/v1/test-compose.yml`
 
 **Interfaces:**
 
-- Produces request/status/cancel endpoints and access states `active`, `pending_deletion`,
-  `purging`.
-- Produces `DeletionReceiptSink::create_receipt(HmacUserId, purged_at, key_version)` available only
-  to purge command configuration, not API serving configuration.
+- Produces `POST /api/v1/account/deletion`, `GET /api/v1/account/deletion`,
+  `POST /api/v1/account/deletion/cancel`, and access states `active`, `pending_deletion`, `purging`.
+- Produces
+  `DeletionReceiptStore::put_receipt(&DeletionReceipt) -> Result<ReceiptWrite, ReceiptError>` backed
+  by a dedicated S3-compatible bucket/prefix with narrowly scoped credentials available only to
+  purge/replay commands, never the serving API.
+- `DeletionReceipt { hmac_user_id, purged_at, key_version }` uses stable `purge_started_at` as
+  `purged_at`; object key and canonical JSON bytes are deterministic across retries.
+- `ReceiptWrite` is `Created | AlreadyPresentIdentical`; divergent existing content returns
+  `ReceiptError::DivergentObject`.
+- Uses `aws-sdk-s3` with configured S3-compatible endpoint, bucket, and prefix. Receipt credentials
+  have only receipt-prefix read/write/list permissions and are distinct from pgBackRest credentials.
+- Purge/replay command config uses `DELETION_RECEIPT_S3_ENDPOINT`, `DELETION_RECEIPT_S3_REGION`,
+  `DELETION_RECEIPT_S3_BUCKET`, `DELETION_RECEIPT_S3_PREFIX`, `DELETION_RECEIPT_S3_ACCESS_KEY_ID`,
+  `DELETION_RECEIPT_S3_SECRET_ACCESS_KEY`, and versioned `DELETION_RECEIPT_HMAC_KEYS`. `serve`
+  rejects/ignores this command-only config and receives none of those credentials in deployment.
 
 - [ ] **Step 1: Write failing lifecycle and race tests**
 
@@ -841,45 +928,70 @@ Cover recent password requirement, transactional session revocation, seven-day g
 login after correct credentials, allowed status/cancel/logout only, password reset remaining
 unauthenticated and not cancelling deletion, atomic pending-to-purging claim, failed cancel after
 claim, two-worker single claim, failed receipt keeping live data and retryable purging state,
-receipt-before-delete, and full live-data cascade.
+receipt-before-delete, idempotent receipt retry after successful PUT plus failed PostgreSQL delete,
+divergent-object fail-closed behavior, and full live-data cascade.
+
+`deletion_receipts.rs` uses a `testcontainers` dev dependency to launch a disposable S3-compatible
+store and runs the concrete `aws-sdk-s3` adapter against a dedicated bucket/prefix;
+`infra/v1/test-compose.yml` mirrors that service for local multi-service runs. Account-lifecycle
+unit tests may use a fake only for deterministic failure injection.
 
 - [ ] **Step 2: Run account deletion tests**
 
-Run: `cargo test -p cashmemo-api --test account_deletion --test auth`
+Run: `cargo test -p cashmemo-api --test account_deletion --test deletion_receipts --test auth`
 
 Expected: FAIL.
 
 - [ ] **Step 3: Implement request/cancel and restricted session access**
 
-Normal app middleware rejects `DeletionOnly`; only `GET /account/deletion`,
-`POST /account/deletion/cancel`, and `POST /auth/logout` accept it. Login reveals pending/purging
-state only after successful password verification. Cancellation atomically updates only
-`pending_deletion` rows.
+Normal app middleware rejects `DeletionOnly`; only `GET /api/v1/account/deletion`,
+`POST /api/v1/account/deletion/cancel`, and `POST /api/v1/auth/logout` accept it. Login reveals
+pending/purging state only after successful password verification. Cancellation atomically updates
+only `pending_deletion` rows.
 
 - [ ] **Step 4: Implement bounded purge claim and durable receipt ordering**
 
 ```sql
-UPDATE users SET status='purging', purge_started_at=now()
-WHERE id=(SELECT id FROM users WHERE status='pending_deletion' AND deletion_due_at<=now()
-          ORDER BY deletion_due_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
-RETURNING id,purge_started_at;
+WITH candidate AS (
+  SELECT id FROM users
+  WHERE (status='pending_deletion' AND deletion_due_at<=now())
+     OR (status='purging' AND (purge_claimed_until IS NULL OR purge_claimed_until<=now()))
+  ORDER BY COALESCE(purge_started_at,deletion_due_at),id
+  FOR UPDATE SKIP LOCKED LIMIT 1
+)
+UPDATE users
+SET status='purging',
+    purge_started_at=COALESCE(purge_started_at,now()),
+    purge_claim_token=$worker_token,
+    purge_claimed_until=now()+$lease
+WHERE id=(SELECT id FROM candidate)
+RETURNING id,purge_started_at,purge_claim_token;
 ```
 
-After claim, create HMAC receipt in external ledger. If receipt fails, commit no live-data delete;
-retain `purging` for retry. If receipt succeeds, delete live data and user in a DB transaction.
-Ledger stores only `HMAC(user_id)`, `purged_at`, and key version; secret stays outside application
-DB/backups. Restored databases remain isolated until receipt replay.
+After claim, derive stable object key `{prefix}/v{key_version}/{hex_hmac_user_id}.json` and
+canonical JSON containing only `hmac_user_id`, `purged_at`, and `key_version`. PUT to the dedicated
+encrypted S3-compatible receipt bucket is idempotent: overwriting the same key uses identical bytes,
+then GET verifies exact content; an existing divergent object fails closed. If PUT/verification
+fails, perform no live-data delete and retain `purging` for retry. If PostgreSQL deletion fails
+after a verified PUT, the next run rewrites and verifies the same object safely before retrying
+deletion. HMAC secret/key ring and receipt-bucket credentials stay outside application DB/backups
+and outside `serve` configuration.
+
+Only the worker holding the current claim token may create/verify the receipt and execute final
+deletion. A retryable failure clears the lease or lets it expire while keeping status `purging` and
+live data intact. This makes crashed/failed work reclaimable while preventing concurrent workers
+from claiming the same account.
 
 - [ ] **Step 5: Verify races and failures**
 
-Run: `cargo test -p cashmemo-api --test account_deletion --test auth`
+Run: `cargo test -p cashmemo-api --test account_deletion --test deletion_receipts --test auth`
 
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add v1/api/src/accounts v1/api/src/auth v1/api/src/app.rs v1/api/src/config.rs v1/api/src/main.rs v1/api/migrations/0007_account_deletion.sql v1/api/tests/account_deletion.rs
+git add v1/api/Cargo.toml v1/api/src/accounts v1/api/src/receipts v1/api/src/auth v1/api/src/app.rs v1/api/src/config.rs v1/api/src/main.rs v1/api/migrations/0007_account_deletion.sql v1/api/tests/account_deletion.rs v1/api/tests/deletion_receipts.rs infra/v1/test-compose.yml
 git commit -m "feat: implement safe account deletion"
 ```
 
@@ -889,6 +1001,7 @@ git commit -m "feat: implement safe account deletion"
 
 - Create: `v1/api/src/{openapi.rs,bin/export_openapi.rs}`
 - Modify: `v1/api/src/lib.rs`
+- Create: `v1/api/tests/openapi.rs`
 - Create: `openapi/cashmemo-v1.json`
 - Create: `v1/web/{package.json,orval.config.ts}`
 - Create: `v1/web/lib/api/axios.ts`
@@ -902,6 +1015,13 @@ git commit -m "feat: implement safe account deletion"
 - Generated files are committed, never manually edited, and regenerated by `pnpm v1:api:generate`.
 
 - [ ] **Step 1: Add failing deterministic-generation checks**
+
+In `v1/api/tests/openapi.rs`, assert contract names before client generation: error envelope uses
+only canonical `fields` for field-specific errors; budget report is only
+`/api/v1/reports/budget-summary`; health is only `/api/v1/health/live` and `/api/v1/health/ready`;
+transaction entry defaults expose `last_used_wallet_id`; recurrence paths/types consistently use
+`recurring-transactions`, `recurring_transactions`, `recurring_transaction_id`, and
+`recurring_occurrence_id`.
 
 Commands compare a fresh Rust export and Orval output with Git worktree:
 
@@ -917,7 +1037,7 @@ Commands compare a fresh Rust export and Orval output with Git worktree:
 
 - [ ] **Step 2: Run generation and confirm absent schema/client**
 
-Run: `pnpm v1:api:generate`
+Run: `cargo test -p cashmemo-api --test openapi && pnpm v1:api:generate`
 
 Expected: FAIL until `ApiDoc`, operation IDs, and Orval config exist.
 
@@ -935,7 +1055,7 @@ Expected: PASS with no diff after a second generation.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add package.json pnpm-workspace.yaml v1/api/src/openapi.rs v1/api/src/bin/export_openapi.rs v1/api/src/lib.rs openapi/cashmemo-v1.json v1/web
+git add package.json pnpm-workspace.yaml v1/api/src/openapi.rs v1/api/src/bin/export_openapi.rs v1/api/src/lib.rs v1/api/tests/openapi.rs openapi/cashmemo-v1.json v1/web
 git commit -m "build: generate V1 API client from Rust"
 ```
 
@@ -1031,7 +1151,12 @@ git commit -m "feat: add V1 web shell and authentication"
 Test interrupted/repeated onboarding, timezone/default currency selection, starter category seeding,
 empty state, first wallet, exact mirrored text limits without truncation, immutable wallet currency
 messaging, archive confirmation, category rename/archive/reference behavior, and seeded/custom
-uniform display.
+uniform display. Test explicit hard-delete confirmation for an unreferenced category and clear
+server-conflict feedback when references prevent deletion.
+
+When active recurrences use a wallet/category, archive confirmation explains they will pause and the
+success state uses server `paused_recurring_count`. Restore explains that recurrence stays paused
+and requires explicit resume from recurring-transaction management.
 
 - [ ] **Step 2: Run focused component tests**
 
@@ -1072,7 +1197,8 @@ git commit -m "feat: add V1 onboarding and organization UX"
 
 **Interfaces:**
 
-- Consumes generated transaction/history hooks.
+- Consumes generated transaction/history hooks and `GET /api/v1/transactions/entry-defaults`; no
+  history-query inference supplies wallet defaults.
 - Produces canonical `/app/transactions/new` entry route, URL-owned filters, explicit `Load more`,
   edit/delete/restore/permanent-delete UI.
 
@@ -1123,7 +1249,7 @@ git add v1/web/app v1/web/features/transactions v1/web/lib/validation/transactio
 git commit -m "feat: add V1 transaction UX"
 ```
 
-### Task 18: Build Dashboard, Budgets, Recurring Rules, and Settings UX
+### Task 18: Build Dashboard, Budgets, Recurring Transactions, and Settings UX
 
 **Files:**
 
@@ -1152,9 +1278,9 @@ month selection, budget creation, and authoritative post-mutation totals.
 - [ ] **Step 2: Write failing recurring/settings tests**
 
 Test daily/weekly/monthly/yearly form, next-date explanation, create/edit, pause/resume, upcoming
-rules excluded from financial totals/history, timezone/default currency semantics, current/all
-session logout, recent-password account deletion, grace/backup wording, and deletion-only
-transition.
+recurring transactions excluded from financial totals/history, timezone/default currency semantics,
+current/all session logout, recent-password account deletion, grace/backup wording, and
+deletion-only transition.
 
 - [ ] **Step 3: Run focused tests**
 
@@ -1190,6 +1316,8 @@ git commit -m "feat: complete V1 financial journal UX"
 - Create:
   `v1/web/e2e/{auth-onboarding,transactions,history-trash,budgets-recurring,account-deletion,cache-isolation}.spec.ts`
 - Create: `v1/web/tests/accessibility.spec.tsx`
+- Create: `v1/web/e2e/support/mailbox.ts`
+- Modify: `infra/v1/test-compose.yml`
 - Modify: `v1/web/playwright.config.ts`
 - Modify: `v1/web/app/(auth)/app/layout.tsx`
 - Modify: `v1/web/components/app-shell/{app-shell.tsx,bottom-nav.tsx,sidebar.tsx}`
@@ -1199,7 +1327,8 @@ git commit -m "feat: complete V1 financial journal UX"
 
 **Interfaces:**
 
-- Produces executable acceptance evidence for major spec flows against real Rust API and PostgreSQL.
+- Produces executable acceptance evidence for major spec flows against real Rust API, PostgreSQL,
+  and a development/test-only Mailpit-compatible mailbox.
 
 - [ ] **Step 1: Write failing critical browser flows**
 
@@ -1207,6 +1336,11 @@ Create isolated users and cover first visit → register → verify → login �
 add expense/income; filter/edit/delete/restore; budget update; recurring pause/resume; session
 revoke; pending deletion cancel. Add a two-user browser/API assertion proving no cross-user
 read/mutation/inference.
+
+`e2e/support/mailbox.ts` polls Mailpit's test HTTP API by unique recipient, reads the delivered
+verification email, extracts the same public verification URL a user receives, and navigates through
+that URL. Mailpit exists only in `infra/v1/test-compose.yml`; production config continues using the
+normal `EmailSender` and exposes no token-reading or verification-bypass route.
 
 - [ ] **Step 2: Add failing accessibility assertions**
 
@@ -1235,7 +1369,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add v1/web
+git add v1/web infra/v1/test-compose.yml
 git commit -m "test: verify V1 browser acceptance flows"
 ```
 
@@ -1252,7 +1386,8 @@ git commit -m "test: verify V1 browser acceptance flows"
 
 - Produces two long-running services (`cashmemo-v1-web`, `cashmemo-v1-api`), one V1 PostgreSQL
   target, explicit migrate command, and Dokploy schedules using API image commands.
-- Produces `/health` process liveness and `/ready` dependency readiness.
+- Hardens and operationally verifies the existing `/api/v1/health/live` process-liveness and
+  `/api/v1/health/ready` dependency-readiness contracts from Task 3.
 
 - [ ] **Step 1: Write failing operations tests**
 
@@ -1268,9 +1403,10 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement runtime and config boundary**
 
-Application env includes only `V1_DATABASE_URL`, `PUBLIC_ORIGIN`, `COOKIE_SECURE`, session
+Application serving env includes only `V1_DATABASE_URL`, `PUBLIC_ORIGIN`, `COOKIE_SECURE`, session
 durations, `EMAIL_*`, `APP_ENV`, `LOG_LEVEL`, and auth rate-limit thresholds. Backup credentials
-never enter web/API config. Purge command alone receives deletion-ledger credentials.
+never enter web/API config. Purge/replay commands alone receive deletion-receipt credentials and
+HMAC key ring.
 
 - [ ] **Step 4: Create proportional containers and Dokploy commands**
 
@@ -1301,14 +1437,25 @@ git commit -m "ops: package Cashmemo V1 runtime"
 
 - Create: `infra/backup/pgbackrest.conf.example`
 - Create: `infra/backup/restore-runbook.md`
-- Create: `scripts/{preservation-audit.sh,verify-restore.sh}`
+- Create:
+  `scripts/{preservation-audit.sh,production-replacement-gate.sh,verify-restore.sh,replay-deletion-receipts.sh}`
+- Create: `v1/api/src/receipts/replay.rs`
+- Modify: `v1/api/src/{main.rs,config.rs}`
+- Modify: `infra/v1/test-compose.yml`
+- Create: `v1/api/tests/deletion_receipt_replay.rs`
 - Create: `docs/operations/{preservation-gate.md,backup-recovery.md,rollback.md}`
-- Create: `tests/operations/{preservation-gate.bats,restore-drill.bats}`
+- Create:
+  `tests/operations/{preservation-gate.bats,production-replacement-gate.bats,restore-drill.bats,deletion-receipt-replay.bats}`
 
 **Interfaces:**
 
-- Produces operator evidence templates for preservation decision, backup freshness, restore/PITR
-  drill, deletion receipt replay, production readiness, and rollback/reconciliation.
+- Produces executable production-replacement gate, restore verification, and deletion-receipt replay
+  plus operator evidence templates for preservation decision, backup freshness, production
+  readiness, and rollback/reconciliation.
+- Produces `replay_deletion_receipts(restored_pool, receipt_store, hmac_keyring) -> ReplaySummary`;
+  `ReplaySummary` contains unsigned `receipts_scanned`, `users_purged`, `unreadable_receipts`, and
+  `unprocessed_matches`; readiness requires both failure counts to be zero. restored DB remains
+  isolated until every receipt has been validated and matching resurrected accounts deleted.
 
 - [ ] **Step 1: Write failing shell contract tests**
 
@@ -1317,9 +1464,19 @@ identification, table/row evidence, backup inventory/freshness, real-data decisi
 record. Test migration/deploy wrapper refuses missing evidence for production replacement but
 permits explicitly disposable isolated V1 development/staging targets.
 
+Test receipt replay against an isolated restored PostgreSQL fixture: list receipt objects, validate
+schema/key version/canonical HMAC, compute HMAC candidates for restored user IDs with every
+unexpired key version, permanently delete matches, remain idempotent on a second run, and fail
+closed before network exposure on malformed/unreadable/divergent receipts.
+
+Reuse Task 13's testcontainer-backed S3-compatible store and dedicated test bucket/prefix; extend
+the compose test topology with an isolated restored-PostgreSQL target that has no web/API route.
+Replay integration tests use real PostgreSQL and S3 adapters, not in-memory substitutes.
+
 - [ ] **Step 2: Run operations contract tests**
 
-Run: `bats tests/operations/preservation-gate.bats tests/operations/restore-drill.bats`
+Run:
+`cargo test -p cashmemo-api --test deletion_receipt_replay && bats tests/operations/preservation-gate.bats tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats tests/operations/deletion-receipt-replay.bats`
 
 Expected: FAIL because scripts/runbooks are absent.
 
@@ -1330,6 +1487,11 @@ replacement deployment, or production route cutover. If real user data exists, o
 `STOP_REQUIRES_DEDICATED_MIGRATION_PLAN` and perform no destructive/replacement action. Never infer
 approval from repository state.
 
+`production-replacement-gate.sh` consumes the signed/recorded preservation decision and target
+classification, calls `preservation-audit.sh`, and exits nonzero before any migration/deployment
+command when evidence is missing. It explicitly permits only disposable isolated V1
+development/staging targets without the legacy audit.
+
 - [ ] **Step 4: Define pgBackRest and restore verification exactly**
 
 Document weekly full, daily differential, continuous WAL archive, encrypted external S3-compatible
@@ -1338,6 +1500,12 @@ implementation-time values for `repo1-retention-full`, `repo1-retention-full-typ
 override if used, and archive/WAL retention. Treat RPO/RTO as targets until drills prove them.
 Deletion receipts expire only after proving no restorable pre-purge backup remains plus seven-day
 safety margin; key rotation preserves all unexpired receipt evaluation.
+
+Implement `replay_deletion_receipts` and `scripts/replay-deletion-receipts.sh`. The wrapper requires
+an explicit isolated-restored-database acknowledgement, narrow receipt-bucket read credentials, and
+the HMAC key ring; it invokes the Rust command, records `ReplaySummary`, and refuses readiness until
+zero unreadable receipts and zero unprocessed matches remain. Run replay after every restore and
+before restored DB can receive application traffic.
 
 - [ ] **Step 5: Define rollback constraints**
 
@@ -1348,14 +1516,14 @@ states and require explicit reconciliation procedure/operator decision.
 - [ ] **Step 6: Verify scripts and documentation links**
 
 Run:
-`bats tests/operations/preservation-gate.bats tests/operations/restore-drill.bats && pnpm exec prettier --check docs/operations infra/backup`
+`cargo test -p cashmemo-api --test deletion_receipt_replay && bats tests/operations/preservation-gate.bats tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats tests/operations/deletion-receipt-replay.bats && pnpm exec prettier --check docs/operations infra/backup`
 
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add infra/backup scripts/preservation-audit.sh scripts/verify-restore.sh docs/operations tests/operations
+git add infra/backup infra/v1/test-compose.yml scripts/preservation-audit.sh scripts/production-replacement-gate.sh scripts/verify-restore.sh scripts/replay-deletion-receipts.sh v1/api/src/receipts/replay.rs v1/api/src/main.rs v1/api/src/config.rs v1/api/tests/deletion_receipt_replay.rs docs/operations tests/operations
 git commit -m "ops: define V1 preservation and recovery gates"
 ```
 
@@ -1393,7 +1561,9 @@ Expected: PASS for completed V1 tasks; any failure blocks CI addition until fixe
 Use PostgreSQL service container and isolated V1 DB. Jobs: Rust
 format/clippy/unit/integration/build; frontend lint/typecheck/test/build; OpenAPI/Orval drift;
 Playwright critical suite; migration empty/identified/unknown-target checks; Docker builds;
-existing-compatible dependency/container scanning. Do not make legacy TS7053 cleanup a V1 gate.
+existing-compatible dependency/container scanning. Playwright job starts Mailpit from
+`infra/v1/test-compose.yml`, uses unique recipient addresses, and never enables a verification
+bypass. Do not make legacy TS7053 cleanup a V1 gate.
 
 - [ ] **Step 4: Validate workflow syntax and local gates**
 
@@ -1443,7 +1613,7 @@ idempotency, purge races, and migration target protection.
 
 Record commit SHA and outputs for approved scope, CI, E2E, ownership/security, clean migrations,
 canonical-structure preparation, docs, and preservation decision status. A real-data discovery must
-reference a separately approved migration spec/plan before Task 24 may remove legacy migration
+reference a separately approved migration spec/plan before Task 25 may remove legacy migration
 material.
 
 - [ ] **Step 4: Record production-cutover inputs separately**
@@ -1460,58 +1630,118 @@ git add docs/verification README.md
 git commit -m "docs: record Cashmemo V1 verification"
 ```
 
-### Task 24: Promote V1 to Canonical Repository and Remove Legacy Application
+### Task 24: Audit and Prepare Approved Legacy Removal
 
 **Files:**
 
-- Move: `v1/api` → `apps/api`
-- Move: `v1/web` → `apps/web`
-- Modify: `Cargo.toml`, `package.json`, `pnpm-workspace.yaml`, `openapi/cashmemo-v1.json`
-- Modify: `.github/workflows/v1-ci.yml`,
-  `infra/v1/{api.Dockerfile,web.Dockerfile,dokploy-compose.yml,env.example,traefik.md}`, `README.md`
-- Modify:
-  `docs/operations/{v1-deployment.md,preservation-gate.md,backup-recovery.md,rollback.md,ci-gates.md}`
-- Remove: legacy `apps/server`, legacy `apps/web` before V1 promotion, `packages/contracts`,
-  `packages/currency-registry`, `packages/domain`, `packages/privacy-rules`, and
-  `packages/test-support` after exact preservation/reuse audit
-- Remove: obsolete legacy workflows, Docker/Dokploy configuration, routes, and excluded
-  AI/voice/draft/export code named by the Task 24 inventory
-- Preserve: legacy migration/history files named by the recorded preservation decision
+- Create: `docs/verification/legacy-removal-manifest.md`
+- Create: `scripts/apply-approved-legacy-removal.sh`
+- Create: `tests/repository/legacy-removal-manifest.bats`
+- Modify: `docs/verification/v1-merge-readiness.md`
 
 **Interfaces:**
 
-- Produces exact repository state intended for `main`: one Cashmemo V1 web app, one Rust API,
-  isolated approved schema history, current operations docs, no permanent dual-app structure.
+- Produces reviewed manifest assigning every legacy path to `REMOVE`, `PRESERVE`, or
+  `ALREADY_REUSED`, including exact legacy migration/history files required by preservation
+  decision.
+- Produces `apply-approved-legacy-removal.sh --check MANIFEST_SHA256` and explicit
+  `--apply MANIFEST_SHA256`; default/check mode performs no filesystem mutation.
 
 - [ ] **Step 1: Re-check Task 23 and preservation prerequisites**
 
 Run:
 `test -f docs/verification/v1-merge-readiness.md && scripts/preservation-audit.sh --check-recorded-decision`
 
-Expected: PASS. If output is `STOP_REQUIRES_DEDICATED_MIGRATION_PLAN`, stop this task; do not remove
-legacy code or migrations.
+Expected: PASS. If output is `STOP_REQUIRES_DEDICATED_MIGRATION_PLAN`, record the stop and do not
+prepare an executable removal set.
 
-- [ ] **Step 2: Move V1 paths and update all references mechanically**
+- [ ] **Step 2: Write failing manifest completeness tests**
 
-Move legacy `apps/web` aside only within this reviewed removal transaction, then use
-`git mv v1/api apps/api` and `git mv v1/web apps/web`. Update workspace members; rename root scripts
-`v1:openapi` → `openapi`, `v1:api:generate` → `api:generate`, `v1:api:check` → `api:check`, and
-`v1:verify` → `verify`; then update CI, Docker contexts, Orval output, docs, and commands. Keep API
-route prefix `/api/v1` unchanged.
+Test that every `git ls-files` path under legacy `apps/server`, legacy `apps/web`,
+`packages/contracts`, `packages/currency-registry`, `packages/domain`, `packages/privacy-rules`,
+`packages/test-support`, and legacy workflow/runtime roots appears exactly once in the manifest.
+Test that `PRESERVE` entries match the preservation decision and that unlisted paths make `--check`
+fail.
 
-- [ ] **Step 3: Remove legacy implementation after exact inventory review**
+- [ ] **Step 3: Run manifest tests and confirm missing artifacts**
 
-Generate `git ls-files` inventory, mark each legacy path against REUSE/ADAPT/REPLACE/REMOVE
-assessment, then remove only approved legacy app code, old API contracts, excluded
-AI/voice/draft/export paths, and obsolete CI/runtime config. Keep reusable branding/assets and
-infrastructure patterns already incorporated. Do not delete legacy migrations required by the
-preservation decision.
+Run: `bats tests/repository/legacy-removal-manifest.bats`
 
-- [ ] **Step 4: Add clean-repository boundary test**
+Expected: FAIL because manifest and check script do not exist.
 
-Create `tests/repository/canonical-layout.bats` asserting `apps/api`, `apps/web`, current
-OpenAPI/client paths exist; temporary `v1/` and legacy executable entrypoints do not; workspace
-manifests and CI reference only canonical apps; excluded V1 dependencies/routes are absent.
+- [ ] **Step 4: Create exact manifest and non-mutating validation**
+
+Generate repository inventory, classify every scoped path against approved
+REUSE/ADAPT/REPLACE/REMOVE assessment, and record reason plus preservation source for every
+`PRESERVE` entry. Implement script with explicit allowlisted paths only—no unresolved variables,
+broad globs, or repository-root delete. `--apply` verifies clean worktree, current branch, manifest
+hash, Task 23 evidence, and preservation gate before issuing path-specific `git rm` commands; Task
+24 never invokes `--apply`.
+
+- [ ] **Step 5: Verify preparation is complete and non-destructive**
+
+Run:
+`bats tests/repository/legacy-removal-manifest.bats && scripts/apply-approved-legacy-removal.sh --check "$(shasum -a 256 docs/verification/legacy-removal-manifest.md | cut -d' ' -f1)" && git diff --exit-code -- apps packages .github infra Cargo.toml package.json pnpm-workspace.yaml`
+
+Expected: PASS; tracked repository content is unchanged except Task 24's new/modified documentation,
+script, and test.
+
+- [ ] **Step 6: Commit reviewed removal preparation**
+
+```bash
+git add docs/verification/legacy-removal-manifest.md docs/verification/v1-merge-readiness.md scripts/apply-approved-legacy-removal.sh tests/repository/legacy-removal-manifest.bats
+git commit -m "docs: prepare reviewed legacy removal"
+```
+
+### Task 25: Promote V1 to Canonical Repository and Apply Approved Removal
+
+**Files:**
+
+- Move: `v1/api` → `apps/api`
+- Move: `v1/web` → `apps/web`
+- Create: `tests/repository/canonical-layout.bats`
+- Modify: `Cargo.toml`, `package.json`, `pnpm-workspace.yaml`, `openapi/cashmemo-v1.json`
+- Modify: `.github/workflows/v1-ci.yml`,
+  `infra/v1/{api.Dockerfile,web.Dockerfile,dokploy-compose.yml,test-compose.yml,env.example,traefik.md}`,
+  `README.md`
+- Modify:
+  `docs/operations/{v1-deployment.md,preservation-gate.md,backup-recovery.md,rollback.md,ci-gates.md}`
+- Remove: only `REMOVE` paths in `docs/verification/legacy-removal-manifest.md`
+- Preserve: every `PRESERVE` path in that manifest
+
+**Interfaces:**
+
+- Consumes reviewed manifest hash and Task 24 `--check` result.
+- Produces exact repository intended for `main`: canonical `apps/api`, canonical `apps/web`, one
+  current OpenAPI/client workflow, preserved required migration history, and no permanent dual app.
+
+- [ ] **Step 1: Verify approved removal input before mutation**
+
+Run:
+`test -z "$(git status --porcelain)" && scripts/apply-approved-legacy-removal.sh --check "$(shasum -a 256 docs/verification/legacy-removal-manifest.md | cut -d' ' -f1)"`
+
+Expected: PASS. Any manifest drift or preservation-gate failure stops Task 25 before removal.
+
+- [ ] **Step 2: Apply exact removal and promote canonical paths**
+
+Run
+`scripts/apply-approved-legacy-removal.sh --apply "$(shasum -a 256 docs/verification/legacy-removal-manifest.md | cut -d' ' -f1)"`,
+then use `git mv v1/api apps/api` and `git mv v1/web apps/web`. Script may remove only manifest
+`REMOVE` entries; it must not remove any `PRESERVE` entry. This repository operation does not touch
+database, Dokploy, deployment routing, or production data.
+
+- [ ] **Step 3: Rewrite canonical references**
+
+Update workspace members; rename root scripts `v1:openapi` → `openapi`, `v1:api:generate` →
+`api:generate`, `v1:api:check` → `api:check`, and `v1:verify` → `verify`; update CI, Docker
+contexts, Orval output, docs, and commands. Keep API route prefix `/api/v1` unchanged.
+
+- [ ] **Step 4: Add canonical-layout boundary test**
+
+Assert `apps/api`, `apps/web`, current OpenAPI/client paths exist; temporary `v1/` and legacy
+executable entrypoints do not; every manifest `REMOVE` path is absent; every `PRESERVE` path
+remains; workspace manifests and CI reference only canonical apps; excluded V1 dependencies/routes
+are absent.
 
 - [ ] **Step 5: Run complete canonical verification**
 
@@ -1527,7 +1757,7 @@ git add -A
 git commit -m "refactor: replace legacy Cashmemo with V1"
 ```
 
-### Task 25: Final Branch Review Gate—No Merge or Deployment
+### Task 26: Final Branch Review Gate—No Merge or Deployment
 
 **Files:**
 
@@ -1582,7 +1812,7 @@ runtime state, migrate/deploy/switch/smoke, stabilize, then operational cleanup.
 
 ## Plan Completion Definition
 
-Plan execution is complete only when Task 25 stops with a clean, fully verified rewrite branch ready
+Plan execution is complete only when Task 26 stops with a clean, fully verified rewrite branch ready
 for human review. Production deployment/cutover and operational cleanup remain separately authorized
 operations. Any discovered real user data changes execution immediately to
 `STOP → dedicated migration specification and plan`; clean-schema assumptions never authorize data
