@@ -19,6 +19,12 @@ const V1_TABLES: &[&str] = &[
 ];
 const IDENTITY_ONLY_MIGRATIONS: &[(i64, bool)] = &[(1, true)];
 const FULL_V1_MIGRATIONS: &[(i64, bool)] = &[(1, true), (2, true), (3, true), (4, true), (5, true)];
+const FULL_SCHEMA_MIGRATION_PREFIXES: &[&[(i64, bool)]] = &[
+    &[(1, true), (2, true)],
+    &[(1, true), (2, true), (3, true)],
+    &[(1, true), (2, true), (3, true), (4, true)],
+    FULL_V1_MIGRATIONS,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetState {
@@ -49,10 +55,10 @@ pub async fn assert_v1_migration_target(pool: &PgPool) -> Result<TargetState, Ta
     }
 
     let table_names = tables.iter().map(String::as_str).collect::<Vec<_>>();
-    let expected_migrations = if table_names == IDENTITY_ONLY_TABLES {
-        IDENTITY_ONLY_MIGRATIONS
+    let expected_migration_prefixes = if table_names == IDENTITY_ONLY_TABLES {
+        &[IDENTITY_ONLY_MIGRATIONS][..]
     } else if table_names == V1_TABLES {
-        FULL_V1_MIGRATIONS
+        FULL_SCHEMA_MIGRATION_PREFIXES
     } else {
         return Err(TargetError::UnknownNonEmpty);
     };
@@ -69,13 +75,45 @@ pub async fn assert_v1_migration_target(pool: &PgPool) -> Result<TargetState, Ta
         return Err(TargetError::UnknownNonEmpty);
     }
 
-    let migrations: Vec<(i64, bool)> =
-        sqlx::query_as("SELECT version, success FROM _sqlx_migrations ORDER BY version")
+    let migrations: Vec<(i64, bool, Vec<u8>)> =
+        sqlx::query_as("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
             .fetch_all(pool)
             .await?;
-    if migrations.as_slice() != expected_migrations {
+    let migrations_are_valid = expected_migration_prefixes
+        .iter()
+        .any(|prefix| migrations_match(&migrations, prefix));
+    if !migrations_are_valid {
         return Err(TargetError::UnknownNonEmpty);
     }
 
     Ok(TargetState::CashmemoV1)
+}
+
+pub async fn assert_latest_v1_migration_target(pool: &PgPool) -> Result<TargetState, TargetError> {
+    let state = assert_v1_migration_target(pool).await?;
+    let migrations: Vec<(i64, bool, Vec<u8>)> =
+        sqlx::query_as("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(pool)
+            .await?;
+    if migrations_match(&migrations, FULL_V1_MIGRATIONS) {
+        Ok(state)
+    } else {
+        Err(TargetError::UnknownNonEmpty)
+    }
+}
+
+fn migrations_match(actual: &[(i64, bool, Vec<u8>)], expected: &[(i64, bool)]) -> bool {
+    let known = sqlx::migrate!("./migrations");
+    actual.len() == expected.len()
+        && actual
+            .iter()
+            .zip(expected)
+            .all(|((version, success, checksum), expected)| {
+                let Some(migration) = known.iter().find(|migration| migration.version == *version)
+                else {
+                    return false;
+                };
+                (*version, *success) == *expected
+                    && checksum.as_slice() == migration.checksum.as_ref()
+            })
 }

@@ -1,6 +1,9 @@
 mod support;
 
-use cashmemo_api::db::target_guard::{TargetError, TargetState, assert_v1_migration_target};
+use cashmemo_api::db::{
+    migrate::migrate_v1,
+    target_guard::{TargetError, TargetState, assert_v1_migration_target},
+};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
@@ -50,10 +53,17 @@ async fn identified_v1_database_at_0001_is_allowed_to_continue_migrating(pool: P
         .execute(&pool)
         .await
         .unwrap();
+    let checksum = sqlx::migrate!("./migrations")
+        .iter()
+        .find(|migration| migration.version == 1)
+        .unwrap()
+        .checksum
+        .to_vec();
     sqlx::query(
         "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
-         VALUES (1, 'v1 identity', TRUE, '\\x00', 0)",
+         VALUES (1, 'v1 identity', TRUE, $1, 0)",
     )
+    .bind(checksum)
     .execute(&pool)
     .await
     .unwrap();
@@ -62,4 +72,62 @@ async fn identified_v1_database_at_0001_is_allowed_to_continue_migrating(pool: P
         assert_v1_migration_target(&pool).await.unwrap(),
         TargetState::CashmemoV1
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("DROP TRIGGER wallets_opening_balance_immutable ON wallets")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION reject_wallet_opening_balance_change()")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 5")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        assert_v1_migration_target(&pool).await.unwrap(),
+        TargetState::CashmemoV1
+    );
+    assert_eq!(migrate_v1(&pool).await.unwrap(), TargetState::CashmemoV1);
+
+    let migrations: Vec<i64> =
+        sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn identified_v1_database_with_migration_gap_is_rejected(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 4")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        assert_v1_migration_target(&pool).await,
+        Err(TargetError::UnknownNonEmpty)
+    ));
+}
+
+#[sqlx::test(migrations = false)]
+async fn identified_v1_database_with_modified_migration_is_rejected(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = '\\x00' WHERE version = 5")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        assert_v1_migration_target(&pool).await,
+        Err(TargetError::UnknownNonEmpty)
+    ));
 }
