@@ -306,12 +306,16 @@ impl TransactionService {
         user_id: Uuid,
         transaction_id: Uuid,
     ) -> Result<(), TransactionError> {
-        let deleted = sqlx::query("DELETE FROM transactions WHERE user_id = $1 AND id = $2")
-            .bind(user_id)
-            .bind(transaction_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|_| TransactionError::Persistence)?;
+        let deleted = sqlx::query(
+            "DELETE FROM transactions
+             WHERE user_id = $1 AND id = $2
+               AND deleted_at IS NOT NULL AND purge_after IS NOT NULL",
+        )
+        .bind(user_id)
+        .bind(transaction_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| TransactionError::Persistence)?;
         if deleted.rows_affected() == 0 {
             return Err(TransactionError::NotFound);
         }

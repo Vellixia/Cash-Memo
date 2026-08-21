@@ -253,6 +253,20 @@ async fn trash_restore_and_permanent_purge_enforce_lifecycle_and_preserve_occurr
     let restored = response_json(restored).await;
     assert!(restored["deleted_at"].is_null() && restored["purge_after"].is_null());
 
+    let active_purge = app
+        .clone()
+        .oneshot(delete_permanently(&cookie, transaction_id))
+        .await
+        .unwrap();
+    assert_eq!(active_purge.status(), StatusCode::NOT_FOUND);
+
+    let trashed_again = app
+        .clone()
+        .oneshot(delete_transaction(&cookie, transaction_id))
+        .await
+        .unwrap();
+    assert_eq!(trashed_again.status(), StatusCode::OK);
+
     let occurrence_id: Uuid = sqlx::query_scalar(
         "INSERT INTO recurring_transactions
              (user_id, wallet_id, category_id, transaction_type, amount, frequency, start_date, next_due_date)
