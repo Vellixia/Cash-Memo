@@ -179,13 +179,59 @@ This assumption never authorizes destructive action. The mandatory preservation 
 
 ## 7. Legacy REUSE / ADAPT / REPLACE / REMOVE Assessment
 
-| Classification | Material | Rationale |
-|---|---|---|
-| REUSE | Product name; cross-user isolation test scenarios; privacy-boundary knowledge; PostgreSQL preservation warning; backup/restore knowledge | These are product or operational facts independent of legacy runtime architecture. |
-| ADAPT | GitHub Actions structure; Dokploy/Traefik routing; container hardening; pgBackRest/S3 patterns; environment/secrets injection; health/readiness; PostgreSQL integration-test setup; OpenAPI drift checks; email-delivery configuration if production-compatible | Existing patterns are useful, but service names, commands, runtime assumptions, and credentials must fit Next.js/Rust. |
-| EVALUATE | Existing ISO/CLDR currency registry data; integer minor-unit money model; security headers; secret/dependency scanning; exact email provider | These may be correct independent of legacy. Selection must follow V1 semantics and verified environment evidence. |
-| REPLACE | Vite frontend; Fastify backend; TypeScript domain packages; Better Auth integration; current API; current 23-table schema design; money-space model; handwritten fetch clients; current state management; reporting and lifecycle logic | Target architecture, domain ownership, and user flows differ materially. |
-| REMOVE AT FINAL REPLACEMENT | AI/STT/voice/drafts; provider attempts; temporary audio; export object lifecycle; complex deletion-suppression system; unused frontend dependencies; legacy verifier/evidence machinery not justified by V1; obsolete routes, contracts, containers, CI, and docs | Explicit V1 non-goals or temporary legacy support. |
+**REUSE**
+
+- Product name.
+- Cross-user isolation test scenarios.
+- Privacy-boundary knowledge.
+- PostgreSQL preservation warning.
+- Backup/restore knowledge.
+- Rationale: these are product or operational facts independent of legacy runtime architecture.
+
+**ADAPT**
+
+- GitHub Actions structure.
+- Dokploy/Traefik routing.
+- Container hardening.
+- pgBackRest/S3 patterns.
+- Environment/secrets injection.
+- Health/readiness.
+- PostgreSQL integration-test setup.
+- OpenAPI drift checks.
+- Email-delivery configuration if production-compatible.
+- Rationale: existing patterns are useful, but service names, commands, runtime assumptions, and credentials must fit Next.js/Rust.
+
+**EVALUATE**
+
+- Existing ISO/CLDR currency registry data.
+- Integer minor-unit money model.
+- Security headers.
+- Secret/dependency scanning.
+- Exact email provider.
+- Rationale: these may be correct independent of legacy. Selection must follow V1 semantics and verified environment evidence.
+
+**REPLACE**
+
+- Vite frontend.
+- Fastify backend.
+- TypeScript domain packages.
+- Better Auth integration.
+- Current API and 23-table schema design.
+- Money-space model.
+- Handwritten fetch clients.
+- Current state management, reporting, and lifecycle logic.
+- Rationale: target architecture, domain ownership, and user flows differ materially.
+
+**REMOVE AT FINAL REPLACEMENT**
+
+- AI/STT/voice/drafts.
+- Provider attempts and temporary audio.
+- Export object lifecycle.
+- Complex deletion-suppression system.
+- Unused frontend dependencies.
+- Legacy verifier/evidence machinery not justified by V1.
+- Obsolete routes, contracts, containers, CI, and docs.
+- Rationale: these are explicit V1 non-goals or temporary legacy support.
 
 Legacy migrations are not removed merely because the schema is replaced. They remain until the preservation audit resolves whether any real data requires migration or continued historical material.
 
@@ -399,6 +445,7 @@ User status:
 pending_verification
 active
 pending_deletion
+purging
 ```
 
 Email normalization is intentionally conservative: trim leading/trailing whitespace and lowercase. The result is Cashmemo's unique login identifier. Cashmemo does not apply Gmail dot normalization, strip plus aliases, or perform provider-specific alias normalization.
@@ -484,7 +531,13 @@ No IP history, geolocation, detailed device fingerprint, or persisted user-agent
 - Logout current revokes current session and clears cookie.
 - Logout all and password reset revoke every existing session transactionally.
 
-### 13.6 CSRF and origins
+### 13.6 Authentication throttling
+
+V1 assumes one Rust API replica. A bounded in-memory Tower middleware limiter protects registration, verification resend, login, and password-reset request endpoints. The trusted HTTP edge may add a coarse outer limit, but correctness does not depend on Redis or persistent login-attempt history.
+
+Exact per-IP and per-normalized-login-identifier thresholds and windows are deployment configuration. They must deter obvious automated abuse without exposing whether an account exists. Rejected requests return `429`; focused tests cover threshold, expiry, and enumeration-safe responses. Restarts may clear in-memory counters. A distributed/shared limiter becomes necessary only if Cashmemo later runs multiple API replicas.
+
+### 13.7 CSRF and origins
 
 - `GET`, `HEAD`, and `OPTIONS` never mutate application state.
 - `POST`, `PUT`, `PATCH`, and `DELETE` require exact match against configured allowed `Origin`.
@@ -494,7 +547,7 @@ No IP history, geolocation, detailed device fingerprint, or persisted user-agent
 - Development origins are explicit configuration.
 - No separate CSRF-token subsystem is needed for browser V1.
 
-### 13.7 Pending-deletion authentication
+### 13.8 Pending-deletion authentication
 
 Pending-deletion email/password login creates deletion-restricted access. It allows only:
 
@@ -523,6 +576,15 @@ authenticated user_id
 Foreign-owned resource IDs return the same `404` as nonexistent IDs. Filter, nested-reference, mutation, restore, Trash, and reporting paths reapply ownership.
 
 RLS is not required for V1 correctness. If later adopted, application scoping and composite constraints remain authoritative and RLS is defense-in-depth only.
+
+### 14.1 Text Input Limits
+
+Rust enforces product limits authoritatively by Unicode code points. Frontend mirrors them for immediate feedback. PostgreSQL may use `TEXT`; database type width is not product validation. Input is rejected rather than silently truncated.
+
+- Wallet name: 1–80 Unicode code points after trim.
+- Category name: 1–80 Unicode code points after trim.
+- Transaction note: 0–500 Unicode code points.
+- History search `q`: 0–100 Unicode code points after trim; empty means no text filter.
 
 ## 15. Wallets
 
@@ -737,18 +799,16 @@ Base path is `/api/v1`. JSON success returns resource directly. Collections retu
 
 Representative resources:
 
-| Area | Routes |
-|---|---|
-| Auth | register, resend verification, verify email, login, logout, logout-all, session, password-reset request/consume |
-| Profile | get/update timezone and default currency |
-| Wallets | list, create, get, update name/opening balance, archive, restore, delete if eligible |
-| Categories | list, create, rename, archive, restore, delete if eligible |
-| Transactions | list, create, get, update, move to Trash, restore, permanent delete, list Trash |
-| Budgets | list/progress, create, update, delete |
-| Recurring | list, create, update future rule, pause, resume |
-| Reports | monthly summary and budget summary |
-| Account deletion | request, status, cancel |
-| Operations | liveness and readiness |
+- **Auth:** register, resend verification, verify email, login, logout, logout-all, session, and password-reset request/consume.
+- **Profile:** get/update timezone and default currency.
+- **Wallets:** list, create, get, update name/opening balance, archive, restore, and delete if eligible.
+- **Categories:** list, create, rename, archive, restore, and delete if eligible.
+- **Transactions:** list, create, get, update, move to Trash, restore, permanent delete, and list Trash.
+- **Budgets:** list/progress, create, update, and delete.
+- **Recurring:** list, create, update future rule, pause, and resume.
+- **Reports:** monthly summary and budget summary.
+- **Account deletion:** request, status, and cancel.
+- **Operations:** liveness and readiness.
 
 Error envelope:
 
@@ -801,16 +861,14 @@ Axum + utoipa schemas
 
 ### 24.1 State ownership
 
-| Concern | Owner |
-|---|---|
-| Form state | React Hook Form |
-| Immediate validation | Zod |
-| Authoritative validation/calculation | Rust/PostgreSQL |
-| Remote state/cache | TanStack Query |
-| HTTP | Axios |
-| Generated API/types/hooks | Orval |
-| Filters/month selection | URL search parameters |
-| Dialog/sheet/disclosure | Local React state |
+- **Form state:** React Hook Form.
+- **Immediate validation:** Zod.
+- **Authoritative validation/calculation:** Rust/PostgreSQL.
+- **Remote state/cache:** TanStack Query.
+- **HTTP:** Axios.
+- **Generated API/types/hooks:** Orval.
+- **Filters/month selection:** URL search parameters.
+- **Dialog/sheet/disclosure:** local React state.
 
 No Redux or Zustand is introduced without a demonstrated need.
 
@@ -892,25 +950,89 @@ Pending-deletion screen contains only deletion date, Cancel Account Deletion, an
 
 ### 24.6 Major screen contracts
 
-| Screen | Primary goal/action | Required information | Empty/loading/error/success | Mobile behavior |
-|---|---|---|---|---|
-| First visit | Understand purpose; Log In or Create Account | Product purpose and privacy boundary | Static public content; safe unavailable state if navigation fails | Single column; primary actions remain above fold |
-| Register | Create account | Email, 15–128-character password, privacy guidance | Pending disables submit; errors link to fields; success opens verification-pending screen | Correct email/password keyboards; no horizontal form layout |
-| Verify email | Complete ownership proof; Resend if needed | Token from URL or resend email | Loading while consuming; invalid/expired gives resend; success links to login | Focused status screen with one primary action |
-| Login | Start session | Email and password | Generic invalid credentials; verified success enters onboarding/app; pending deletion enters restricted screen | Full-width form and visible password controls |
-| Forgot/reset password | Request or consume recovery token | Email, or token plus new password | Request always generic; token failure safe; success returns to login | Focused single-column recovery flow |
-| Onboarding | Establish usable account | Confirmed timezone, default currency, first wallet | Derive missing steps; retry idempotently; success opens dashboard | One short step per screen where needed |
-| Dashboard | Understand current month; Add transaction | Currency-separated monthly/budget/recent data | No wallet -> Create Wallet; no activity -> Add Expense/Income; section-level retry for small read set | Currency chips, stacked cards, bottom navigation |
-| New transaction | Save income/expense quickly | Type, deterministic wallet/currency, amount, matching category; optional note/time | Preserve form on error; server-confirmed success closes/navigates and invalidates affected scopes | Canonical full-page route with amount focus and numeric keyboard |
-| History | Find and open transactions; Load more | Current filters, items, cursor | Distinguish no data/no matches; retry failed page without losing prior items | Filters in accessible sheet; explicit Load more |
-| Transaction detail/edit | Understand or correct one record | Authoritative stored transaction and lifecycle state | Missing/foreign -> safe not found; failed save preserves form; success updates affected views | Normal page; destructive actions separated from edit |
-| Trash | Restore or permanently delete | Deleted date and purge date | Empty explains 30-day policy; restore/purge errors retain row; success follows server state | Large explicit actions; irreversible confirmation |
-| Wallets | Manage money containers | Name, immutable currency, opening/current balance, status | No wallet -> Create Wallet; archive/delete conflicts explain references; success refreshes affected wallet views | Stacked wallet cards and focused edit page/sheet |
-| Categories | Maintain flat labels | Income/expense kind, name, status | Seeded/custom rows look same; conflicts and recurring pause consequences explicit | Income/Expense tabs; touch-safe row menu |
-| Budgets | Set and understand monthly intent | Month, currency, expense category, amount, derived progress | Empty -> Create Budget; safe retry; success invalidates selected month/category scope | Stacked progress list; month/currency controls remain visible |
-| Recurring | Manage future generation | Template, frequency, start/next date, status | Empty explains generated transactions; errors preserve rule; pause/resume success shows next date | Compact cards; create/edit use one focused form |
-| Settings/sessions | Change preferences and session state | Timezone, default currency, current session | Save errors preserve prior server value; logout-all confirmation; success uses targeted invalidation | Grouped sections; destructive account action last |
-| Account deletion | Request deletion or manage grace | Password before request; purge date during grace | Failure does not change status; success revokes sessions; restricted state exposes only Cancel and Sign Out | Focused warning page with non-color severity cues |
+**First visit**
+
+- Goal/action: understand purpose; Log In or Create Account.
+- Required information: product purpose and privacy boundary.
+- States: static public content; safe unavailable state if navigation fails.
+- Mobile: single column; primary actions remain above fold.
+
+**Register and verify email**
+
+- Goal/action: create account, then complete ownership proof or resend.
+- Required information: email, 15–128-character password, privacy guidance, and verification token from URL.
+- States: pending disables submit; errors link to fields; invalid/expired verification offers resend; success links to login.
+- Mobile: correct email/password keyboards; focused single-column status/form.
+
+**Login and password recovery**
+
+- Goal/action: start session or recover password.
+- Required information: email/password, or email, or reset token plus new password.
+- States: generic invalid credentials; reset request always generic; verified success enters onboarding/app; pending deletion enters restricted screen.
+- Mobile: full-width focused forms and visible password controls.
+
+**Onboarding**
+
+- Goal/action: establish usable account.
+- Required information: confirmed timezone, default currency, and first wallet.
+- States: derive missing steps, retry idempotently, and open dashboard on completion.
+- Mobile: one short step per screen where needed.
+
+**Dashboard**
+
+- Goal/action: understand current month and add transaction.
+- Required information: currency-separated monthly, budget, and recent data.
+- States: no wallet offers Create Wallet; no activity offers Add Expense/Income; small read set supports section-level retry.
+- Mobile: currency chips, stacked cards, and bottom navigation.
+
+**New transaction**
+
+- Goal/action: save income/expense quickly.
+- Required information: type, deterministic wallet/currency, amount, matching category, optional note/time.
+- States: preserve form on error; server-confirmed success closes/navigates and invalidates affected scopes.
+- Mobile: canonical full-page route with amount focus and numeric keyboard.
+
+**History and transaction detail**
+
+- Goal/action: find, load more, inspect, and edit transactions.
+- Required information: current filters, items/cursor, and authoritative selected transaction.
+- States: distinguish no data/no matches; retry failed page without losing prior items; missing/foreign resource is safe not found; failed save preserves form.
+- Mobile: accessible filter sheet, explicit Load more, normal detail page, and separated destructive actions.
+
+**Trash**
+
+- Goal/action: restore or permanently delete.
+- Required information: deleted and purge dates.
+- States: empty explains 30-day policy; restore/purge errors retain row; success follows server state.
+- Mobile: large explicit actions and irreversible confirmation.
+
+**Wallets and categories**
+
+- Goal/action: manage money containers and flat labels.
+- Required information: wallet name/currency/opening/current balance/status; category kind/name/status.
+- States: empty wallets offer Create Wallet; conflicts explain references; seeded/custom categories look same; archive explains recurring pause.
+- Mobile: stacked cards, Income/Expense tabs, touch-safe row menus, and focused edit views.
+
+**Budgets**
+
+- Goal/action: set and understand monthly intent.
+- Required information: month, currency, expense category, amount, and derived progress.
+- States: empty offers Create Budget; safe retry; success invalidates selected month/category scope.
+- Mobile: stacked progress list with visible month/currency controls.
+
+**Recurring**
+
+- Goal/action: manage future generation.
+- Required information: template, frequency, start/next date, and status.
+- States: empty explains generated transactions; errors preserve rule; pause/resume success shows next date.
+- Mobile: compact cards and one focused create/edit form.
+
+**Settings, sessions, and account deletion**
+
+- Goal/action: change preferences/session state, request deletion, or manage grace.
+- Required information: timezone, default currency, current session, current password before deletion, and purge date during grace.
+- States: save errors preserve server value; logout-all confirms; deletion failure does not change state; request success revokes sessions; restricted view exposes only allowed actions.
+- Mobile: grouped settings with destructive action last; focused deletion warning with non-color severity cues.
 
 Every contract uses the shared loading/error/accessibility requirements below; this table defines screen-specific hierarchy rather than pixel-perfect layout.
 
@@ -962,10 +1084,22 @@ active
 -> recent password confirmation
 -> pending deletion for 7 days
    |-- restricted login -> cancel or sign out
-   `-- grace expires -> safe live-data purge
+   `-- grace expires -> atomically claimed as purging
+                        -> durable deletion receipt
+                        -> safe live-data purge
 ```
 
 Request revokes all sessions. Normal application access is disabled. Cancellation invalidates restricted session and requires normal login. At grace expiry, live user-owned application data is hard-deleted transactionally after durable anti-resurrection receipt creation.
+
+Finalization closes deletion/cancellation race:
+
+- Scheduled purge atomically claims an expired `pending_deletion` request by changing it to `purging` before external receipt work.
+- Claim uses row locking or conditional update so concurrent workers cannot claim same account.
+- Cancellation succeeds only while state remains `pending_deletion`; once claimed, it returns lifecycle conflict.
+- Receipt creation occurs only after successful claim.
+- If receipt creation fails, account remains `purging`, live data remains intact, and later bounded run retries.
+- Login during `purging` may show deletion-finalizing status and Sign Out, but cannot offer cancellation.
+- After durable receipt exists, one database transaction deletes live user data and completes request by removing account-owned rows.
 
 UI explains seven-day grace, disabled normal access, cancellation method, live purge after grace, and that backup copies expire according to infrastructure retention rather than immediately.
 
@@ -1100,7 +1234,7 @@ key/ledger version
 
 ## 28. Mandatory Data-Preservation Gate
 
-Before destructive reset, production-target migration, deployment, or route cutover:
+Before destructive legacy-data action, production-target migration, production replacement deployment, or production route cutover:
 
 1. Resolve actual Dokploy application, PostgreSQL, volume, and backup resource IDs.
 2. Identify legacy and V1 targets.
@@ -1122,6 +1256,8 @@ do not deploy replacement over data
 ```
 
 Clean-schema default does not imply destroying legacy data.
+
+Isolated V1 development/staging deployments against explicitly disposable V1 databases do not require legacy production-data audit. Migration fail-closed rules and environment isolation still apply.
 
 ## 29. Scheduled Commands
 
@@ -1270,27 +1406,25 @@ After defined stabilization period, remove legacy Dokploy services and obsolete 
 
 ## 34. Key Decisions and Trade-offs
 
-| Decision | Chosen approach | Alternatives and trade-off |
-|---|---|---|
-| Replacement | Temporary parallel rebuild, then remove legacy before merge | Progressive replacement risks coupling; immediate reset loses reference/rollback. Temporary duplication accepted. |
-| Existing data | Clean V1 schema plus mandatory preservation gate | Full compatibility rejected without production evidence. Gate prevents destructive assumption. |
-| Persistence isolation | Separate databases, URLs, and migration histories | Schema-only isolation is weaker against operator error. |
-| Money | `NUMERIC(20,4)` + `Decimal` + strings | Integer minor units exact but add conversion/exponent boundaries. Rust pre-SQL validation prevents rounding. |
-| Wallet opening balance | Wallet state | Synthetic transaction would create fake income/category and distort reporting. |
-| Transaction ownership | Direct `user_id` plus composite FKs | Deriving only through wallet reduces duplication but weakens query simplicity/security constraints. |
-| Authorization | Explicit user-scoped SQL + composite ownership; no baseline RLS | RLS offers defense-in-depth but adds pool/role/job complexity without demonstrated V1 need. |
-| Sessions | Opaque PostgreSQL sessions in Secure HttpOnly cookie | JWT/localStorage rejected for revocation and browser security. |
-| Transaction deletion | 30-day Trash, restore, explicit purge, auto-purge | Immediate-only deletion harms recovery; indefinite Trash conflicts with minimization. |
-| Account deletion | Seven-day grace, restricted login, durable safe purge | Immediate purge harms mistake recovery; longer grace unnecessary. |
-| Wallet/category removal | Archive referenced rows; delete unreferenced only | Cascading delete would invalidate history. |
-| Budget | Category + currency + local month; derived spent | Wallet-only or converted budget conflicts with multi-currency/no-FX rules. |
-| Recurrence | Calendar rule + immutable occurrence ledger | Queue/Redis unnecessary; deleting occurrence would permit duplicate recreation. |
-| Pagination | Keyset + explicit Load more | Offset drifts; infinite scroll adds UX/error complexity. |
-| Search | Escaped literal `ILIKE` | Full-text/trigram/external search premature. |
-| API | REST `/api/v1`, Rust OpenAPI, Orval | GraphQL and hand-maintained clients add unnecessary surface/drift. |
-| Deployment | Same origin, two long-running app services | Cross-origin complicates cookies/CORS; permanent job service unnecessary. |
-| Backup | pgBackRest + encrypted S3 + verified retention/PITR | Application-managed backup rejected; nominal retention alone is insufficient evidence. |
-| PWA | Static public assets only; private data `no-store` | Offline financial caching/sync increases privacy and correctness risk. |
+- **Replacement:** temporary parallel rebuild, then remove legacy before merge. Progressive replacement risks coupling; immediate reset loses reference/rollback. Temporary duplication is accepted.
+- **Existing data:** clean V1 schema plus mandatory preservation gate. Full compatibility is rejected without production evidence; gate prevents destructive assumption.
+- **Persistence isolation:** separate databases, URLs, and migration histories. Schema-only isolation is weaker against operator error.
+- **Money:** `NUMERIC(20,4)` + `Decimal` + strings. Integer minor units are exact but add conversion/exponent boundaries; Rust pre-SQL validation prevents rounding.
+- **Wallet opening balance:** wallet state. Synthetic transaction would create fake income/category and distort reporting.
+- **Transaction ownership:** direct `user_id` plus composite FKs. Deriving only through wallet reduces duplication but weakens query simplicity/security constraints.
+- **Authorization:** explicit user-scoped SQL + composite ownership, without baseline RLS. RLS adds pool/role/job complexity without demonstrated V1 need.
+- **Sessions:** opaque PostgreSQL sessions in Secure HttpOnly cookie. JWT/localStorage is rejected for revocation and browser security.
+- **Transaction deletion:** 30-day Trash, restore, explicit purge, and auto-purge. Immediate-only deletion harms recovery; indefinite Trash conflicts with minimization.
+- **Account deletion:** seven-day grace, restricted login, and durable safe purge. Immediate purge harms mistake recovery; longer grace is unnecessary.
+- **Wallet/category removal:** archive referenced rows and delete unreferenced rows only. Cascading delete would invalidate history.
+- **Budget:** category + currency + local month with derived spent. Wallet-only or converted budget conflicts with multi-currency/no-FX rules.
+- **Recurrence:** calendar rule + immutable occurrence ledger. Queue/Redis is unnecessary; deleting occurrence would permit duplicate recreation.
+- **Pagination:** keyset + explicit Load more. Offset drifts; infinite scroll adds UX/error complexity.
+- **Search:** escaped literal `ILIKE`. Full-text/trigram/external search is premature.
+- **API:** REST `/api/v1`, Rust OpenAPI, and Orval. GraphQL and hand-maintained clients add unnecessary surface/drift.
+- **Deployment:** same origin and two long-running app services. Cross-origin complicates cookies/CORS; permanent job service is unnecessary.
+- **Backup:** pgBackRest + encrypted S3 + verified retention/PITR. Application-managed backup is rejected; nominal retention alone is insufficient evidence.
+- **PWA:** static public assets only and private data `no-store`. Offline financial caching/sync increases privacy and correctness risk.
 
 ## 35. Material Risks and Unresolved Deployment Inputs
 
