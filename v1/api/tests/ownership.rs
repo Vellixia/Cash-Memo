@@ -50,6 +50,60 @@ async fn rejects_cross_user_wallet_category_transaction(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn rejects_direct_wallet_currency_and_opening_balance_changes(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let user: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (email, password_hash) VALUES ('wallet-immutable@example.test', 'hash') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let wallet: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO wallets (user_id, name, currency_code, opening_balance)
+         VALUES ($1, 'Cash', 'USD', 10) RETURNING id",
+    )
+    .bind(user)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let currency_change = sqlx::query("UPDATE wallets SET currency_code = 'EUR' WHERE id = $1")
+        .bind(wallet)
+        .execute(&pool)
+        .await;
+    assert!(
+        currency_change.is_err(),
+        "wallet currency must be immutable"
+    );
+
+    let opening_balance_change =
+        sqlx::query("UPDATE wallets SET opening_balance = 20 WHERE id = $1")
+            .bind(wallet)
+            .execute(&pool)
+            .await;
+    assert!(
+        opening_balance_change.is_err(),
+        "wallet opening balance must be immutable"
+    );
+
+    sqlx::query("UPDATE wallets SET name = 'Pocket', archived_at = now() WHERE id = $1")
+        .bind(wallet)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let stored: (String, rust_decimal::Decimal, bool) = sqlx::query_as(
+        "SELECT currency_code, opening_balance, archived_at IS NOT NULL FROM wallets WHERE id = $1",
+    )
+    .bind(wallet)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.0, "USD");
+    assert_eq!(stored.1.to_string(), "10.0000");
+    assert!(stored.2);
+}
+
+#[sqlx::test(migrations = false)]
 async fn rejects_inconsistent_active_and_trash_transaction_fields(pool: PgPool) {
     support::migrate_v1(&pool).await;
 
