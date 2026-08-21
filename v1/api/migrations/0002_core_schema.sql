@@ -60,7 +60,11 @@ CREATE TABLE wallets (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     currency_code TEXT NOT NULL REFERENCES currencies(code) ON UPDATE RESTRICT ON DELETE RESTRICT,
-    opening_balance NUMERIC(20,4) NOT NULL DEFAULT 0 CHECK (opening_balance >= 0),
+    opening_balance NUMERIC(20,4) NOT NULL DEFAULT 0
+        CHECK (
+            opening_balance NOT IN ('NaN'::NUMERIC, 'Infinity'::NUMERIC, '-Infinity'::NUMERIC)
+            AND opening_balance >= 0
+        ),
     archived_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -106,7 +110,8 @@ CREATE TABLE recurring_transactions (
     wallet_id UUID NOT NULL,
     category_id UUID NOT NULL,
     transaction_type transaction_type NOT NULL,
-    amount NUMERIC(20,4) NOT NULL CHECK (amount > 0),
+    amount NUMERIC(20,4) NOT NULL
+        CHECK (amount NOT IN ('NaN'::NUMERIC, 'Infinity'::NUMERIC, '-Infinity'::NUMERIC) AND amount > 0),
     note TEXT,
     frequency recurrence_frequency NOT NULL,
     start_date DATE NOT NULL,
@@ -127,7 +132,8 @@ CREATE TABLE budgets (
     category_type transaction_type NOT NULL DEFAULT 'EXPENSE' CHECK (category_type = 'EXPENSE'),
     currency_code TEXT NOT NULL REFERENCES currencies(code) ON UPDATE RESTRICT ON DELETE RESTRICT,
     month_start DATE NOT NULL CHECK (EXTRACT(DAY FROM month_start) = 1),
-    amount NUMERIC(20,4) NOT NULL CHECK (amount > 0),
+    amount NUMERIC(20,4) NOT NULL
+        CHECK (amount NOT IN ('NaN'::NUMERIC, 'Infinity'::NUMERIC, '-Infinity'::NUMERIC) AND amount > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, id),
@@ -136,13 +142,31 @@ CREATE TABLE budgets (
         REFERENCES categories (id, user_id, transaction_type) ON DELETE RESTRICT
 );
 
+CREATE FUNCTION reject_referenced_currency_disable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.enabled AND NOT NEW.enabled AND (
+        EXISTS (SELECT 1 FROM users WHERE default_currency_code = OLD.code)
+        OR EXISTS (SELECT 1 FROM wallets WHERE currency_code = OLD.code)
+        OR EXISTS (SELECT 1 FROM budgets WHERE currency_code = OLD.code)
+    ) THEN
+        RAISE EXCEPTION 'referenced currency cannot be disabled';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER currencies_referenced_rows_stay_enabled
+    BEFORE UPDATE OF enabled ON currencies
+    FOR EACH ROW EXECUTE FUNCTION reject_referenced_currency_disable();
+
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     wallet_id UUID NOT NULL,
     category_id UUID NOT NULL,
     transaction_type transaction_type NOT NULL,
-    amount NUMERIC(20,4) NOT NULL CHECK (amount > 0),
+    amount NUMERIC(20,4) NOT NULL
+        CHECK (amount NOT IN ('NaN'::NUMERIC, 'Infinity'::NUMERIC, '-Infinity'::NUMERIC) AND amount > 0),
     occurred_at TIMESTAMPTZ NOT NULL,
     note TEXT,
     deleted_at TIMESTAMPTZ,

@@ -2,6 +2,7 @@ use sqlx::PgPool;
 use thiserror::Error;
 
 const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
+const IDENTITY_ONLY_TABLES: &[&str] = &[MIGRATIONS_TABLE, "cashmemo_schema_identity"];
 const V1_TABLES: &[&str] = &[
     MIGRATIONS_TABLE,
     "auth_tokens",
@@ -16,6 +17,8 @@ const V1_TABLES: &[&str] = &[
     "users",
     "wallets",
 ];
+const IDENTITY_ONLY_MIGRATIONS: &[(i64, bool)] = &[(1, true)];
+const FULL_V1_MIGRATIONS: &[(i64, bool)] = &[(1, true), (2, true)];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetState {
@@ -45,9 +48,14 @@ pub async fn assert_v1_migration_target(pool: &PgPool) -> Result<TargetState, Ta
         return Ok(TargetState::Empty);
     }
 
-    if tables.iter().map(String::as_str).collect::<Vec<_>>() != V1_TABLES {
+    let table_names = tables.iter().map(String::as_str).collect::<Vec<_>>();
+    let expected_migrations = if table_names == IDENTITY_ONLY_TABLES {
+        IDENTITY_ONLY_MIGRATIONS
+    } else if table_names == V1_TABLES {
+        FULL_V1_MIGRATIONS
+    } else {
         return Err(TargetError::UnknownNonEmpty);
-    }
+    };
 
     let identity: Option<(String, String)> = sqlx::query_as(
         "SELECT product, generation
@@ -56,10 +64,18 @@ pub async fn assert_v1_migration_target(pool: &PgPool) -> Result<TargetState, Ta
     .fetch_optional(pool)
     .await?;
 
-    match identity {
-        Some((product, generation)) if product == "cashmemo" && generation == "v1" => {
-            Ok(TargetState::CashmemoV1)
-        }
-        _ => Err(TargetError::UnknownNonEmpty),
+    if !matches!(identity, Some((product, generation)) if product == "cashmemo" && generation == "v1")
+    {
+        return Err(TargetError::UnknownNonEmpty);
     }
+
+    let migrations: Vec<(i64, bool)> =
+        sqlx::query_as("SELECT version, success FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(pool)
+            .await?;
+    if migrations.as_slice() != expected_migrations {
+        return Err(TargetError::UnknownNonEmpty);
+    }
+
+    Ok(TargetState::CashmemoV1)
 }
