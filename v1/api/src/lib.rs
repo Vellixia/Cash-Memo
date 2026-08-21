@@ -6,4 +6,5 @@ pub mod db;
 pub mod error;
 pub mod http;
 pub mod money;
+pub mod onboarding;
 pub mod time;

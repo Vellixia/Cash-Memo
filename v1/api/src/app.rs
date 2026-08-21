@@ -19,6 +19,7 @@ use crate::{
         rate_limit::{AuthRateLimiter, enforce_auth_limit},
         request_id::attach,
     },
+    onboarding::{OnboardingService, routes as onboarding_routes},
 };
 
 #[derive(Clone)]
@@ -46,8 +47,13 @@ pub fn build_app_with_config(state: AppState, config: &AppConfig) -> Router {
 }
 
 fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthService) -> Router {
+    let onboarding = OnboardingService::new(state.pool.clone());
     Router::<AppState>::new()
-        .nest("/api/v1/auth", routes::router(auth))
+        .nest("/api/v1/auth", routes::router(auth.clone()))
+        .nest(
+            "/api/v1",
+            onboarding_routes::router(onboarding).layer(Extension(auth)),
+        )
         .route("/api/v1/currencies", get(list_currencies))
         .route("/api/v1/health/live", get(health_live))
         .route("/api/v1/health/ready", get(health_ready))
