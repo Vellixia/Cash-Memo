@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use cashmemo_api::{
-    app::{AppState, build_app},
+    app::{AppState, build_app_with_config},
     config::AppConfig,
     db::migrate::migrate_v1,
     error::ApiError,
@@ -41,7 +41,12 @@ async fn run() -> Result<(), ApiError> {
     match cli.command {
         Command::Serve => {
             let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
-            axum::serve(listener, build_app(AppState { pool })).await?;
+            axum::serve(
+                listener,
+                build_app_with_config(AppState { pool }, &config)
+                    .into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .await?;
         }
         Command::Migrate => {
             migrate_v1(&pool).await?;
