@@ -44,7 +44,6 @@ struct CreateWalletRequest {
 #[serde(deny_unknown_fields)]
 struct UpdateWalletRequest {
     name: Option<String>,
-    opening_balance: Option<String>,
 }
 
 async fn list_wallets(
@@ -104,14 +103,7 @@ async fn update_wallet(
 ) -> Result<Json<Wallet>, HttpError> {
     let user_id = full_access_user_id(session, request_id.clone())?;
     service
-        .update(
-            user_id,
-            wallet_id,
-            UpdateWallet {
-                name: body.name,
-                opening_balance: body.opening_balance,
-            },
-        )
+        .update(user_id, wallet_id, UpdateWallet { name: body.name })
         .await
         .map(Json)
         .map_err(|error| map_error(error, request_id))

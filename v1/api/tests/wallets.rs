@@ -88,10 +88,10 @@ async fn rejects_disabled_currency_and_invalid_opening_balance_before_persistenc
 }
 
 #[sqlx::test(migrations = false)]
-async fn updates_name_and_opening_balance_but_rejects_currency_change(pool: PgPool) {
+async fn updates_name_but_rejects_immutable_currency_and_opening_balance(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (_user_id, cookie) = authenticated_user(&pool, "wallet-update@example.test").await;
-    let app = build_app(AppState { pool });
+    let app = build_app(AppState { pool: pool.clone() });
     let wallet = create_wallet(&app, &cookie, "Cash", "USD", "10.00").await;
     let wallet_id = wallet["id"].as_str().unwrap();
 
@@ -100,24 +100,34 @@ async fn updates_name_and_opening_balance_but_rejects_currency_change(pool: PgPo
         .oneshot(patch_wallet(
             &cookie,
             wallet_id,
-            json!({ "name": "Pocket", "opening_balance": "20.00" }),
+            json!({ "name": "Pocket" }),
         ))
         .await
         .unwrap();
     assert_eq!(updated.status(), StatusCode::OK);
     let body = response_json(updated).await;
     assert_eq!(body["name"], "Pocket");
-    assert_eq!(body["opening_balance"], "20.00");
+    assert_eq!(body["opening_balance"], "10.00");
 
-    let rejected = app
-        .oneshot(patch_wallet(
-            &cookie,
-            wallet_id,
-            json!({ "currency": "EUR" }),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    for immutable_field in [
+        json!({ "currency": "EUR" }),
+        json!({ "opening_balance": "20.00" }),
+    ] {
+        let rejected = app
+            .clone()
+            .oneshot(patch_wallet(&cookie, wallet_id, immutable_field))
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let stored: (String, rust_decimal::Decimal) =
+        sqlx::query_as("SELECT currency_code, opening_balance FROM wallets WHERE id = $1")
+            .bind(Uuid::parse_str(wallet_id).unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored.0, "USD");
+    assert_eq!(stored.1.to_string(), "10.0000");
 }
 
 #[sqlx::test(migrations = false)]

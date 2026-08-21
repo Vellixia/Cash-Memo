@@ -45,7 +45,6 @@ pub struct NewWallet {
 #[derive(Debug)]
 pub struct UpdateWallet {
     pub name: Option<String>,
-    pub opening_balance: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -126,31 +125,18 @@ impl WalletService {
         wallet_id: Uuid,
         input: UpdateWallet,
     ) -> Result<Wallet, WalletError> {
-        if input.name.is_none() && input.opening_balance.is_none() {
+        let Some(name) = input.name else {
             return Err(WalletError::NoChanges);
-        }
-        let current = self.load(user_id, wallet_id).await?;
-        let name = input.name.map(|name| validate_name(&name)).transpose()?;
-        let opening_balance = match input.opening_balance {
-            Some(amount) => Some(
-                parse_opening_balance_for_currency(
-                    &amount,
-                    current.balance.currency.clone(),
-                    &self.pool,
-                )
-                .await?,
-            ),
-            None => None,
         };
+        let name = validate_name(&name)?;
         sqlx::query(
             "UPDATE wallets
-             SET name = COALESCE($3, name), opening_balance = COALESCE($4, opening_balance), updated_at = now()
+             SET name = $3, updated_at = now()
              WHERE user_id = $1 AND id = $2",
         )
         .bind(user_id)
         .bind(wallet_id)
         .bind(name)
-        .bind(opening_balance.map(|money| money.decimal()))
         .execute(&self.pool)
         .await
         .map_err(|_| WalletError::Persistence)?;
@@ -279,17 +265,6 @@ fn validate_name(input: &str) -> Result<String, WalletError> {
 
 fn parse_opening_balance(input: &str, exponent: u32) -> Result<Money, WalletError> {
     Money::parse_for_exponent(input, exponent).map_err(|_| WalletError::InvalidOpeningBalance)
-}
-
-async fn parse_opening_balance_for_currency(
-    input: &str,
-    currency: CurrencyCode,
-    pool: &PgPool,
-) -> Result<Money, WalletError> {
-    let definition = CurrencyRepository::require_enabled(pool, &currency)
-        .await
-        .map_err(map_currency_error)?;
-    parse_opening_balance(input, definition.exponent)
 }
 
 fn map_currency_error(error: CurrencyError) -> WalletError {
