@@ -1,8 +1,21 @@
 use sqlx::PgPool;
 use thiserror::Error;
 
-const IDENTITY_TABLE: &str = "cashmemo_schema_identity";
 const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
+const V1_TABLES: &[&str] = &[
+    MIGRATIONS_TABLE,
+    "auth_tokens",
+    "budgets",
+    "cashmemo_schema_identity",
+    "categories",
+    "currencies",
+    "recurring_occurrences",
+    "recurring_transactions",
+    "sessions",
+    "transactions",
+    "users",
+    "wallets",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetState {
@@ -32,7 +45,7 @@ pub async fn assert_v1_migration_target(pool: &PgPool) -> Result<TargetState, Ta
         return Ok(TargetState::Empty);
     }
 
-    if tables.as_slice() != [MIGRATIONS_TABLE, IDENTITY_TABLE] {
+    if tables.iter().map(String::as_str).collect::<Vec<_>>() != V1_TABLES {
         return Err(TargetError::UnknownNonEmpty);
     }
 

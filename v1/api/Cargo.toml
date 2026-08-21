@@ -6,7 +6,15 @@ rust-version.workspace = true
 
 [dependencies]
 axum.workspace = true
+chrono-tz.workspace = true
 clap.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tower.workspace = true
+uuid.workspace = true
