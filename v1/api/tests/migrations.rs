@@ -2,7 +2,9 @@ mod support;
 
 use cashmemo_api::db::{
     migrate::migrate_v1,
-    target_guard::{TargetError, TargetState, assert_v1_migration_target},
+    target_guard::{
+        TargetError, TargetState, assert_latest_v1_migration_target, assert_v1_migration_target,
+    },
 };
 use sqlx::PgPool;
 
@@ -30,6 +32,10 @@ async fn empty_or_identified_v1_database_is_allowed(pool: PgPool) {
 
     assert_eq!(
         assert_v1_migration_target(&pool).await.unwrap(),
+        TargetState::CashmemoV1
+    );
+    assert_eq!(
+        assert_latest_v1_migration_target(&pool).await.unwrap(),
         TargetState::CashmemoV1
     );
 }
@@ -77,6 +83,7 @@ async fn identified_v1_database_at_0001_is_allowed_to_continue_migrating(pool: P
 #[sqlx::test(migrations = false)]
 async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
     support::migrate_v1(&pool).await;
+    rollback_0008(&pool).await;
     sqlx::query("DROP TRIGGER wallets_opening_balance_immutable ON wallets")
         .execute(&pool)
         .await
@@ -109,12 +116,13 @@ async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8]);
 }
 
 #[sqlx::test(migrations = false)]
 async fn identified_v1_database_at_0005_upgrades_to_latest(pool: PgPool) {
     support::migrate_v1(&pool).await;
+    rollback_0008(&pool).await;
     sqlx::query("DROP INDEX transactions_active_history_order_idx")
         .execute(&pool)
         .await
@@ -151,7 +159,44 @@ async fn identified_v1_database_at_0005_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn identified_v1_database_at_0007_upgrades_to_0008(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    rollback_0008(&pool).await;
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 8")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        assert_v1_migration_target(&pool).await.unwrap(),
+        TargetState::CashmemoV1
+    );
+    assert!(matches!(
+        assert_latest_v1_migration_target(&pool).await,
+        Err(TargetError::UnknownNonEmpty)
+    ));
+    assert_eq!(migrate_v1(&pool).await.unwrap(), TargetState::CashmemoV1);
+    let migrations: Vec<i64> =
+        sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+}
+
+async fn rollback_0008(pool: &PgPool) {
+    sqlx::query("DROP INDEX users_deletion_purge_candidates_idx")
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("ALTER TABLE users DROP COLUMN deletion_requested_at, DROP COLUMN deletion_due_at, DROP COLUMN purge_started_at, DROP COLUMN purge_claim_token, DROP COLUMN purge_claimed_until")
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 #[sqlx::test(migrations = false)]

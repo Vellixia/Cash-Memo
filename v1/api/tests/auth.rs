@@ -33,17 +33,22 @@ impl EmailSender for FailingEmailSender {
     }
 }
 
-struct DelayedEmailSender(std::time::Duration);
+struct DelayedEmailSender {
+    delay: std::time::Duration,
+    completed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
 
 #[async_trait::async_trait]
 impl EmailSender for DelayedEmailSender {
     async fn send_verification(&self, _: &str, _: &str) -> Result<(), EmailError> {
-        tokio::time::sleep(self.0).await;
+        tokio::time::sleep(self.delay).await;
+        self.completed
+            .store(true, std::sync::atomic::Ordering::Release);
         Ok(())
     }
 
     async fn send_password_reset(&self, _: &str, _: &str) -> Result<(), EmailError> {
-        tokio::time::sleep(self.0).await;
+        tokio::time::sleep(self.delay).await;
         Ok(())
     }
 }
@@ -230,17 +235,20 @@ async fn resend_uses_common_public_response_deadline_without_waiting_for_smtp(po
         .unwrap();
     let config =
         AuthConfig::for_tests().with_public_response_floor(std::time::Duration::from_millis(20));
+    let completed = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let delayed = AuthService::new(
         pool,
-        Arc::new(DelayedEmailSender(std::time::Duration::from_millis(500))),
+        Arc::new(DelayedEmailSender {
+            delay: std::time::Duration::from_millis(500),
+            completed: completed.clone(),
+        }),
         config,
     );
-    let started = std::time::Instant::now();
     delayed
         .resend_verification("alice@example.com")
         .await
         .unwrap();
-    assert!(started.elapsed() < std::time::Duration::from_millis(200));
+    assert!(!completed.load(std::sync::atomic::Ordering::Acquire));
 }
 
 #[sqlx::test(migrations = "./migrations")]

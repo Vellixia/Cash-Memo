@@ -1,6 +1,6 @@
 # Task 13 verification report
 
-Status: DONE_WITH_CONCERNS
+Status: DONE
 
 ## Disposable targets
 
@@ -33,22 +33,16 @@ cargo clippy -p cashmemo-api --all-targets --features s3-receipts -- -D warnings
 git diff --check
 ```
 
+Fresh `DATABASE_URL=<disposable-pg> cargo test -p cashmemo-api` passed after the migration
+target-guard and deterministic email-queue test fixes. The focused resend test also passed 5/5.
+
 Concrete coverage proves first S3 PUT/body retrieval, identical retry recognition,
 divergent-object fail-closed behavior, receipt failure preserving live purging data, DB deletion
 failure followed by receipt recognition/retry, and successful conditional cascade. PostgreSQL
 runtime coverage proves recent-password confirmation, transactional session revocation, seven-day
 grace, deletion-only login, atomic claim, and cancel failure after claim.
 
-## Concern
+## Follow-up
 
-The full default backend suite was run against the same disposable PostgreSQL. It had one unrelated
-timing-sensitive pre-existing failure:
-
-```text
-auth::resend_uses_common_public_response_deadline_without_waiting_for_smtp
-assertion: elapsed < 200ms
-```
-
-The test's 200ms latency assertion failed under local test load; all other shown auth tests and the
-Task 13 focused tests passed. This is recorded rather than changed because Task 13 does not alter
-resend timing behavior.
+The auth email-queue test now uses a sender completion signal rather than a scheduling-sensitive
+wall-clock bound. Migration target-guard and replay tests now include migration 0008.
