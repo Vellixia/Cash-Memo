@@ -198,6 +198,62 @@ async fn history_filters_literal_search_future_rows_and_trash_without_cross_user
     assert!(other_ids.iter().all(|id| *id == other));
 }
 
+#[sqlx::test(migrations = false)]
+async fn history_searches_owned_wallet_and_category_names_literally_in_active_and_trash(
+    pool: PgPool,
+) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "history-label-search@example.test").await;
+    let wallet = insert_wallet(&pool, user_id).await;
+    let category = insert_category(&pool, user_id).await;
+    set_wallet_name(&pool, user_id, wallet, "Wallet %_\\ match").await;
+    set_category_name(&pool, user_id, category, "Category %_\\ match").await;
+    let active = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "2030-02-02T00:00:00Z".parse().unwrap(),
+        "unrelated note",
+        false,
+    )
+    .await;
+    let trashed = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "2030-02-01T00:00:00Z".parse().unwrap(),
+        "another unrelated note",
+        true,
+    )
+    .await;
+    let app = build_app(AppState { pool });
+
+    for query in ["Wallet%20%25_%5C%20match", "Category%20%25_%5C%20match"] {
+        let active_page = response_json(
+            app.clone()
+                .oneshot(request(&format!("/api/v1/transactions?q={query}"), &cookie))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(ids(&active_page), vec![active], "active query: {query}");
+
+        let trash_page = response_json(
+            app.clone()
+                .oneshot(request(
+                    &format!("/api/v1/transactions/trash?q={query}"),
+                    &cookie,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(ids(&trash_page), vec![trashed], "trash query: {query}");
+    }
+}
+
 async fn authenticated_user(pool: &PgPool, email: &str) -> (Uuid, String) {
     let user_id: Uuid = sqlx::query_scalar(
         "INSERT INTO users (email, password_hash, status) VALUES ($1, 'hash', 'active') RETURNING id",
@@ -234,6 +290,28 @@ async fn insert_category(pool: &PgPool, user_id: Uuid) -> Uuid {
         .fetch_one(pool)
         .await
         .unwrap()
+}
+
+async fn set_wallet_name(pool: &PgPool, user_id: Uuid, wallet_id: Uuid, name: &str) {
+    sqlx::query("UPDATE wallets SET name = $3 WHERE user_id = $1 AND id = $2")
+        .bind(user_id)
+        .bind(wallet_id)
+        .bind(name)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn set_category_name(pool: &PgPool, user_id: Uuid, category_id: Uuid, name: &str) {
+    sqlx::query(
+        "UPDATE categories SET name = $3, normalized_name = lower($3) WHERE user_id = $1 AND id = $2",
+    )
+    .bind(user_id)
+    .bind(category_id)
+    .bind(name)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn insert_transaction(

@@ -549,6 +549,7 @@ fn history_query(include_trash: bool) -> &'static str {
                 t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
          FROM transactions t
          JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
+         JOIN categories category ON (category.user_id, category.id) = (t.user_id, t.category_id)
          JOIN currencies c ON c.code = w.currency_code
          WHERE t.user_id = $1 AND t.deleted_at IS NOT NULL
            AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
@@ -556,7 +557,9 @@ fn history_query(include_trash: bool) -> &'static str {
            AND ($4::TEXT IS NULL OR t.transaction_type::TEXT = $4)
            AND ($5::UUID IS NULL OR t.wallet_id = $5)
            AND ($6::UUID IS NULL OR t.category_id = $6)
-           AND ($7::TEXT IS NULL OR t.note ILIKE '%' || $7 || '%' ESCAPE '\\')
+           AND ($7::TEXT IS NULL OR t.note ILIKE '%' || $7 || '%' ESCAPE '\\'
+                OR w.name ILIKE '%' || $7 || '%' ESCAPE '\\'
+                OR category.name ILIKE '%' || $7 || '%' ESCAPE '\\')
            AND ($8::TIMESTAMPTZ IS NULL OR (t.occurred_at, t.id) < ($8, $9::UUID))
          ORDER BY t.occurred_at DESC, t.id DESC
          LIMIT $10"
@@ -565,6 +568,7 @@ fn history_query(include_trash: bool) -> &'static str {
                 t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
          FROM transactions t
          JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
+         JOIN categories category ON (category.user_id, category.id) = (t.user_id, t.category_id)
          JOIN currencies c ON c.code = w.currency_code
          WHERE t.user_id = $1 AND t.deleted_at IS NULL
            AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
@@ -572,7 +576,9 @@ fn history_query(include_trash: bool) -> &'static str {
            AND ($4::TEXT IS NULL OR t.transaction_type::TEXT = $4)
            AND ($5::UUID IS NULL OR t.wallet_id = $5)
            AND ($6::UUID IS NULL OR t.category_id = $6)
-           AND ($7::TEXT IS NULL OR t.note ILIKE '%' || $7 || '%' ESCAPE '\\')
+           AND ($7::TEXT IS NULL OR t.note ILIKE '%' || $7 || '%' ESCAPE '\\'
+                OR w.name ILIKE '%' || $7 || '%' ESCAPE '\\'
+                OR category.name ILIKE '%' || $7 || '%' ESCAPE '\\')
            AND ($8::TIMESTAMPTZ IS NULL OR (t.occurred_at, t.id) < ($8, $9::UUID))
          ORDER BY t.occurred_at DESC, t.id DESC
          LIMIT $10"

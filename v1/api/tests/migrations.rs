@@ -113,6 +113,36 @@ async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn identified_v1_database_at_0005_upgrades_to_latest(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("DROP INDEX transactions_active_history_order_idx")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP INDEX transactions_trash_purge_idx")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 6")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        assert_v1_migration_target(&pool).await.unwrap(),
+        TargetState::CashmemoV1
+    );
+    assert_eq!(migrate_v1(&pool).await.unwrap(), TargetState::CashmemoV1);
+
+    let migrations: Vec<i64> =
+        sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6]);
+}
+
+#[sqlx::test(migrations = false)]
 async fn identified_v1_database_with_migration_gap_is_rejected(pool: PgPool) {
     support::migrate_v1(&pool).await;
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 4")
