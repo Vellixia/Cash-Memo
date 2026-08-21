@@ -190,6 +190,8 @@ pub enum ApiError {
     Migration(#[from] sqlx::migrate::MigrateError),
     #[error("auth token cleanup failed")]
     AuthCleanup,
+    #[error("trash purge failed")]
+    TrashPurge,
     #[error(transparent)]
     Server(#[from] std::io::Error),
 }

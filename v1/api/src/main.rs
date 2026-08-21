@@ -6,6 +6,7 @@ use cashmemo_api::{
     config::AppConfig,
     db::migrate::migrate_v1,
     error::ApiError,
+    transactions::TransactionService,
 };
 use clap::{Parser, Subcommand};
 use sqlx::postgres::PgPoolOptions;
@@ -22,6 +23,10 @@ pub enum Command {
     Serve,
     Migrate,
     CleanupAuthTokens {
+        #[arg(long)]
+        batch_size: i64,
+    },
+    PurgeTrash {
         #[arg(long)]
         batch_size: i64,
     },
@@ -60,6 +65,12 @@ async fn run() -> Result<(), ApiError> {
             AuthService::cleanup_tokens(&pool, batch_size)
                 .await
                 .map_err(|_| ApiError::AuthCleanup)?;
+        }
+        Command::PurgeTrash { batch_size } => {
+            TransactionService::new(pool)
+                .purge_trash(batch_size)
+                .await
+                .map_err(|_| ApiError::TrashPurge)?;
         }
     }
 
