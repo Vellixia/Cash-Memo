@@ -8,3 +8,4 @@ pub mod http;
 pub mod money;
 pub mod onboarding;
 pub mod time;
+pub mod wallets;
