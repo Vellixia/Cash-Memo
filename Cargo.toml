@@ -1,0 +1,14 @@
+[workspace]
+members = ["v1/api"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.90"
+
+[workspace.dependencies]
+axum = "0.8.6"
+clap = { version = "4.5.47", features = ["derive"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["macros", "migrate", "postgres", "runtime-tokio-rustls"] }
+thiserror = "2.0.16"
+tokio = { version = "1.47.1", features = ["macros", "net", "rt-multi-thread"] }
