@@ -1,5 +1,7 @@
 use std::process::ExitCode;
 
+#[cfg(feature = "s3-receipts")]
+use cashmemo_api::accounts::AccountDeletionService;
 use cashmemo_api::{
     app::{AppState, build_app_with_config},
     auth::AuthService,
@@ -9,8 +11,6 @@ use cashmemo_api::{
     recurring::{ProcessOptions, RecurringProcessor},
     transactions::TransactionService,
 };
-#[cfg(feature = "s3-receipts")]
-use cashmemo_api::accounts::AccountDeletionService;
 use clap::{Parser, Subcommand};
 use sqlx::postgres::PgPoolOptions;
 
@@ -100,15 +100,28 @@ async fn run() -> Result<(), ApiError> {
         }
         #[cfg(feature = "s3-receipts")]
         Command::PurgeAccounts { batch_size } => {
-            use cashmemo_api::{config::DeletionReceiptCommandConfig, receipts::s3::S3DeletionReceiptStore};
+            use cashmemo_api::{
+                config::DeletionReceiptCommandConfig, receipts::s3::S3DeletionReceiptStore,
+            };
             let receipt_config = DeletionReceiptCommandConfig::from_env()?;
-            let store = S3DeletionReceiptStore::connect(receipt_config.s3.clone()).await.map_err(|_| ApiError::AccountPurge)?;
+            let store = S3DeletionReceiptStore::connect(receipt_config.s3.clone())
+                .await
+                .map_err(|_| ApiError::AccountPurge)?;
             let deletion = AccountDeletionService::new(pool);
             let worker_token = uuid::Uuid::new_v4().to_string();
             let (key_version, key) = receipt_config.current_hmac_key();
             for _ in 0..batch_size {
-                let Some(claim) = deletion.claim_next(&worker_token, std::time::Duration::from_secs(60)).await.map_err(|_| ApiError::AccountPurge)? else { break; };
-                deletion.purge_claim(&claim, key, *key_version, &store).await.map_err(|_| ApiError::AccountPurge)?;
+                let Some(claim) = deletion
+                    .claim_next(&worker_token, std::time::Duration::from_secs(60))
+                    .await
+                    .map_err(|_| ApiError::AccountPurge)?
+                else {
+                    break;
+                };
+                deletion
+                    .purge_claim(&claim, key, *key_version, &store)
+                    .await
+                    .map_err(|_| ApiError::AccountPurge)?;
             }
         }
     }

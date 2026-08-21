@@ -129,23 +129,67 @@ impl AppConfig {
 #[cfg(feature = "s3-receipts")]
 impl DeletionReceiptCommandConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
-        let required = |name: &'static str| env::var(name).ok().filter(|value| !value.trim().is_empty()).ok_or(ConfigError::MissingDeletionReceiptConfig(name));
-        let hmac_keys = required("DELETION_RECEIPT_HMAC_KEYS")?.split(',').map(|item| {
-            let (version, hex) = item.split_once(':').ok_or(ConfigError::InvalidDeletionReceiptKeys)?;
-            let key = hex_decode(hex).ok_or(ConfigError::InvalidDeletionReceiptKeys)?;
-            if key.len() < 32 { return Err(ConfigError::InvalidDeletionReceiptKeys); }
-            Ok((version.parse().map_err(|_| ConfigError::InvalidDeletionReceiptKeys)?, key))
-        }).collect::<Result<Vec<_>, ConfigError>>()?;
-        if hmac_keys.is_empty() { return Err(ConfigError::InvalidDeletionReceiptKeys); }
-        Ok(Self { s3: crate::receipts::s3::S3ReceiptConfig { endpoint: required("DELETION_RECEIPT_S3_ENDPOINT")?, region: required("DELETION_RECEIPT_S3_REGION")?, bucket: required("DELETION_RECEIPT_S3_BUCKET")?, prefix: required("DELETION_RECEIPT_S3_PREFIX")?, access_key_id: required("DELETION_RECEIPT_S3_ACCESS_KEY_ID")?, secret_access_key: required("DELETION_RECEIPT_S3_SECRET_ACCESS_KEY")? }, hmac_keys })
+        let required = |name: &'static str| {
+            env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or(ConfigError::MissingDeletionReceiptConfig(name))
+        };
+        let hmac_keys = required("DELETION_RECEIPT_HMAC_KEYS")?
+            .split(',')
+            .map(|item| {
+                let (version, hex) = item
+                    .split_once(':')
+                    .ok_or(ConfigError::InvalidDeletionReceiptKeys)?;
+                let key = hex_decode(hex).ok_or(ConfigError::InvalidDeletionReceiptKeys)?;
+                if key.len() < 32 {
+                    return Err(ConfigError::InvalidDeletionReceiptKeys);
+                }
+                Ok((
+                    version
+                        .parse()
+                        .map_err(|_| ConfigError::InvalidDeletionReceiptKeys)?,
+                    key,
+                ))
+            })
+            .collect::<Result<Vec<_>, ConfigError>>()?;
+        if hmac_keys.is_empty() {
+            return Err(ConfigError::InvalidDeletionReceiptKeys);
+        }
+        Ok(Self {
+            s3: crate::receipts::s3::S3ReceiptConfig {
+                endpoint: required("DELETION_RECEIPT_S3_ENDPOINT")?,
+                region: required("DELETION_RECEIPT_S3_REGION")?,
+                bucket: required("DELETION_RECEIPT_S3_BUCKET")?,
+                prefix: required("DELETION_RECEIPT_S3_PREFIX")?,
+                access_key_id: required("DELETION_RECEIPT_S3_ACCESS_KEY_ID")?,
+                secret_access_key: required("DELETION_RECEIPT_S3_SECRET_ACCESS_KEY")?,
+            },
+            hmac_keys,
+        })
     }
-    pub fn current_hmac_key(&self) -> &(u32, Vec<u8>) { self.hmac_keys.iter().max_by_key(|(version, _)| version).expect("validated nonempty key ring") }
+    pub fn current_hmac_key(&self) -> &(u32, Vec<u8>) {
+        self.hmac_keys
+            .iter()
+            .max_by_key(|(version, _)| version)
+            .expect("validated nonempty key ring")
+    }
 }
 
 #[cfg(feature = "s3-receipts")]
 fn hex_decode(value: &str) -> Option<Vec<u8>> {
-    if value.len() % 2 != 0 { return None; }
-    value.as_bytes().chunks(2).map(|pair| std::str::from_utf8(pair).ok().and_then(|value| u8::from_str_radix(value, 16).ok())).collect()
+    if value.len() % 2 != 0 {
+        return None;
+    }
+    value
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|value| u8::from_str_radix(value, 16).ok())
+        })
+        .collect()
 }
 
 impl SmtpEmailConfig {
@@ -335,7 +379,9 @@ pub enum ConfigError {
     InvalidSessionConfiguration,
     #[error("{0} is required only for purge/replay commands")]
     MissingDeletionReceiptConfig(&'static str),
-    #[error("DELETION_RECEIPT_HMAC_KEYS must be comma-separated version:hex keys of at least 32 bytes")]
+    #[error(
+        "DELETION_RECEIPT_HMAC_KEYS must be comma-separated version:hex keys of at least 32 bytes"
+    )]
     InvalidDeletionReceiptKeys,
     #[error("{name} must be a positive integer, got {value}")]
     InvalidPositiveEnvironment { name: &'static str, value: String },
