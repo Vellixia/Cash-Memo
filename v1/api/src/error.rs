@@ -45,6 +45,42 @@ impl HttpError {
         )
     }
 
+    pub fn invalid_credentials(request_id: RequestId) -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            "INVALID_CREDENTIALS",
+            "Invalid email or password.",
+            request_id,
+        )
+    }
+
+    pub fn email_not_verified(request_id: RequestId) -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "EMAIL_NOT_VERIFIED",
+            "Email verification is required.",
+            request_id,
+        )
+    }
+
+    pub fn account_unavailable(request_id: RequestId) -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "ACCOUNT_UNAVAILABLE",
+            "Account is unavailable.",
+            request_id,
+        )
+    }
+
+    pub fn invalid_token(request_id: RequestId) -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            "INVALID_TOKEN",
+            "Token is invalid or expired.",
+            request_id,
+        )
+    }
+
     pub fn forbidden(request_id: RequestId) -> Self {
         Self::new(
             StatusCode::FORBIDDEN,
@@ -152,6 +188,8 @@ pub enum ApiError {
     Target(#[from] TargetError),
     #[error(transparent)]
     Migration(#[from] sqlx::migrate::MigrateError),
+    #[error("auth token cleanup failed")]
+    AuthCleanup,
     #[error(transparent)]
     Server(#[from] std::io::Error),
 }

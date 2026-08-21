@@ -8,6 +8,7 @@ use axum::{
 use sqlx::PgPool;
 
 use crate::{
+    auth::{AuthConfig, AuthService, SmtpEmailSender, UnconfiguredEmailSender, routes},
     config::{AppConfig, HttpSafetyConfig},
     currency::{CurrencyRepository, EnabledCurrencyResponse},
     error::HttpError,
@@ -26,15 +27,27 @@ pub struct AppState {
 }
 
 pub fn build_app(state: AppState) -> Router {
-    build_app_with_safety(state, HttpSafetyConfig::default())
+    let auth = AuthService::new(
+        state.pool.clone(),
+        std::sync::Arc::new(UnconfiguredEmailSender),
+        AuthConfig::default(),
+    );
+    build_app_with_safety(state, HttpSafetyConfig::default(), auth)
 }
 
 pub fn build_app_with_config(state: AppState, config: &AppConfig) -> Router {
-    build_app_with_safety(state, config.http_safety.clone())
+    let mailer = SmtpEmailSender::new(&config.smtp).expect("validated SMTP configuration");
+    let auth = AuthService::new(
+        state.pool.clone(),
+        std::sync::Arc::new(mailer),
+        config.auth.clone(),
+    );
+    build_app_with_safety(state, config.http_safety.clone(), auth)
 }
 
-fn build_app_with_safety(state: AppState, config: HttpSafetyConfig) -> Router {
-    Router::new()
+fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthService) -> Router {
+    Router::<AppState>::new()
+        .nest("/api/v1/auth", routes::router(auth))
         .route("/api/v1/currencies", get(list_currencies))
         .route("/api/v1/health/live", get(health_live))
         .route("/api/v1/health/ready", get(health_ready))

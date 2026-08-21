@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use cashmemo_api::{
     app::{AppState, build_app_with_config},
+    auth::AuthService,
     config::AppConfig,
     db::migrate::migrate_v1,
     error::ApiError,
@@ -20,6 +21,10 @@ struct Cli {
 pub enum Command {
     Serve,
     Migrate,
+    CleanupAuthTokens {
+        #[arg(long)]
+        batch_size: i64,
+    },
 }
 
 #[tokio::main]
@@ -50,6 +55,11 @@ async fn run() -> Result<(), ApiError> {
         }
         Command::Migrate => {
             migrate_v1(&pool).await?;
+        }
+        Command::CleanupAuthTokens { batch_size } => {
+            AuthService::cleanup_tokens(&pool, batch_size)
+                .await
+                .map_err(|_| ApiError::AuthCleanup)?;
         }
     }
 

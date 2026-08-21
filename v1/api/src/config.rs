@@ -6,9 +6,20 @@ use thiserror::Error;
 pub struct AppConfig {
     pub database_url: String,
     pub bind_addr: SocketAddr,
+    pub smtp: SmtpEmailConfig,
+    pub auth: crate::auth::AuthConfig,
     /// V1 runs one Rust API replica. These in-memory limits are not distributed;
     /// add a shared limiter before scaling to multiple replicas.
     pub http_safety: HttpSafetyConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct SmtpEmailConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub from: String,
 }
 
 #[derive(Clone, Debug)]
@@ -41,11 +52,63 @@ impl AppConfig {
             .parse()
             .map_err(ConfigError::InvalidBindAddress)?;
         let http_safety = HttpSafetyConfig::from_env()?;
+        let smtp = SmtpEmailConfig::from_env()?;
+        let auth = crate::auth::AuthConfig {
+            idle_timeout: Duration::from_secs(parse_positive(
+                "CASHMEMO_V1_SESSION_IDLE_SECONDS",
+                7 * 24 * 60 * 60,
+            )? as u64),
+            absolute_timeout: Duration::from_secs(parse_positive(
+                "CASHMEMO_V1_SESSION_ABSOLUTE_SECONDS",
+                30 * 24 * 60 * 60,
+            )? as u64),
+            touch_interval: Duration::from_secs(parse_positive(
+                "CASHMEMO_V1_SESSION_TOUCH_SECONDS",
+                60 * 60,
+            )? as u64),
+        };
 
         Ok(Self {
             database_url,
             bind_addr,
+            smtp,
+            auth,
             http_safety,
+        })
+    }
+}
+
+impl SmtpEmailConfig {
+    fn from_env() -> Result<Self, ConfigError> {
+        let host = env::var("CASHMEMO_V1_SMTP_HOST").map_err(|_| ConfigError::MissingSmtpHost)?;
+        if host.trim().is_empty() {
+            return Err(ConfigError::MissingSmtpHost);
+        }
+        let from = env::var("CASHMEMO_V1_SMTP_FROM").map_err(|_| ConfigError::MissingSmtpFrom)?;
+        if from.trim().is_empty() {
+            return Err(ConfigError::MissingSmtpFrom);
+        }
+        let username = env::var("CASHMEMO_V1_SMTP_USERNAME")
+            .ok()
+            .filter(|value| !value.is_empty());
+        let password = env::var("CASHMEMO_V1_SMTP_PASSWORD")
+            .ok()
+            .filter(|value| !value.is_empty());
+        if username.is_some() != password.is_some() {
+            return Err(ConfigError::IncompleteSmtpCredentials);
+        }
+        let port = env::var("CASHMEMO_V1_SMTP_PORT")
+            .unwrap_or_else(|_| "587".to_owned())
+            .parse()
+            .ok()
+            .filter(|port: &u16| *port > 0)
+            .ok_or(ConfigError::InvalidSmtpPort)?;
+        Ok(Self {
+            host,
+            port,
+            username,
+            password,
+            from,
         })
     }
 }
@@ -146,6 +209,14 @@ pub enum ConfigError {
     InvalidBindAddress(#[source] std::net::AddrParseError),
     #[error("CASHMEMO_V1_ALLOWED_ORIGINS must contain at least one origin")]
     EmptyAllowedOrigins,
+    #[error("CASHMEMO_V1_SMTP_HOST is required")]
+    MissingSmtpHost,
+    #[error("CASHMEMO_V1_SMTP_FROM is required")]
+    MissingSmtpFrom,
+    #[error("CASHMEMO_V1_SMTP_USERNAME and CASHMEMO_V1_SMTP_PASSWORD must be set together")]
+    IncompleteSmtpCredentials,
+    #[error("CASHMEMO_V1_SMTP_PORT must be a positive u16")]
+    InvalidSmtpPort,
     #[error("{name} must be a positive integer, got {value}")]
     InvalidPositiveEnvironment { name: &'static str, value: String },
 }
