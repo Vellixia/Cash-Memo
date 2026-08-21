@@ -196,11 +196,65 @@ async fn category_seeding_is_idempotent_for_repeated_and_concurrent_requests(poo
     assert_eq!(response_json(state).await["categories_seeded"], true);
 }
 
+#[sqlx::test(migrations = false)]
+async fn deletion_only_sessions_cannot_read_or_mutate_onboarding(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user_with_status(
+        &pool,
+        "deletion-only-onboarding@example.test",
+        "pending_deletion",
+    )
+    .await;
+    let app = build_app(AppState { pool: pool.clone() });
+
+    let read = app.clone().oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(read.status(), StatusCode::FORBIDDEN);
+
+    let preferences = app
+        .clone()
+        .oneshot(put_preferences(
+            &cookie,
+            json!({
+                "timezone": "Asia/Jakarta",
+                "default_currency_code": "IDR",
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(preferences.status(), StatusCode::FORBIDDEN);
+
+    let seed = app.oneshot(seed_categories(&cookie)).await.unwrap();
+    assert_eq!(seed.status(), StatusCode::FORBIDDEN);
+
+    let preferences: (String, Option<String>) =
+        sqlx::query_as("SELECT timezone, default_currency_code FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(preferences, ("Etc/UTC".to_owned(), None));
+    let categories: i64 = sqlx::query_scalar("SELECT count(*) FROM categories WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(categories, 0);
+}
+
 async fn authenticated_user(pool: &PgPool, email: &str) -> (Uuid, String) {
+    authenticated_user_with_status(pool, email, "active").await
+}
+
+async fn authenticated_user_with_status(
+    pool: &PgPool,
+    email: &str,
+    status: &str,
+) -> (Uuid, String) {
     let user_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO users (email, password_hash, status) VALUES ($1, 'hash', 'active') RETURNING id",
+        "INSERT INTO users (email, password_hash, status) VALUES ($1, 'hash', $2::user_status) RETURNING id",
     )
     .bind(email)
+    .bind(status)
     .fetch_one(pool)
     .await
     .unwrap();

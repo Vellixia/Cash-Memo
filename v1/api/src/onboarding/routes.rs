@@ -7,7 +7,11 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{auth::AuthSession, error::HttpError, http::RequestId};
+use crate::{
+    auth::{AuthSession, SessionAccess},
+    error::HttpError,
+    http::RequestId,
+};
 
 use super::{OnboardingError, OnboardingService, OnboardingState, Preferences};
 
@@ -33,8 +37,9 @@ async fn onboarding(
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<OnboardingState>, HttpError> {
+    let user_id = full_access_user_id(session, request_id.clone())?;
     service
-        .state(session.user_id)
+        .state(user_id)
         .await
         .map(Json)
         .map_err(|error| map_error(error, request_id))
@@ -46,9 +51,10 @@ async fn update_preferences(
     Extension(request_id): Extension<RequestId>,
     Json(body): Json<PreferencesRequest>,
 ) -> Result<Json<OnboardingState>, HttpError> {
+    let user_id = full_access_user_id(session, request_id.clone())?;
     service
         .update_preferences(
-            session.user_id,
+            user_id,
             Preferences {
                 timezone: body.timezone,
                 default_currency_code: body.default_currency_code,
@@ -57,7 +63,7 @@ async fn update_preferences(
         .await
         .map_err(|error| map_error(error, request_id.clone()))?;
     service
-        .state(session.user_id)
+        .state(user_id)
         .await
         .map(Json)
         .map_err(|error| map_error(error, request_id))
@@ -68,15 +74,27 @@ async fn seed_categories(
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<OnboardingState>, HttpError> {
+    let user_id = full_access_user_id(session, request_id.clone())?;
     service
-        .seed_categories(session.user_id)
+        .seed_categories(user_id)
         .await
         .map_err(|error| map_error(error, request_id.clone()))?;
     service
-        .state(session.user_id)
+        .state(user_id)
         .await
         .map(Json)
         .map_err(|error| map_error(error, request_id))
+}
+
+fn full_access_user_id(
+    session: AuthSession,
+    request_id: RequestId,
+) -> Result<uuid::Uuid, HttpError> {
+    if session.access == SessionAccess::Full {
+        Ok(session.user_id)
+    } else {
+        Err(HttpError::forbidden(request_id))
+    }
 }
 
 fn map_error(error: OnboardingError, request_id: RequestId) -> HttpError {
