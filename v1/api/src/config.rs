@@ -20,6 +20,14 @@ pub struct SmtpEmailConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub from: String,
+    pub security: SmtpSecurity,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SmtpSecurity {
+    #[default]
+    StartTls,
+    Plaintext,
 }
 
 #[derive(Clone, Debug)]
@@ -53,20 +61,27 @@ impl AppConfig {
             .map_err(ConfigError::InvalidBindAddress)?;
         let http_safety = HttpSafetyConfig::from_env()?;
         let smtp = SmtpEmailConfig::from_env()?;
-        let auth = crate::auth::AuthConfig {
-            idle_timeout: Duration::from_secs(parse_positive(
+        let password_hash = crate::auth::Argon2idConfig::new(
+            parse_positive_u32("CASHMEMO_V1_ARGON2_MEMORY_KIB", 65_536)?,
+            parse_positive_u32("CASHMEMO_V1_ARGON2_TIME_COST", 3)?,
+            parse_positive_u32("CASHMEMO_V1_ARGON2_PARALLELISM", 1)?,
+        )
+        .map_err(|_| ConfigError::InvalidArgon2Parameters)?;
+        let auth = crate::auth::AuthConfig::new(
+            Duration::from_secs(parse_positive(
                 "CASHMEMO_V1_SESSION_IDLE_SECONDS",
                 7 * 24 * 60 * 60,
             )? as u64),
-            absolute_timeout: Duration::from_secs(parse_positive(
+            Duration::from_secs(parse_positive(
                 "CASHMEMO_V1_SESSION_ABSOLUTE_SECONDS",
                 30 * 24 * 60 * 60,
             )? as u64),
-            touch_interval: Duration::from_secs(parse_positive(
-                "CASHMEMO_V1_SESSION_TOUCH_SECONDS",
-                60 * 60,
-            )? as u64),
-        };
+            Duration::from_secs(
+                parse_positive("CASHMEMO_V1_SESSION_TOUCH_SECONDS", 60 * 60)? as u64,
+            ),
+            password_hash,
+        )
+        .map_err(|_| ConfigError::InvalidSessionConfiguration)?;
 
         Ok(Self {
             database_url,
@@ -103,12 +118,22 @@ impl SmtpEmailConfig {
             .ok()
             .filter(|port: &u16| *port > 0)
             .ok_or(ConfigError::InvalidSmtpPort)?;
+        let security = match env::var("CASHMEMO_V1_SMTP_SECURITY")
+            .unwrap_or_else(|_| "starttls".to_owned())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "starttls" => SmtpSecurity::StartTls,
+            "plaintext" => SmtpSecurity::Plaintext,
+            _ => return Err(ConfigError::InvalidSmtpSecurity),
+        };
         Ok(Self {
             host,
             port,
             username,
             password,
             from,
+            security,
         })
     }
 }
@@ -201,6 +226,17 @@ fn parse_positive(name: &'static str, default: usize) -> Result<usize, ConfigErr
     }
 }
 
+fn parse_positive_u32(name: &'static str, default: u32) -> Result<u32, ConfigError> {
+    match env::var(name) {
+        Ok(value) => value
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or(ConfigError::InvalidPositiveEnvironment { name, value }),
+        Err(_) => Ok(default),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("CASHMEMO_V1_DATABASE_URL is required")]
@@ -217,6 +253,12 @@ pub enum ConfigError {
     IncompleteSmtpCredentials,
     #[error("CASHMEMO_V1_SMTP_PORT must be a positive u16")]
     InvalidSmtpPort,
+    #[error("CASHMEMO_V1_SMTP_SECURITY must be starttls or plaintext")]
+    InvalidSmtpSecurity,
+    #[error("Argon2id parameters do not meet the approved security floor")]
+    InvalidArgon2Parameters,
+    #[error("session configuration exceeds approved limits")]
+    InvalidSessionConfiguration,
     #[error("{name} must be a positive integer, got {value}")]
     InvalidPositiveEnvironment { name: &'static str, value: String },
 }

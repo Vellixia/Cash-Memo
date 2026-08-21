@@ -4,7 +4,7 @@ use lettre::{
     transport::smtp::authentication::Credentials,
 };
 
-use crate::config::SmtpEmailConfig;
+use crate::config::{SmtpEmailConfig, SmtpSecurity};
 
 use super::{EmailError, EmailSender};
 
@@ -15,9 +15,17 @@ pub struct SmtpEmailSender {
 
 impl SmtpEmailSender {
     pub fn new(config: &SmtpEmailConfig) -> Result<Self, EmailError> {
-        let mut builder = AsyncSmtpTransport::<Tokio1Executor>::relay(&config.host)
-            .map_err(|_| EmailError::Delivery)?
-            .port(config.port);
+        let mut builder = match config.security {
+            SmtpSecurity::StartTls => {
+                AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&config.host)
+                    .map_err(|_| EmailError::Delivery)?
+                    .port(config.port)
+            }
+            SmtpSecurity::Plaintext => {
+                AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&config.host)
+                    .port(config.port)
+            }
+        };
         if let (Some(username), Some(password)) = (&config.username, &config.password) {
             builder = builder.credentials(Credentials::new(username.clone(), password.clone()));
         }

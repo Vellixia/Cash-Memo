@@ -10,6 +10,10 @@ use uuid::Uuid;
 use crate::error::HttpError;
 
 use super::AuthService;
+use super::password::Argon2idConfig;
+
+const MAX_IDLE_TIMEOUT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const MAX_ABSOLUTE_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -33,24 +37,65 @@ pub struct LoginSession {
     pub raw_token: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthConfig {
     pub idle_timeout: Duration,
     pub absolute_timeout: Duration,
     pub touch_interval: Duration,
+    pub password_hash: Argon2idConfig,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum AuthConfigError {
+    #[error("session idle timeout exceeds seven days")]
+    IdleTimeoutTooLong,
+    #[error("session absolute timeout exceeds 30 days")]
+    AbsoluteTimeoutTooLong,
+    #[error("session touch interval must be positive and no longer than idle timeout")]
+    InvalidTouchInterval,
+    #[error("session idle timeout cannot exceed absolute timeout")]
+    IdleExceedsAbsolute,
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
-        Self {
-            idle_timeout: Duration::from_secs(7 * 24 * 60 * 60),
-            absolute_timeout: Duration::from_secs(30 * 24 * 60 * 60),
-            touch_interval: Duration::from_secs(60 * 60),
-        }
+        Self::new(
+            MAX_IDLE_TIMEOUT,
+            MAX_ABSOLUTE_TIMEOUT,
+            Duration::from_secs(60 * 60),
+            Argon2idConfig::default(),
+        )
+        .expect("approved auth defaults are valid")
     }
 }
 
 impl AuthConfig {
+    pub fn new(
+        idle_timeout: Duration,
+        absolute_timeout: Duration,
+        touch_interval: Duration,
+        password_hash: Argon2idConfig,
+    ) -> Result<Self, AuthConfigError> {
+        if idle_timeout > MAX_IDLE_TIMEOUT {
+            return Err(AuthConfigError::IdleTimeoutTooLong);
+        }
+        if absolute_timeout > MAX_ABSOLUTE_TIMEOUT {
+            return Err(AuthConfigError::AbsoluteTimeoutTooLong);
+        }
+        if idle_timeout > absolute_timeout {
+            return Err(AuthConfigError::IdleExceedsAbsolute);
+        }
+        if touch_interval.is_zero() || touch_interval > idle_timeout {
+            return Err(AuthConfigError::InvalidTouchInterval);
+        }
+        Ok(Self {
+            idle_timeout,
+            absolute_timeout,
+            touch_interval,
+            password_hash,
+        })
+    }
+
     pub fn for_tests() -> Self {
         Self::default()
     }

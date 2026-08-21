@@ -5,6 +5,6 @@ pub mod routes;
 mod service;
 
 pub use email::{EmailError, EmailSender, SmtpEmailSender, UnconfiguredEmailSender};
-pub use model::{AuthConfig, AuthSession, LoginSession, SessionAccess};
-pub use password::{PasswordError, validate_password};
+pub use model::{AuthConfig, AuthConfigError, AuthSession, LoginSession, SessionAccess};
+pub use password::{Argon2idConfig, PasswordError, validate_password};
 pub use service::{AuthError, AuthService, normalize_email};

@@ -4,10 +4,12 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use cashmemo_api::auth::email::SmtpEmailSender;
 use cashmemo_api::auth::{
-    AuthConfig, AuthError, AuthService, EmailError, EmailSender, PasswordError, SessionAccess,
-    normalize_email, validate_password,
+    Argon2idConfig, AuthConfig, AuthConfigError, AuthError, AuthService, EmailError, EmailSender,
+    PasswordError, SessionAccess, normalize_email, validate_password,
 };
+use cashmemo_api::config::{SmtpEmailConfig, SmtpSecurity};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -16,6 +18,19 @@ use uuid::Uuid;
 struct FakeEmailSender {
     verification: Mutex<Vec<(String, String)>>,
     resets: Mutex<Vec<(String, String)>>,
+}
+
+struct FailingEmailSender;
+
+#[async_trait::async_trait]
+impl EmailSender for FailingEmailSender {
+    async fn send_verification(&self, _: &str, _: &str) -> Result<(), EmailError> {
+        Err(EmailError::Delivery)
+    }
+
+    async fn send_password_reset(&self, _: &str, _: &str) -> Result<(), EmailError> {
+        Err(EmailError::Delivery)
+    }
 }
 
 #[async_trait::async_trait]
@@ -68,6 +83,45 @@ fn password_boundaries_count_unicode_code_points_and_bytes() {
     assert!(validate_password(&"😀".repeat(128)).is_ok());
 }
 
+#[test]
+fn auth_configuration_keeps_argon2id_tunable_but_session_limits_hard_bounded() {
+    let password_hash = Argon2idConfig::new(65_536, 3, 1).unwrap();
+    assert_eq!(password_hash.memory_cost_kib(), 65_536);
+    assert!(Argon2idConfig::new(65_535, 3, 1).is_err());
+    assert!(
+        AuthConfig::new(
+            std::time::Duration::from_secs(7 * 24 * 60 * 60 + 1),
+            std::time::Duration::from_secs(30 * 24 * 60 * 60),
+            std::time::Duration::from_secs(60 * 60),
+            password_hash.clone(),
+        )
+        .is_err()
+    );
+    assert_eq!(
+        AuthConfig::new(
+            std::time::Duration::from_secs(7 * 24 * 60 * 60),
+            std::time::Duration::from_secs(30 * 24 * 60 * 60 + 1),
+            std::time::Duration::from_secs(60 * 60),
+            password_hash,
+        ),
+        Err(AuthConfigError::AbsoluteTimeoutTooLong),
+    );
+}
+
+#[test]
+fn smtp_security_mode_requires_explicit_plaintext_for_mailpit() {
+    let mailpit = SmtpEmailConfig {
+        host: "127.0.0.1".to_owned(),
+        port: 1025,
+        username: None,
+        password: None,
+        from: "noreply@example.com".to_owned(),
+        security: SmtpSecurity::Plaintext,
+    };
+    assert!(SmtpEmailSender::new(&mailpit).is_ok());
+    assert_eq!(SmtpSecurity::default(), SmtpSecurity::StartTls);
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn registration_hashes_password_and_stores_only_hashed_256_bit_token(pool: PgPool) {
     let mailer = Arc::new(FakeEmailSender::default());
@@ -100,6 +154,26 @@ async fn registration_hashes_password_and_stores_only_hashed_256_bit_token(pool:
             .await
             .unwrap(),
         0
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn registration_and_reset_keep_generic_success_when_delivery_fails(pool: PgPool) {
+    let working_mailer = Arc::new(FakeEmailSender::default());
+    let working = service(pool.clone(), working_mailer.clone());
+    working
+        .register("alice@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let verification = working_mailer.verification.lock().unwrap()[0].1.clone();
+    working.verify_email(&verification).await.unwrap();
+
+    let failing = AuthService::new(pool, Arc::new(FailingEmailSender), AuthConfig::for_tests());
+    assert!(
+        failing
+            .request_password_reset("alice@example.com")
+            .await
+            .is_ok()
     );
 }
 

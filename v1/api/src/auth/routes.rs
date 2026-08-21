@@ -198,6 +198,6 @@ fn map_error(error: AuthError, request_id: RequestId) -> HttpError {
         AuthError::InvalidToken => HttpError::invalid_token(request_id),
         AuthError::Unauthorized => HttpError::unauthorized(request_id),
         AuthError::Validation => HttpError::validation(Default::default(), request_id),
-        AuthError::EmailDelivery | AuthError::Persistence => HttpError::internal(request_id),
+        AuthError::Persistence => HttpError::internal(request_id),
     }
 }

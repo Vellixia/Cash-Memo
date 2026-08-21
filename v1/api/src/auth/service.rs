@@ -8,7 +8,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::{
-    email::{EmailError, EmailSender},
+    email::EmailSender,
     model::{AuthConfig, AuthSession, LoginSession, SessionAccess},
     password::{hash_password, validate_password, verify_password},
 };
@@ -48,8 +48,6 @@ pub enum AuthError {
     Unauthorized,
     #[error("input is invalid")]
     Validation,
-    #[error("email delivery failed")]
-    EmailDelivery,
     #[error("authentication persistence failed")]
     Persistence,
 }
@@ -67,6 +65,8 @@ impl AuthService {
         validate_email(email)?;
         validate_password(password).map_err(|_| AuthError::Validation)?;
         let email = normalize_email(email);
+        let candidate_password_hash = hash_password(password, &self.config.password_hash)
+            .map_err(|_| AuthError::Validation)?;
         let mut transaction = self
             .pool
             .begin()
@@ -91,12 +91,11 @@ impl AuthService {
             ),
             Some((_, true)) => None,
             None => {
-                let password_hash = hash_password(password).map_err(|_| AuthError::Validation)?;
                 let user_id: Uuid = sqlx::query_scalar(
                     "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
                 )
                 .bind(&email)
-                .bind(password_hash)
+                .bind(candidate_password_hash)
                 .fetch_one(&mut *transaction)
                 .await
                 .map_err(|_| AuthError::Persistence)?;
@@ -116,10 +115,7 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         if let Some(token) = token {
-            self.mailer
-                .send_verification(&email, &token)
-                .await
-                .map_err(map_email)?;
+            let _ = self.mailer.send_verification(&email, &token).await;
         }
         Ok(())
     }
@@ -157,10 +153,7 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         if let Some(token) = token {
-            self.mailer
-                .send_verification(&email, &token)
-                .await
-                .map_err(map_email)?;
+            let _ = self.mailer.send_verification(&email, &token).await;
         }
         Ok(())
     }
@@ -195,12 +188,16 @@ impl AuthService {
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| AuthError::Persistence)?;
-        let Some((user_id, password_hash, email_verified, status)) = user else {
-            return Err(AuthError::InvalidCredentials);
-        };
-        if !verify_password(password, &password_hash) {
+        let password_hash = login_password_hash(
+            user.as_ref()
+                .map(|(_, password_hash, _, _)| password_hash.as_str()),
+        );
+        if !verify_password(password, password_hash) {
             return Err(AuthError::InvalidCredentials);
         }
+        let Some((user_id, _, email_verified, status)) = user else {
+            return Err(AuthError::InvalidCredentials);
+        };
         if !email_verified {
             return Err(AuthError::EmailNotVerified);
         }
@@ -305,6 +302,7 @@ impl AuthService {
     pub async fn request_password_reset(&self, email: &str) -> Result<(), AuthError> {
         validate_email(email)?;
         let email = normalize_email(email);
+        let _ = verify_password("not-a-cashmemo-password", login_password_hash(None));
         let mut transaction = self
             .pool
             .begin()
@@ -327,10 +325,7 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         if let Some(token) = token {
-            self.mailer
-                .send_password_reset(&email, &token)
-                .await
-                .map_err(map_email)?;
+            let _ = self.mailer.send_password_reset(&email, &token).await;
         }
         Ok(())
     }
@@ -341,7 +336,8 @@ impl AuthService {
         password: &str,
     ) -> Result<(), AuthError> {
         validate_password(password).map_err(|_| AuthError::Validation)?;
-        let password_hash = hash_password(password).map_err(|_| AuthError::Validation)?;
+        let password_hash = hash_password(password, &self.config.password_hash)
+            .map_err(|_| AuthError::Validation)?;
         let mut transaction = self
             .pool
             .begin()
@@ -462,6 +458,26 @@ fn chrono_duration(duration: Duration) -> chrono::Duration {
     chrono::Duration::from_std(duration).expect("configured duration fits chrono")
 }
 
-fn map_email(_: EmailError) -> AuthError {
-    AuthError::EmailDelivery
+fn login_password_hash(stored: Option<&str>) -> &str {
+    static DUMMY_PASSWORD_HASH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+        hash_password(
+            "correct horse battery staple",
+            &super::password::Argon2idConfig::default(),
+        )
+        .expect("approved dummy password config")
+    });
+    stored.unwrap_or(DUMMY_PASSWORD_HASH.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_login_uses_valid_argon2id_dummy_hash() {
+        assert!(verify_password(
+            "correct horse battery staple",
+            login_password_hash(None),
+        ));
+    }
 }
