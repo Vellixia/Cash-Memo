@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -183,7 +183,7 @@ impl BudgetService {
             .unwrap_or(existing.month_start);
         let amount = match input.amount {
             Some(value) => positive_amount(&value, definition.exponent)?,
-            None => existing.amount,
+            None => ensure_amount_exponent(existing.amount, definition.exponent)?,
         };
         let row: BudgetRow = sqlx::query_as(
             "UPDATE budgets SET category_id = $3, currency_code = $4, month_start = $5, amount = $6, updated_at = now()
@@ -235,6 +235,7 @@ impl BudgetService {
                           AND t.category_id = b.category_id
                           AND t.transaction_type = 'EXPENSE'
                           AND t.deleted_at IS NULL
+                          AND t.occurred_at <= now()
                           AND w.currency_code = b.currency_code
                           AND t.occurred_at >= $2 AND t.occurred_at < $3
                     ), 0) AS spent
@@ -320,21 +321,68 @@ fn month_bounds(
         NaiveDate::from_ymd_opt(month.year(), month.month() + 1, 1)
     }
     .ok_or(BudgetError::InvalidMonth)?;
-    let start = timezone
-        .from_local_datetime(
-            &month
-                .and_hms_opt(0, 0, 0)
-                .ok_or(BudgetError::InvalidMonth)?,
-        )
-        .single()
-        .ok_or(BudgetError::Persistence)?
-        .with_timezone(&Utc);
-    let end = timezone
-        .from_local_datetime(&next.and_hms_opt(0, 0, 0).ok_or(BudgetError::InvalidMonth)?)
-        .single()
-        .ok_or(BudgetError::Persistence)?
-        .with_timezone(&Utc);
+    let start = resolve_local_boundary(
+        timezone,
+        month
+            .and_hms_opt(0, 0, 0)
+            .ok_or(BudgetError::InvalidMonth)?,
+    )?;
+    let end = resolve_local_boundary(
+        timezone,
+        next.and_hms_opt(0, 0, 0).ok_or(BudgetError::InvalidMonth)?,
+    )?;
     Ok((start, end))
+}
+
+fn resolve_local_boundary(
+    timezone: Tz,
+    requested: NaiveDateTime,
+) -> Result<DateTime<Utc>, BudgetError> {
+    match timezone.from_local_datetime(&requested) {
+        LocalResult::Single(value) => Ok(value.with_timezone(&Utc)),
+        LocalResult::Ambiguous(first, second) => Ok(first.min(second).with_timezone(&Utc)),
+        LocalResult::None => resolve_nonexistent_local_boundary(timezone, requested),
+    }
+}
+
+fn resolve_nonexistent_local_boundary(
+    timezone: Tz,
+    requested: NaiveDateTime,
+) -> Result<DateTime<Utc>, BudgetError> {
+    let mut missing_seconds = 0_i64;
+    let mut valid_seconds = 1_i64;
+    while matches!(
+        timezone.from_local_datetime(&add_seconds(requested, valid_seconds)?),
+        LocalResult::None
+    ) {
+        missing_seconds = valid_seconds;
+        valid_seconds = valid_seconds
+            .checked_mul(2)
+            .filter(|seconds| *seconds <= 172_800)
+            .ok_or(BudgetError::Persistence)?;
+    }
+    while valid_seconds - missing_seconds > 1 {
+        let middle = missing_seconds + (valid_seconds - missing_seconds) / 2;
+        if matches!(
+            timezone.from_local_datetime(&add_seconds(requested, middle)?),
+            LocalResult::None
+        ) {
+            missing_seconds = middle;
+        } else {
+            valid_seconds = middle;
+        }
+    }
+    match timezone.from_local_datetime(&add_seconds(requested, valid_seconds)?) {
+        LocalResult::Single(value) => Ok(value.with_timezone(&Utc)),
+        LocalResult::Ambiguous(first, second) => Ok(first.min(second).with_timezone(&Utc)),
+        LocalResult::None => Err(BudgetError::Persistence),
+    }
+}
+
+fn add_seconds(value: NaiveDateTime, seconds: i64) -> Result<NaiveDateTime, BudgetError> {
+    value
+        .checked_add_signed(Duration::seconds(seconds))
+        .ok_or(BudgetError::Persistence)
 }
 
 fn positive_amount(input: &str, exponent: u32) -> Result<Decimal, BudgetError> {
@@ -342,6 +390,12 @@ fn positive_amount(input: &str, exponent: u32) -> Result<Decimal, BudgetError> {
         .map_err(|_| BudgetError::InvalidAmount)?
         .decimal();
     (amount > Decimal::ZERO)
+        .then_some(amount)
+        .ok_or(BudgetError::InvalidAmount)
+}
+
+fn ensure_amount_exponent(amount: Decimal, exponent: u32) -> Result<Decimal, BudgetError> {
+    (amount > Decimal::ZERO && amount.round_dp(exponent) == amount)
         .then_some(amount)
         .ok_or(BudgetError::InvalidAmount)
 }

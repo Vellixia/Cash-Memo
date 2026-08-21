@@ -26,7 +26,7 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
     let usd_wallet = insert_wallet(&pool, user_id, "USD").await;
     let eur_wallet = insert_wallet(&pool, user_id, "EUR").await;
 
-    let budget = create_budget(&app, &cookie, food, "USD", "2026-08", "100.00").await;
+    let budget = create_budget(&app, &cookie, food, "USD", "2026-04", "100.00").await;
     assert_eq!(budget["amount"], "100.00");
 
     insert_transaction(
@@ -36,7 +36,7 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
         food,
         "expense",
         "12.50",
-        "2026-08-01T04:00:00Z",
+        "2026-04-01T04:00:00Z",
         None,
     )
     .await;
@@ -47,7 +47,7 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
         food,
         "expense",
         "20.25",
-        "2026-09-01T03:59:59Z",
+        "2026-05-01T03:59:59Z",
         None,
     )
     .await;
@@ -58,7 +58,7 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
         salary,
         "income",
         "99.00",
-        "2026-08-15T12:00:00Z",
+        "2026-04-15T12:00:00Z",
         None,
     )
     .await;
@@ -69,7 +69,7 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
         travel,
         "expense",
         "40.00",
-        "2026-08-15T12:00:00Z",
+        "2026-04-15T12:00:00Z",
         None,
     )
     .await;
@@ -80,7 +80,7 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
         food,
         "expense",
         "30.00",
-        "2026-08-15T12:00:00Z",
+        "2026-04-15T12:00:00Z",
         None,
     )
     .await;
@@ -91,16 +91,16 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
         food,
         "expense",
         "7.25",
-        "2026-08-15T12:00:00Z",
+        "2026-04-15T12:00:00Z",
         Some(Utc::now()),
     )
     .await;
 
-    let summary = get_summary(&app, &cookie, "2026-08").await;
+    let summary = get_summary(&app, &cookie, "2026-04").await;
     assert_eq!(
         summary,
         json!({
-            "month": "2026-08",
+            "month": "2026-04",
             "budgets": [{
                 "id": budget["id"],
                 "category_id": food,
@@ -125,8 +125,8 @@ async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and
     let travel = insert_category(&pool, user_id, "expense").await;
     let usd_wallet = insert_wallet(&pool, user_id, "USD").await;
     let eur_wallet = insert_wallet(&pool, user_id, "EUR").await;
-    create_budget(&app, &cookie, food, "USD", "2026-08", "10.00").await;
-    create_budget(&app, &cookie, travel, "EUR", "2026-09", "10.00").await;
+    create_budget(&app, &cookie, food, "USD", "2026-03", "10.00").await;
+    create_budget(&app, &cookie, travel, "EUR", "2026-04", "10.00").await;
 
     let transaction = create_transaction(
         &app,
@@ -134,10 +134,10 @@ async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and
         usd_wallet,
         food,
         "1.50",
-        "2026-08-31T23:00:00Z",
+        "2026-03-31T23:00:00Z",
     )
     .await;
-    assert_eq!(summary_spent(&app, &cookie, "2026-08").await, "1.50");
+    assert_eq!(summary_spent(&app, &cookie, "2026-03").await, "1.50");
 
     let moved = app
         .clone()
@@ -151,14 +151,14 @@ async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and
             Some(json!({
                 "wallet_id": eur_wallet,
                 "category_id": travel,
-                "occurred_at": "2026-09-01T00:00:00Z"
+                "occurred_at": "2026-04-01T00:00:00Z"
             })),
         ))
         .await
         .unwrap();
     assert!(moved.status().is_success());
-    assert_eq!(summary_spent(&app, &cookie, "2026-08").await, "0.00");
-    assert_eq!(summary_spent(&app, &cookie, "2026-09").await, "1.50");
+    assert_eq!(summary_spent(&app, &cookie, "2026-03").await, "0.00");
+    assert_eq!(summary_spent(&app, &cookie, "2026-04").await, "1.50");
 
     let id = transaction["id"].as_str().unwrap();
     for (method, uri, expected) in [
@@ -177,8 +177,26 @@ async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and
             .await
             .unwrap();
         assert!(response.status().is_success());
-        assert_eq!(summary_spent(&app, &cookie, "2026-09").await, expected);
+        assert_eq!(summary_spent(&app, &cookie, "2026-04").await, expected);
     }
+}
+
+#[sqlx::test(migrations = false)]
+async fn budget_summary_excludes_future_expenses(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let app = build_app(AppState { pool: pool.clone() });
+    let (user_id, cookie) = authenticated_user(&pool, "future@example.test", "UTC").await;
+    let food = insert_category(&pool, user_id, "expense").await;
+    let wallet = insert_wallet(&pool, user_id, "USD").await;
+    let month = Utc::now().format("%Y-%m").to_string();
+    create_budget(&app, &cookie, food, "USD", &month, "10.00").await;
+    let future = (Utc::now() + chrono::Duration::days(1)).to_rfc3339();
+    insert_transaction(
+        &pool, user_id, wallet, food, "expense", "1.00", &future, None,
+    )
+    .await;
+
+    assert_eq!(summary_spent(&app, &cookie, &month).await, "0.00");
 }
 
 #[sqlx::test(migrations = false)]
@@ -215,6 +233,49 @@ async fn budget_crud_enforces_month_category_currency_uniqueness_and_user_owners
     .await;
     assert_eq!(updated["amount"], "12.34");
 
+    let incompatible_currency = app
+        .clone()
+        .oneshot(request(
+            "PATCH",
+            &format!("/api/v1/budgets/{}", first["id"].as_str().unwrap()),
+            &cookie,
+            Some(json!({ "currency": "IDR" })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        incompatible_currency.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    let whole_amount = response_json(
+        app.clone()
+            .oneshot(request(
+                "PATCH",
+                &format!("/api/v1/budgets/{}", first["id"].as_str().unwrap()),
+                &cookie,
+                Some(json!({ "amount": "12" })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(whole_amount["amount"], "12.00");
+    let idr = response_json(
+        app.clone()
+            .oneshot(request(
+                "PATCH",
+                &format!("/api/v1/budgets/{}", first["id"].as_str().unwrap()),
+                &cookie,
+                Some(json!({ "currency": "IDR" })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(idr["currency"], "IDR");
+    assert_eq!(idr["amount"], "12");
+
     let other_user = authenticated_user(&pool, "other@example.test", "UTC")
         .await
         .1;
@@ -240,6 +301,28 @@ async fn budget_crud_enforces_month_category_currency_uniqueness_and_user_owners
         .await
         .unwrap();
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+}
+
+#[sqlx::test(migrations = false)]
+async fn budget_summary_resolves_ambiguous_and_nonexistent_midnight_month_boundaries(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let app = build_app(AppState { pool: pool.clone() });
+    for (email, timezone, month) in [
+        ("havana@example.test", "America/Havana", "2020-11"),
+        ("asuncion@example.test", "America/Asuncion", "2000-10"),
+        ("new-york@example.test", "America/New_York", "2026-03"),
+    ] {
+        let (user_id, cookie) = authenticated_user(&pool, email, timezone).await;
+        let category = insert_category(&pool, user_id, "expense").await;
+        create_budget(&app, &cookie, category, "USD", month, "1.00").await;
+        assert_eq!(
+            get_summary(&app, &cookie, month).await["budgets"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 }
 
 async fn authenticated_user(pool: &PgPool, email: &str, timezone: &str) -> (Uuid, String) {
