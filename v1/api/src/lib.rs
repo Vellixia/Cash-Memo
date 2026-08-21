@@ -9,6 +9,7 @@ pub mod error;
 pub mod http;
 pub mod money;
 pub mod onboarding;
+pub mod recurring;
 pub mod time;
 pub mod transactions;
 pub mod wallets;

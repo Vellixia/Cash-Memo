@@ -15,7 +15,7 @@ use crate::{
     http::RequestId,
 };
 
-use super::{NewWallet, UpdateWallet, Wallet, WalletError, WalletService};
+use super::{ArchiveResult, NewWallet, UpdateWallet, Wallet, WalletError, WalletService};
 
 pub fn router<S>(service: WalletService) -> Router<S>
 where
@@ -114,7 +114,7 @@ async fn archive_wallet(
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
     Path(wallet_id): Path<Uuid>,
-) -> Result<Json<Wallet>, HttpError> {
+) -> Result<Json<ArchiveResult>, HttpError> {
     let user_id = full_access_user_id(session, request_id.clone())?;
     service
         .archive(user_id, wallet_id)

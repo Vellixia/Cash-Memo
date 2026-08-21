@@ -95,14 +95,14 @@ impl TransactionDirection {
         }
     }
 
-    fn database_value(self) -> &'static str {
+    pub(crate) fn database_value(self) -> &'static str {
         match self {
             Self::Income => "INCOME",
             Self::Expense => "EXPENSE",
         }
     }
 
-    fn from_database(input: &str) -> Result<Self, TransactionError> {
+    pub(crate) fn from_database(input: &str) -> Result<Self, TransactionError> {
         match input {
             "INCOME" => Ok(Self::Income),
             "EXPENSE" => Ok(Self::Expense),

@@ -15,7 +15,7 @@ use crate::{
     http::RequestId,
 };
 
-use super::{Category, CategoryError, CategoryService, NewCategory, UpdateCategory};
+use super::{ArchiveResult, Category, CategoryError, CategoryService, NewCategory, UpdateCategory};
 
 pub fn router<S>(service: CategoryService) -> Router<S>
 where
@@ -98,7 +98,7 @@ async fn archive_category(
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
     Path(category_id): Path<Uuid>,
-) -> Result<Json<Category>, HttpError> {
+) -> Result<Json<ArchiveResult>, HttpError> {
     let user_id = full_access_user_id(session, request_id.clone())?;
     service
         .archive(user_id, category_id)

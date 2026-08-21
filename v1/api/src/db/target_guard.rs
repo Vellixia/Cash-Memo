@@ -25,6 +25,15 @@ const FULL_V1_MIGRATIONS: &[(i64, bool)] = &[
     (4, true),
     (5, true),
     (6, true),
+    (7, true),
+];
+const PRE_RECURRING_CONSTRAINTS_MIGRATIONS: &[(i64, bool)] = &[
+    (1, true),
+    (2, true),
+    (3, true),
+    (4, true),
+    (5, true),
+    (6, true),
 ];
 const PRE_HISTORY_MIGRATIONS: &[(i64, bool)] =
     &[(1, true), (2, true), (3, true), (4, true), (5, true)];
@@ -33,6 +42,7 @@ const FULL_SCHEMA_MIGRATION_PREFIXES: &[&[(i64, bool)]] = &[
     &[(1, true), (2, true), (3, true)],
     &[(1, true), (2, true), (3, true), (4, true)],
     PRE_HISTORY_MIGRATIONS,
+    PRE_RECURRING_CONSTRAINTS_MIGRATIONS,
     FULL_V1_MIGRATIONS,
 ];
 

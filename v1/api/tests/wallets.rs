@@ -253,6 +253,45 @@ async fn deletes_wallet_without_references(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn archiving_wallet_pauses_active_recurrences_without_restore_auto_resume(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "wallet-recurring-archive@example.test").await;
+    let app = build_app(AppState { pool: pool.clone() });
+    let wallet = create_wallet(&app, &cookie, "Cash", "USD", "0.00").await;
+    let wallet_id = Uuid::parse_str(wallet["id"].as_str().unwrap()).unwrap();
+    let category_id: Uuid = sqlx::query_scalar("INSERT INTO categories (user_id,name,normalized_name,transaction_type) VALUES ($1,'Bills','bills','EXPENSE') RETURNING id").bind(user_id).fetch_one(&pool).await.unwrap();
+    let rule_id: Uuid = sqlx::query_scalar("INSERT INTO recurring_transactions (user_id,wallet_id,category_id,transaction_type,amount,frequency,start_date,next_due_date) VALUES ($1,$2,$3,'EXPENSE',1,'daily',CURRENT_DATE,CURRENT_DATE) RETURNING id").bind(user_id).bind(wallet_id).bind(category_id).fetch_one(&pool).await.unwrap();
+
+    let archived = app
+        .clone()
+        .oneshot(post_archive(&cookie, &wallet_id.to_string()))
+        .await
+        .unwrap();
+    assert_eq!(archived.status(), StatusCode::OK);
+    assert_eq!(response_json(archived).await["paused_recurring_count"], 1);
+    let status: String =
+        sqlx::query_scalar("SELECT status::TEXT FROM recurring_transactions WHERE id=$1")
+            .bind(rule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "paused");
+    let restored = app
+        .oneshot(post_restore(&cookie, &wallet_id.to_string()))
+        .await
+        .unwrap();
+    assert_eq!(restored.status(), StatusCode::OK);
+    let status: String =
+        sqlx::query_scalar("SELECT status::TEXT FROM recurring_transactions WHERE id=$1")
+            .bind(rule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "paused");
+}
+
+#[sqlx::test(migrations = false)]
 async fn hides_wallets_from_other_users_for_all_lifecycle_routes(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (_owner_id, owner_cookie) = authenticated_user(&pool, "wallet-owner@example.test").await;

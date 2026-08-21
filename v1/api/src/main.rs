@@ -6,6 +6,7 @@ use cashmemo_api::{
     config::AppConfig,
     db::migrate::migrate_v1,
     error::ApiError,
+    recurring::{ProcessOptions, RecurringProcessor},
     transactions::TransactionService,
 };
 use clap::{Parser, Subcommand};
@@ -29,6 +30,12 @@ pub enum Command {
     PurgeTrash {
         #[arg(long)]
         batch_size: i64,
+    },
+    ProcessRecurring {
+        #[arg(long)]
+        batch_size: u64,
+        #[arg(long)]
+        max_occurrences_per_recurring_transaction: u64,
     },
 }
 
@@ -71,6 +78,18 @@ async fn run() -> Result<(), ApiError> {
                 .purge_trash(batch_size)
                 .await
                 .map_err(|_| ApiError::TrashPurge)?;
+        }
+        Command::ProcessRecurring {
+            batch_size,
+            max_occurrences_per_recurring_transaction,
+        } => {
+            RecurringProcessor::new(pool)
+                .process(ProcessOptions {
+                    batch_size,
+                    max_occurrences_per_recurring_transaction,
+                })
+                .await
+                .map_err(|_| ApiError::RecurringProcess)?;
         }
     }
 

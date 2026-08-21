@@ -64,6 +64,13 @@ pub struct Wallet {
     pub balance: WalletBalance,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ArchiveResult {
+    #[serde(flatten)]
+    pub wallet: Wallet,
+    pub paused_recurring_count: u64,
+}
+
 #[derive(FromRow)]
 struct WalletRow {
     id: Uuid,
@@ -143,20 +150,45 @@ impl WalletService {
         self.load(user_id, wallet_id).await
     }
 
-    pub async fn archive(&self, user_id: Uuid, wallet_id: Uuid) -> Result<Wallet, WalletError> {
-        let updated = sqlx::query(
+    pub async fn archive(
+        &self,
+        user_id: Uuid,
+        wallet_id: Uuid,
+    ) -> Result<ArchiveResult, WalletError> {
+        let mut database = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| WalletError::Persistence)?;
+        let exists: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM wallets WHERE user_id = $1 AND id = $2 FOR UPDATE")
+                .bind(user_id)
+                .bind(wallet_id)
+                .fetch_optional(&mut *database)
+                .await
+                .map_err(|_| WalletError::Persistence)?;
+        if exists.is_none() {
+            return Err(WalletError::NotFound);
+        }
+        sqlx::query(
             "UPDATE wallets SET archived_at = COALESCE(archived_at, now()), updated_at = now()
              WHERE user_id = $1 AND id = $2",
         )
         .bind(user_id)
         .bind(wallet_id)
-        .execute(&self.pool)
+        .execute(&mut *database)
         .await
         .map_err(|_| WalletError::Persistence)?;
-        if updated.rows_affected() == 0 {
-            return Err(WalletError::NotFound);
-        }
-        self.load(user_id, wallet_id).await
+        let paused = sqlx::query("UPDATE recurring_transactions SET status = 'paused', updated_at = now() WHERE user_id = $1 AND wallet_id = $2 AND status = 'active'")
+            .bind(user_id).bind(wallet_id).execute(&mut *database).await.map_err(|_| WalletError::Persistence)?;
+        database
+            .commit()
+            .await
+            .map_err(|_| WalletError::Persistence)?;
+        Ok(ArchiveResult {
+            wallet: self.load(user_id, wallet_id).await?,
+            paused_recurring_count: paused.rows_affected(),
+        })
     }
 
     pub async fn restore(&self, user_id: Uuid, wallet_id: Uuid) -> Result<Wallet, WalletError> {

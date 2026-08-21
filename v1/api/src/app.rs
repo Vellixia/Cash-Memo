@@ -22,6 +22,7 @@ use crate::{
         request_id::attach,
     },
     onboarding::{OnboardingService, routes as onboarding_routes},
+    recurring::{RecurringTransactionService, router as recurring_routes},
     transactions::{TransactionService, router as transaction_routes},
     wallets::{WalletService, routes as wallet_routes},
 };
@@ -56,6 +57,7 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
     let categories = CategoryService::new(state.pool.clone());
     let budgets = BudgetService::new(state.pool.clone());
     let transactions = TransactionService::new(state.pool.clone());
+    let recurring = RecurringTransactionService::new(state.pool.clone());
     Router::<AppState>::new()
         .nest("/api/v1/auth", routes::router(auth.clone()))
         .nest(
@@ -65,6 +67,7 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
                 .merge(category_routes(categories))
                 .merge(budget_routes(budgets))
                 .merge(transaction_routes(transactions))
+                .merge(recurring_routes(recurring))
                 .layer(Extension(auth)),
         )
         .route("/api/v1/currencies", get(list_currencies))

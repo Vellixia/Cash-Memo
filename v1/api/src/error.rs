@@ -192,6 +192,8 @@ pub enum ApiError {
     AuthCleanup,
     #[error("trash purge failed")]
     TrashPurge,
+    #[error("recurring processing failed")]
+    RecurringProcess,
     #[error(transparent)]
     Server(#[from] std::io::Error),
 }

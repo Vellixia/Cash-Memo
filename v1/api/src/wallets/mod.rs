@@ -1,4 +1,6 @@
 pub mod routes;
 mod service;
 
-pub use service::{NewWallet, UpdateWallet, Wallet, WalletBalance, WalletError, WalletService};
+pub use service::{
+    ArchiveResult, NewWallet, UpdateWallet, Wallet, WalletBalance, WalletError, WalletService,
+};

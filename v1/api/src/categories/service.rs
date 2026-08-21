@@ -78,6 +78,13 @@ pub struct Category {
     pub archived_at: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ArchiveResult {
+    #[serde(flatten)]
+    pub category: Category,
+    pub paused_recurring_count: u64,
+}
+
 #[derive(FromRow)]
 struct CategoryRow {
     id: Uuid,
@@ -158,21 +165,43 @@ impl CategoryService {
         &self,
         user_id: Uuid,
         category_id: Uuid,
-    ) -> Result<Category, CategoryError> {
-        let updated = sqlx::query(
+    ) -> Result<ArchiveResult, CategoryError> {
+        let mut database = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| CategoryError::Persistence)?;
+        let exists: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM categories WHERE user_id = $1 AND id = $2 FOR UPDATE",
+        )
+        .bind(user_id)
+        .bind(category_id)
+        .fetch_optional(&mut *database)
+        .await
+        .map_err(|_| CategoryError::Persistence)?;
+        if exists.is_none() {
+            return Err(CategoryError::NotFound);
+        }
+        sqlx::query(
             "UPDATE categories
              SET archived_at = COALESCE(archived_at, now()), updated_at = now()
              WHERE user_id = $1 AND id = $2",
         )
         .bind(user_id)
         .bind(category_id)
-        .execute(&self.pool)
+        .execute(&mut *database)
         .await
         .map_err(|_| CategoryError::Persistence)?;
-        if updated.rows_affected() == 0 {
-            return Err(CategoryError::NotFound);
-        }
-        self.load(user_id, category_id).await
+        let paused = sqlx::query("UPDATE recurring_transactions SET status = 'paused', updated_at = now() WHERE user_id = $1 AND category_id = $2 AND status = 'active'")
+            .bind(user_id).bind(category_id).execute(&mut *database).await.map_err(|_| CategoryError::Persistence)?;
+        database
+            .commit()
+            .await
+            .map_err(|_| CategoryError::Persistence)?;
+        Ok(ArchiveResult {
+            category: self.load(user_id, category_id).await?,
+            paused_recurring_count: paused.rows_affected(),
+        })
     }
 
     pub async fn restore(

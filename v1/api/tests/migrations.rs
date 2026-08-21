@@ -109,7 +109,7 @@ async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7]);
 }
 
 #[sqlx::test(migrations = false)]
@@ -123,7 +123,19 @@ async fn identified_v1_database_at_0005_upgrades_to_latest(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 6")
+    sqlx::query("DROP TRIGGER recurring_occurrences_immutable ON recurring_occurrences")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION reject_recurring_occurrence_mutation()")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP INDEX recurring_transactions_due_active_idx")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 6")
         .execute(&pool)
         .await
         .unwrap();
@@ -139,7 +151,7 @@ async fn identified_v1_database_at_0005_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7]);
 }
 
 #[sqlx::test(migrations = false)]
