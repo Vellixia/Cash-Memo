@@ -235,6 +235,56 @@ async fn permanent_deletion_keeps_occurrence_and_processor_does_not_regenerate_i
 }
 
 #[sqlx::test(migrations = false)]
+async fn existing_occurrence_never_regenerates_after_transaction_deletion_and_due_reset(
+    pool: PgPool,
+) {
+    support::migrate_v1(&pool).await;
+    let (user_id, _cookie) =
+        authenticated_user(&pool, "recurring-consumed-occurrence@example.test").await;
+    let (wallet_id, category_id) = owned_references(&pool, user_id).await;
+    let due = Utc::now().date_naive();
+    let rule_id = insert_rule(&pool, user_id, wallet_id, category_id, due).await;
+    let processor = RecurringProcessor::new(pool.clone());
+    processor
+        .process(ProcessOptions {
+            batch_size: 1,
+            max_occurrences_per_recurring_transaction: 1,
+        })
+        .await
+        .unwrap();
+    let transaction_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM transactions WHERE recurring_occurrence_id IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let transactions = TransactionService::new(pool.clone());
+    transactions.trash(user_id, transaction_id).await.unwrap();
+    transactions
+        .permanently_delete(user_id, transaction_id)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE recurring_transactions SET next_due_date=$2, updated_at=now() WHERE id=$1")
+        .bind(rule_id)
+        .bind(due)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        processor
+            .process(ProcessOptions {
+                batch_size: 1,
+                max_occurrences_per_recurring_transaction: 1
+            })
+            .await
+            .unwrap()
+            .generated,
+        0
+    );
+    let counts: (i64, i64) = sqlx::query_as("SELECT (SELECT count(*) FROM recurring_occurrences WHERE recurring_transaction_id=$1), (SELECT count(*) FROM transactions WHERE recurring_occurrence_id IS NOT NULL)").bind(rule_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(counts, (1, 0));
+}
+
+#[sqlx::test(migrations = false)]
 async fn concurrent_processors_create_one_occurrence_and_transaction(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, _cookie) = authenticated_user(&pool, "recurring-concurrent@example.test").await;
@@ -412,6 +462,57 @@ async fn paused_rule_is_absent_from_history_until_generation(pool: PgPool) {
             .len(),
         1
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn midnight_gap_rule_and_later_due_rule_both_process(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (gap_user, _gap_cookie) =
+        authenticated_user(&pool, "recurring-apia-gap@example.test").await;
+    let (later_user, _later_cookie) =
+        authenticated_user(&pool, "recurring-later-rule@example.test").await;
+    sqlx::query("UPDATE users SET timezone='Pacific/Apia' WHERE id=$1")
+        .bind(gap_user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (gap_wallet, gap_category) = owned_references(&pool, gap_user).await;
+    let (later_wallet, later_category) = owned_references(&pool, later_user).await;
+    let gap_date = chrono::NaiveDate::from_ymd_opt(2011, 12, 30).unwrap();
+    let later_date = chrono::NaiveDate::from_ymd_opt(2011, 12, 31).unwrap();
+    insert_rule(&pool, gap_user, gap_wallet, gap_category, gap_date).await;
+    insert_rule(&pool, later_user, later_wallet, later_category, later_date).await;
+    let now = chrono::DateTime::parse_from_rfc3339("2011-12-31T12:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    assert_eq!(
+        RecurringProcessor::new(pool.clone())
+            .process_at(
+                ProcessOptions {
+                    batch_size: 10,
+                    max_occurrences_per_recurring_transaction: 1
+                },
+                now
+            )
+            .await
+            .unwrap()
+            .generated,
+        2
+    );
+    let rows: Vec<(Uuid, chrono::DateTime<Utc>)> = sqlx::query_as("SELECT user_id, occurred_at FROM transactions WHERE recurring_occurrence_id IS NOT NULL ORDER BY user_id").fetch_all(&pool).await.unwrap();
+    assert_eq!(rows.len(), 2);
+    let apia_time = rows
+        .iter()
+        .find(|(user_id, _)| *user_id == gap_user)
+        .unwrap()
+        .1;
+    assert_eq!(
+        apia_time,
+        chrono::DateTime::parse_from_rfc3339("2011-12-30T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+    );
+    assert!(rows.iter().any(|(user_id, _)| *user_id == later_user));
 }
 
 async fn insert_rule(
