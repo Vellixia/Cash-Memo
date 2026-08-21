@@ -9,6 +9,7 @@ use sqlx::PgPool;
 
 use crate::{
     auth::{AuthConfig, AuthService, SmtpEmailSender, UnconfiguredEmailSender, routes},
+    budgets::{BudgetService, router as budget_routes},
     categories::{CategoryService, router as category_routes},
     config::{AppConfig, HttpSafetyConfig},
     currency::{CurrencyRepository, EnabledCurrencyResponse},
@@ -53,6 +54,7 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
     let onboarding = OnboardingService::new(state.pool.clone());
     let wallets = WalletService::new(state.pool.clone());
     let categories = CategoryService::new(state.pool.clone());
+    let budgets = BudgetService::new(state.pool.clone());
     let transactions = TransactionService::new(state.pool.clone());
     Router::<AppState>::new()
         .nest("/api/v1/auth", routes::router(auth.clone()))
@@ -61,6 +63,7 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
             onboarding_routes::router(onboarding)
                 .merge(wallet_routes::router(wallets))
                 .merge(category_routes(categories))
+                .merge(budget_routes(budgets))
                 .merge(transaction_routes(transactions))
                 .layer(Extension(auth)),
         )
