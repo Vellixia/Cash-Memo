@@ -1,0 +1,287 @@
+mod support;
+
+use axum::{
+    body::{Body, to_bytes},
+    http::{Request, StatusCode, header},
+};
+use cashmemo_api::app::{AppState, build_app};
+use chrono::{DateTime, Utc};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use sqlx::PgPool;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+#[sqlx::test(migrations = false)]
+async fn history_uses_stable_keyset_traversal_and_explicit_load_more_contract(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "history@example.test").await;
+    let wallet = insert_wallet(&pool, user_id).await;
+    let category = insert_category(&pool, user_id).await;
+    let occurred_at: DateTime<Utc> = "2026-08-21T12:00:00Z".parse().unwrap();
+    let first = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        occurred_at,
+        "first",
+        false,
+    )
+    .await;
+    let second = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        occurred_at,
+        "second",
+        false,
+    )
+    .await;
+    let third = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        occurred_at,
+        "third",
+        false,
+    )
+    .await;
+    let mut expected = vec![first, second, third];
+    expected.sort_by(|left, right| right.cmp(left));
+    assert_eq!(
+        ordered_ids(&pool, user_id).await,
+        expected,
+        "fixture establishes the stable UUID tie-breaker"
+    );
+
+    let app = build_app(AppState { pool });
+    let first_page = response_json(
+        app.clone()
+            .oneshot(request("/api/v1/transactions?limit=2", &cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let first_ids = ids(&first_page);
+    assert_eq!(first_ids, expected[..2]);
+    let cursor = first_page["next_cursor"]
+        .as_str()
+        .expect("page must expose next_cursor");
+    let second_page = response_json(
+        app.clone()
+            .oneshot(request(
+                &format!("/api/v1/transactions?limit=2&cursor={cursor}"),
+                &cookie,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(ids(&second_page), expected[2..]);
+    assert!(
+        second_page["next_cursor"].is_null(),
+        "last page makes Load-more exhaustion explicit"
+    );
+    assert_eq!(first_page["items"].as_array().unwrap().len(), 2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn history_rejects_invalid_bounds_and_untrusted_cursors(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (_user_id, cookie) = authenticated_user(&pool, "history-validation@example.test").await;
+    let app = build_app(AppState { pool });
+
+    for uri in [
+        "/api/v1/transactions?limit=0",
+        "/api/v1/transactions?limit=101",
+        "/api/v1/transactions?cursor=not-base64url",
+        &format!("/api/v1/transactions?q={}", "x".repeat(101)),
+    ] {
+        let response = app.clone().oneshot(request(uri, &cookie)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{uri}");
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], "VALIDATION_FAILED");
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn history_filters_literal_search_future_rows_and_trash_without_cross_user_replay(
+    pool: PgPool,
+) {
+    support::migrate_v1(&pool).await;
+    let (owner_id, owner_cookie) = authenticated_user(&pool, "history-owner@example.test").await;
+    let (other_id, other_cookie) = authenticated_user(&pool, "history-other@example.test").await;
+    let owner_wallet = insert_wallet(&pool, owner_id).await;
+    let owner_category = insert_category(&pool, owner_id).await;
+    let other_wallet = insert_wallet(&pool, other_id).await;
+    let other_category = insert_category(&pool, other_id).await;
+    let active = insert_transaction(
+        &pool,
+        owner_id,
+        owner_wallet,
+        owner_category,
+        "2030-01-02T00:00:00Z".parse().unwrap(),
+        "Future 100%_\\ match",
+        false,
+    )
+    .await;
+    let _older_active = insert_transaction(
+        &pool,
+        owner_id,
+        owner_wallet,
+        owner_category,
+        "2030-01-01T00:00:00Z".parse().unwrap(),
+        "older",
+        false,
+    )
+    .await;
+    let trashed = insert_transaction(
+        &pool,
+        owner_id,
+        owner_wallet,
+        owner_category,
+        "2030-01-01T00:00:00Z".parse().unwrap(),
+        "trash",
+        true,
+    )
+    .await;
+    let other = insert_transaction(
+        &pool,
+        other_id,
+        other_wallet,
+        other_category,
+        "2030-01-01T00:00:00Z".parse().unwrap(),
+        "other",
+        false,
+    )
+    .await;
+    let app = build_app(AppState { pool });
+
+    let active_page = response_json(app.clone().oneshot(request(&format!("/api/v1/transactions?wallet_id={owner_wallet}&category_id={owner_category}&type=expense&from=2030-01-01T00:00:00Z&to=2030-01-03T00:00:00Z&q=%20Future%20100%25_%5C%20%20"), &owner_cookie)).await.unwrap()).await;
+    assert_eq!(ids(&active_page), vec![active]);
+    let trash_page = response_json(
+        app.clone()
+            .oneshot(request("/api/v1/transactions/trash", &owner_cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(ids(&trash_page), vec![trashed]);
+    assert!(!ids(&active_page).contains(&trashed));
+
+    let owner_cursor_page = response_json(
+        app.clone()
+            .oneshot(request("/api/v1/transactions?limit=1", &owner_cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let owner_cursor = owner_cursor_page["next_cursor"]
+        .as_str()
+        .expect("owner page has continuation cursor");
+    let other_page = response_json(
+        app.clone()
+            .oneshot(request(
+                &format!("/api/v1/transactions?cursor={owner_cursor}"),
+                &other_cookie,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let other_ids = ids(&other_page);
+    assert!(!other_ids.contains(&active));
+    assert!(!other_ids.contains(&trashed));
+    assert!(other_ids.iter().all(|id| *id == other));
+}
+
+async fn authenticated_user(pool: &PgPool, email: &str) -> (Uuid, String) {
+    let user_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO users (email, password_hash, status) VALUES ($1, 'hash', 'active') RETURNING id",
+    )
+    .bind(email)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let token = format!("test-token-{user_id}");
+    let token_hash = format!("{:x}", Sha256::digest(token.as_bytes()));
+    sqlx::query("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, now() + INTERVAL '1 day')")
+        .bind(user_id)
+        .bind(token_hash)
+        .execute(pool)
+        .await
+        .unwrap();
+    (user_id, format!("__Host-cashmemo_session={token}"))
+}
+
+async fn insert_wallet(pool: &PgPool, user_id: Uuid) -> Uuid {
+    sqlx::query_scalar("INSERT INTO wallets (user_id, name, currency_code, opening_balance) VALUES ($1, $2, 'USD', 0) RETURNING id")
+        .bind(user_id)
+        .bind(format!("wallet-{}", Uuid::new_v4()))
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn insert_category(pool: &PgPool, user_id: Uuid) -> Uuid {
+    let name = format!("category-{}", Uuid::new_v4());
+    sqlx::query_scalar("INSERT INTO categories (user_id, name, normalized_name, transaction_type) VALUES ($1, $2, $2, 'EXPENSE') RETURNING id")
+        .bind(user_id)
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn insert_transaction(
+    pool: &PgPool,
+    user_id: Uuid,
+    wallet_id: Uuid,
+    category_id: Uuid,
+    occurred_at: DateTime<Utc>,
+    note: &str,
+    trashed: bool,
+) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO transactions (user_id, wallet_id, category_id, transaction_type, amount, occurred_at, note, deleted_at, purge_after)
+         VALUES ($1, $2, $3, 'EXPENSE', 1, $4, $5, CASE WHEN $6 THEN now() ELSE NULL END, CASE WHEN $6 THEN now() + INTERVAL '30 days' ELSE NULL END) RETURNING id",
+    )
+    .bind(user_id).bind(wallet_id).bind(category_id).bind(occurred_at).bind(note).bind(trashed)
+    .fetch_one(pool).await.unwrap()
+}
+
+async fn ordered_ids(pool: &PgPool, user_id: Uuid) -> Vec<Uuid> {
+    sqlx::query_scalar(
+        "SELECT id FROM transactions WHERE user_id = $1 ORDER BY occurred_at DESC, id DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+fn request(uri: &str, cookie: &str) -> Request<Body> {
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header(header::COOKIE, cookie)
+        .header(header::ORIGIN, "http://localhost:3000")
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn ids(page: &Value) -> Vec<Uuid> {
+    page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| Uuid::parse_str(item["id"].as_str().unwrap()).unwrap())
+        .collect()
+}
+
+async fn response_json(response: axum::response::Response) -> Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}

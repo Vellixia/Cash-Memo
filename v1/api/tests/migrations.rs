@@ -85,7 +85,15 @@ async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 5")
+    sqlx::query("DROP INDEX transactions_active_history_order_idx")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP INDEX transactions_trash_purge_idx")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 5")
         .execute(&pool)
         .await
         .unwrap();
@@ -101,7 +109,7 @@ async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6]);
 }
 
 #[sqlx::test(migrations = false)]

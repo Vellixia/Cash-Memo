@@ -1,8 +1,10 @@
+mod query;
 mod routes;
 mod service;
 
+pub use query::{HistoryQuery, RawHistoryQuery};
 pub use routes::router;
 pub use service::{
-    EntryDefaults, NewTransaction, Transaction, TransactionError, TransactionService,
+    EntryDefaults, HistoryPage, NewTransaction, Transaction, TransactionError, TransactionService,
     UpdateTransaction,
 };

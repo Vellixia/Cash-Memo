@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use crate::{currency::CurrencyCode, money::Money};
 
+use super::query::{HistoryCursor, HistoryQuery};
+
 #[derive(Clone)]
 pub struct TransactionService {
     pool: PgPool,
@@ -32,6 +34,8 @@ pub enum TransactionError {
     InvalidOccurredAt,
     #[error("transaction update has no changes")]
     NoChanges,
+    #[error("transaction history query is invalid")]
+    InvalidHistoryQuery(&'static str),
     #[error("transaction persistence failed")]
     Persistence,
 }
@@ -83,7 +87,7 @@ pub enum TransactionDirection {
 }
 
 impl TransactionDirection {
-    fn parse(input: &str) -> Result<Self, TransactionError> {
+    pub(crate) fn parse(input: &str) -> Result<Self, TransactionError> {
         match input {
             "income" => Ok(Self::Income),
             "expense" => Ok(Self::Expense),
@@ -177,6 +181,48 @@ impl TransactionService {
     ) -> Result<Transaction, TransactionError> {
         let row = load(&self.pool, user_id, transaction_id).await?;
         row.try_into()
+    }
+
+    pub async fn history(
+        &self,
+        user_id: Uuid,
+        query: HistoryQuery,
+        include_trash: bool,
+    ) -> Result<HistoryPage, TransactionError> {
+        let transaction_type = query
+            .transaction_type
+            .map(TransactionDirection::database_value);
+        let cursor_occurred_at = query.cursor.as_ref().map(|cursor| cursor.occurred_at);
+        let cursor_id = query.cursor.as_ref().map(|cursor| cursor.id);
+        let mut rows: Vec<TransactionRow> = sqlx::query_as(history_query(include_trash))
+            .bind(user_id)
+            .bind(query.from)
+            .bind(query.to)
+            .bind(transaction_type)
+            .bind(query.wallet_id)
+            .bind(query.category_id)
+            .bind(query.escaped_query)
+            .bind(cursor_occurred_at)
+            .bind(cursor_id)
+            .bind(query.limit + 1)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| TransactionError::Persistence)?;
+        let has_more = rows.len() > query.limit as usize;
+        rows.truncate(query.limit as usize);
+        let next_cursor = has_more.then(|| {
+            let last = rows.last().expect("non-empty page has cursor");
+            HistoryCursor {
+                occurred_at: last.occurred_at,
+                id: last.id,
+            }
+            .encode()
+        });
+        let items = rows
+            .into_iter()
+            .map(Transaction::try_from)
+            .collect::<Result<_, _>>()?;
+        Ok(HistoryPage { items, next_cursor })
     }
 
     pub async fn update(
@@ -362,6 +408,12 @@ impl TransactionService {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct HistoryPage {
+    pub items: Vec<Transaction>,
+    pub next_cursor: Option<String>,
+}
+
 async fn active_wallet(
     database: &mut PgConnection,
     user_id: Uuid,
@@ -489,6 +541,42 @@ fn transaction_query(filter: &str) -> String {
          JOIN currencies c ON c.code = w.currency_code
          {filter}"
     )
+}
+
+fn history_query(include_trash: bool) -> &'static str {
+    if include_trash {
+        "SELECT t.id, t.wallet_id, t.category_id, t.transaction_type::TEXT AS transaction_type,
+                t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
+         FROM transactions t
+         JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
+         JOIN currencies c ON c.code = w.currency_code
+         WHERE t.user_id = $1 AND t.deleted_at IS NOT NULL
+           AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
+           AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at <= $3)
+           AND ($4::TEXT IS NULL OR t.transaction_type::TEXT = $4)
+           AND ($5::UUID IS NULL OR t.wallet_id = $5)
+           AND ($6::UUID IS NULL OR t.category_id = $6)
+           AND ($7::TEXT IS NULL OR t.note ILIKE '%' || $7 || '%' ESCAPE '\\')
+           AND ($8::TIMESTAMPTZ IS NULL OR (t.occurred_at, t.id) < ($8, $9::UUID))
+         ORDER BY t.occurred_at DESC, t.id DESC
+         LIMIT $10"
+    } else {
+        "SELECT t.id, t.wallet_id, t.category_id, t.transaction_type::TEXT AS transaction_type,
+                t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
+         FROM transactions t
+         JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
+         JOIN currencies c ON c.code = w.currency_code
+         WHERE t.user_id = $1 AND t.deleted_at IS NULL
+           AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
+           AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at <= $3)
+           AND ($4::TEXT IS NULL OR t.transaction_type::TEXT = $4)
+           AND ($5::UUID IS NULL OR t.wallet_id = $5)
+           AND ($6::UUID IS NULL OR t.category_id = $6)
+           AND ($7::TEXT IS NULL OR t.note ILIKE '%' || $7 || '%' ESCAPE '\\')
+           AND ($8::TIMESTAMPTZ IS NULL OR (t.occurred_at, t.id) < ($8, $9::UUID))
+         ORDER BY t.occurred_at DESC, t.id DESC
+         LIMIT $10"
+    }
 }
 
 impl TryFrom<TransactionRow> for Transaction {

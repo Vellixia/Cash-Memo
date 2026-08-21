@@ -18,7 +18,14 @@ const V1_TABLES: &[&str] = &[
     "wallets",
 ];
 const IDENTITY_ONLY_MIGRATIONS: &[(i64, bool)] = &[(1, true)];
-const FULL_V1_MIGRATIONS: &[(i64, bool)] = &[(1, true), (2, true), (3, true), (4, true), (5, true)];
+const FULL_V1_MIGRATIONS: &[(i64, bool)] = &[
+    (1, true),
+    (2, true),
+    (3, true),
+    (4, true),
+    (5, true),
+    (6, true),
+];
 const FULL_SCHEMA_MIGRATION_PREFIXES: &[&[(i64, bool)]] = &[
     &[(1, true), (2, true)],
     &[(1, true), (2, true), (3, true)],

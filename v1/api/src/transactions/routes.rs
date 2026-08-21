@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use axum::{
     Json, Router,
-    extract::{Extension, Path},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     routing::{get, post},
 };
@@ -16,8 +16,8 @@ use crate::{
 };
 
 use super::{
-    EntryDefaults, NewTransaction, Transaction, TransactionError, TransactionService,
-    UpdateTransaction,
+    EntryDefaults, HistoryPage, NewTransaction, RawHistoryQuery, Transaction, TransactionError,
+    TransactionService, UpdateTransaction,
 };
 
 pub fn router<S>(service: TransactionService) -> Router<S>
@@ -26,7 +26,8 @@ where
 {
     Router::new()
         .route("/transactions/entry-defaults", get(entry_defaults))
-        .route("/transactions", post(create_transaction))
+        .route("/transactions", get(list_history).post(create_transaction))
+        .route("/transactions/trash", get(list_trash))
         .route(
             "/transactions/{transaction_id}",
             get(get_transaction)
@@ -42,6 +43,40 @@ where
             axum::routing::delete(permanently_delete_transaction),
         )
         .layer(Extension(service))
+}
+
+async fn list_history(
+    Extension(service): Extension<TransactionService>,
+    session: AuthSession,
+    Extension(request_id): Extension<RequestId>,
+    Query(raw_query): Query<RawHistoryQuery>,
+) -> Result<Json<HistoryPage>, HttpError> {
+    let user_id = full_access_user_id(session, request_id.clone())?;
+    let query = raw_query
+        .parse()
+        .map_err(|error| validation(error.field, request_id.clone()))?;
+    service
+        .history(user_id, query, false)
+        .await
+        .map(Json)
+        .map_err(|error| map_error(error, request_id))
+}
+
+async fn list_trash(
+    Extension(service): Extension<TransactionService>,
+    session: AuthSession,
+    Extension(request_id): Extension<RequestId>,
+    Query(raw_query): Query<RawHistoryQuery>,
+) -> Result<Json<HistoryPage>, HttpError> {
+    let user_id = full_access_user_id(session, request_id.clone())?;
+    let query = raw_query
+        .parse()
+        .map_err(|error| validation(error.field, request_id.clone()))?;
+    service
+        .history(user_id, query, true)
+        .await
+        .map(Json)
+        .map_err(|error| map_error(error, request_id))
 }
 
 #[derive(Deserialize)]
@@ -204,6 +239,7 @@ fn map_error(error: TransactionError, request_id: RequestId) -> HttpError {
         TransactionError::InvalidNote => validation("note", request_id),
         TransactionError::InvalidOccurredAt => validation("occurred_at", request_id),
         TransactionError::NoChanges => HttpError::validation(BTreeMap::new(), request_id),
+        TransactionError::InvalidHistoryQuery(field) => validation(field, request_id),
         TransactionError::Persistence => HttpError::internal(request_id),
     }
 }
