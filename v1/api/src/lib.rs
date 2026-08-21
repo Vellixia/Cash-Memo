@@ -1,4 +1,5 @@
 pub mod app;
+pub mod accounts;
 pub mod auth;
 pub mod budgets;
 pub mod categories;
@@ -11,6 +12,7 @@ pub mod money;
 pub mod onboarding;
 pub mod recurring;
 pub mod reporting;
+pub mod receipts;
 pub mod time;
 pub mod transactions;
 pub mod wallets;

@@ -8,6 +8,7 @@ use axum::{
 use sqlx::PgPool;
 
 use crate::{
+    accounts::{AccountDeletionService, routes as account_routes},
     auth::{AuthConfig, AuthService, SmtpEmailSender, UnconfiguredEmailSender, routes},
     budgets::{BudgetService, router as budget_routes},
     categories::{CategoryService, router as category_routes},
@@ -53,6 +54,7 @@ pub fn build_app_with_config(state: AppState, config: &AppConfig) -> Router {
 }
 
 fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthService) -> Router {
+    let deletion = AccountDeletionService::new(state.pool.clone());
     let onboarding = OnboardingService::new(state.pool.clone());
     let wallets = WalletService::new(state.pool.clone());
     let categories = CategoryService::new(state.pool.clone());
@@ -65,6 +67,7 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
         .nest(
             "/api/v1",
             onboarding_routes::router(onboarding)
+                .merge(account_routes::router(deletion))
                 .merge(wallet_routes::router(wallets))
                 .merge(category_routes(categories))
                 .merge(budget_routes(budgets))

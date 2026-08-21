@@ -322,7 +322,7 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         let user_id: Option<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM users WHERE email = $1 AND email_verified AND status = 'active' FOR UPDATE",
+            "SELECT id FROM users WHERE email = $1 AND email_verified AND status IN ('active', 'pending_deletion') FOR UPDATE",
         )
         .bind(&email).fetch_optional(&mut *transaction).await.map_err(|_| AuthError::Persistence)?;
         let token = if let Some(user_id) = user_id {

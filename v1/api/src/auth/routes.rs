@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{error::HttpError, http::RequestId};
 
-use super::{AuthError, AuthService, AuthSession};
+use super::{AuthError, AuthService, AuthSession, SessionAccess};
 
 pub fn router<S>(auth: AuthService) -> Router<S>
 where
@@ -125,18 +125,20 @@ async fn logout(
     Ok(clear_cookie())
 }
 
-async fn current_session(session: AuthSession) -> Json<CurrentSession> {
-    Json(CurrentSession {
+async fn current_session(session: AuthSession) -> Result<Json<CurrentSession>, HttpError> {
+    if session.access != SessionAccess::Full { return Err(HttpError::forbidden(RequestId::new())); }
+    Ok(Json(CurrentSession {
         user_id: session.user_id,
         session_id: session.session_id,
         access: session.access,
-    })
+    }))
 }
 
 async fn revoke_all(
     Extension(auth): Extension<AuthService>,
     session: AuthSession,
 ) -> Result<Response, HttpError> {
+    if session.access != SessionAccess::Full { return Err(HttpError::forbidden(RequestId::new())); }
     auth.revoke_all(session.user_id)
         .await
         .map_err(|_| HttpError::unauthorized(RequestId::new()))?;

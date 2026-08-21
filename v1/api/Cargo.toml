@@ -4,15 +4,23 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+s3-receipts = ["dep:aws-config", "dep:aws-credential-types", "dep:aws-sdk-s3"]
+
 [dependencies]
 axum.workspace = true
 argon2.workspace = true
 base64.workspace = true
 async-trait.workspace = true
+aws-config = { workspace = true, optional = true }
+aws-credential-types = { workspace = true, optional = true }
+aws-sdk-s3 = { workspace = true, optional = true }
 chrono-tz.workspace = true
 chrono.workspace = true
 clap.workspace = true
 lettre.workspace = true
+hmac.workspace = true
 rand.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
