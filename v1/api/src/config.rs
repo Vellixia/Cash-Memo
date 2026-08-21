@@ -7,10 +7,33 @@ pub struct AppConfig {
     pub database_url: String,
     pub bind_addr: SocketAddr,
     pub smtp: SmtpEmailConfig,
+    pub environment: AppEnvironment,
     pub auth: crate::auth::AuthConfig,
     /// V1 runs one Rust API replica. These in-memory limits are not distributed;
     /// add a shared limiter before scaling to multiple replicas.
     pub http_safety: HttpSafetyConfig,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AppEnvironment {
+    Development,
+    Test,
+    Production,
+}
+
+impl AppEnvironment {
+    fn from_env() -> Result<Self, ConfigError> {
+        match env::var("CASHMEMO_V1_APP_ENV")
+            .unwrap_or_else(|_| "development".to_owned())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "development" => Ok(Self::Development),
+            "test" => Ok(Self::Test),
+            "production" => Ok(Self::Production),
+            _ => Err(ConfigError::InvalidAppEnvironment),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -59,8 +82,9 @@ impl AppConfig {
             .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
             .parse()
             .map_err(ConfigError::InvalidBindAddress)?;
+        let environment = AppEnvironment::from_env()?;
         let http_safety = HttpSafetyConfig::from_env()?;
-        let smtp = SmtpEmailConfig::from_env()?;
+        let smtp = SmtpEmailConfig::from_env(environment)?;
         let password_hash = crate::auth::Argon2idConfig::new(
             parse_positive_u32("CASHMEMO_V1_ARGON2_MEMORY_KIB", 65_536)?,
             parse_positive_u32("CASHMEMO_V1_ARGON2_TIME_COST", 3)?,
@@ -87,6 +111,7 @@ impl AppConfig {
             database_url,
             bind_addr,
             smtp,
+            environment,
             auth,
             http_safety,
         })
@@ -94,7 +119,7 @@ impl AppConfig {
 }
 
 impl SmtpEmailConfig {
-    fn from_env() -> Result<Self, ConfigError> {
+    fn from_env(environment: AppEnvironment) -> Result<Self, ConfigError> {
         let host = env::var("CASHMEMO_V1_SMTP_HOST").map_err(|_| ConfigError::MissingSmtpHost)?;
         if host.trim().is_empty() {
             return Err(ConfigError::MissingSmtpHost);
@@ -127,15 +152,30 @@ impl SmtpEmailConfig {
             "plaintext" => SmtpSecurity::Plaintext,
             _ => return Err(ConfigError::InvalidSmtpSecurity),
         };
-        Ok(Self {
+        let config = Self {
             host,
             port,
             username,
             password,
             from,
             security,
-        })
+        };
+        config.validate_for_environment(environment)?;
+        Ok(config)
     }
+
+    pub fn validate_for_environment(&self, environment: AppEnvironment) -> Result<(), ConfigError> {
+        if self.security == SmtpSecurity::Plaintext
+            && (environment == AppEnvironment::Production || !is_local_mailpit_host(&self.host))
+        {
+            return Err(ConfigError::PlaintextSmtpNotAllowed);
+        }
+        Ok(())
+    }
+}
+
+fn is_local_mailpit_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "mailpit")
 }
 
 impl Default for HttpSafetyConfig {
@@ -255,6 +295,10 @@ pub enum ConfigError {
     InvalidSmtpPort,
     #[error("CASHMEMO_V1_SMTP_SECURITY must be starttls or plaintext")]
     InvalidSmtpSecurity,
+    #[error("CASHMEMO_V1_APP_ENV must be development, test, or production")]
+    InvalidAppEnvironment,
+    #[error("plaintext SMTP is allowed only for development/test local Mailpit")]
+    PlaintextSmtpNotAllowed,
     #[error("Argon2id parameters do not meet the approved security floor")]
     InvalidArgon2Parameters,
     #[error("session configuration exceeds approved limits")]

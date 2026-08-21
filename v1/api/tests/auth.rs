@@ -9,7 +9,7 @@ use cashmemo_api::auth::{
     Argon2idConfig, AuthConfig, AuthConfigError, AuthError, AuthService, EmailError, EmailSender,
     PasswordError, SessionAccess, normalize_email, validate_password,
 };
-use cashmemo_api::config::{SmtpEmailConfig, SmtpSecurity};
+use cashmemo_api::config::{AppEnvironment, SmtpEmailConfig, SmtpSecurity};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -30,6 +30,21 @@ impl EmailSender for FailingEmailSender {
 
     async fn send_password_reset(&self, _: &str, _: &str) -> Result<(), EmailError> {
         Err(EmailError::Delivery)
+    }
+}
+
+struct DelayedEmailSender(std::time::Duration);
+
+#[async_trait::async_trait]
+impl EmailSender for DelayedEmailSender {
+    async fn send_verification(&self, _: &str, _: &str) -> Result<(), EmailError> {
+        tokio::time::sleep(self.0).await;
+        Ok(())
+    }
+
+    async fn send_password_reset(&self, _: &str, _: &str) -> Result<(), EmailError> {
+        tokio::time::sleep(self.0).await;
+        Ok(())
     }
 }
 
@@ -54,6 +69,16 @@ impl EmailSender for FakeEmailSender {
 
 fn service(pool: PgPool, mailer: Arc<FakeEmailSender>) -> AuthService {
     AuthService::new(pool, mailer, AuthConfig::for_tests())
+}
+
+async fn sent_token(sent: &Mutex<Vec<(String, String)>>, index: usize) -> String {
+    for _ in 0..200 {
+        if let Some((_, token)) = sent.lock().unwrap().get(index) {
+            return token.clone();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    panic!("timed out waiting for email token {index}");
 }
 
 #[test]
@@ -118,6 +143,24 @@ fn smtp_security_mode_requires_explicit_plaintext_for_mailpit() {
         from: "noreply@example.com".to_owned(),
         security: SmtpSecurity::Plaintext,
     };
+    assert!(
+        mailpit
+            .validate_for_environment(AppEnvironment::Development)
+            .is_ok()
+    );
+    assert!(
+        mailpit
+            .validate_for_environment(AppEnvironment::Production)
+            .is_err()
+    );
+    assert!(
+        SmtpEmailConfig {
+            host: "smtp.example.test".to_owned(),
+            ..mailpit.clone()
+        }
+        .validate_for_environment(AppEnvironment::Development)
+        .is_err()
+    );
     assert!(SmtpEmailSender::new(&mailpit).is_ok());
     assert_eq!(SmtpSecurity::default(), SmtpSecurity::StartTls);
 }
@@ -139,7 +182,7 @@ async fn registration_hashes_password_and_stores_only_hashed_256_bit_token(pool:
     assert_eq!(email, "alice+tag@example.com");
     assert!(password_hash.starts_with("$argon2id$"));
 
-    let raw = mailer.verification.lock().unwrap()[0].1.clone();
+    let raw = sent_token(&mailer.verification, 0).await;
     assert_eq!(raw.len(), 43);
     let stored: String = sqlx::query_scalar("SELECT token_hash FROM auth_tokens")
         .fetch_one(&pool)
@@ -165,7 +208,7 @@ async fn registration_and_reset_keep_generic_success_when_delivery_fails(pool: P
         .register("alice@example.com", "correct horse battery staple")
         .await
         .unwrap();
-    let verification = working_mailer.verification.lock().unwrap()[0].1.clone();
+    let verification = sent_token(&working_mailer.verification, 0).await;
     working.verify_email(&verification).await.unwrap();
 
     let failing = AuthService::new(pool, Arc::new(FailingEmailSender), AuthConfig::for_tests());
@@ -178,15 +221,38 @@ async fn registration_and_reset_keep_generic_success_when_delivery_fails(pool: P
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn resend_uses_common_public_response_deadline_without_waiting_for_smtp(pool: PgPool) {
+    let setup_mailer = Arc::new(FakeEmailSender::default());
+    let setup = service(pool.clone(), setup_mailer);
+    setup
+        .register("alice@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let config =
+        AuthConfig::for_tests().with_public_response_floor(std::time::Duration::from_millis(20));
+    let delayed = AuthService::new(
+        pool,
+        Arc::new(DelayedEmailSender(std::time::Duration::from_millis(500))),
+        config,
+    );
+    let started = std::time::Instant::now();
+    delayed
+        .resend_verification("alice@example.com")
+        .await
+        .unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_millis(200));
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn verification_tokens_are_replaced_single_use_and_expiring(pool: PgPool) {
     let mailer = Arc::new(FakeEmailSender::default());
     let auth = service(pool.clone(), mailer.clone());
     auth.register("alice@example.com", "correct horse battery staple")
         .await
         .unwrap();
-    let first = mailer.verification.lock().unwrap()[0].1.clone();
+    let first = sent_token(&mailer.verification, 0).await;
     auth.resend_verification("alice@example.com").await.unwrap();
-    let second = mailer.verification.lock().unwrap()[1].1.clone();
+    let second = sent_token(&mailer.verification, 1).await;
     assert_ne!(first, second);
     assert_eq!(
         auth.verify_email(&first).await,
@@ -224,7 +290,7 @@ async fn login_is_enumeration_safe_and_only_reveals_unverified_after_password_ch
             .await,
         Err(AuthError::EmailNotVerified),
     );
-    let token = mailer.verification.lock().unwrap()[0].1.clone();
+    let token = sent_token(&mailer.verification, 0).await;
     auth.verify_email(&token).await.unwrap();
     assert!(
         auth.login("alice@example.com", "correct horse battery staple")
@@ -240,7 +306,7 @@ async fn sessions_honor_idle_and_absolute_expiry_and_revoke_operations(pool: PgP
     auth.register("alice@example.com", "correct horse battery staple")
         .await
         .unwrap();
-    let verification = mailer.verification.lock().unwrap()[0].1.clone();
+    let verification = sent_token(&mailer.verification, 0).await;
     auth.verify_email(&verification).await.unwrap();
     let first = auth
         .login("alice@example.com", "correct horse battery staple")
@@ -281,7 +347,7 @@ async fn session_touch_is_hourly_and_login_sets_host_only_secure_cookie(pool: Pg
     auth.register("alice@example.com", "correct horse battery staple")
         .await
         .unwrap();
-    let verification = mailer.verification.lock().unwrap()[0].1.clone();
+    let verification = sent_token(&mailer.verification, 0).await;
     auth.verify_email(&verification).await.unwrap();
     let login = auth
         .login("alice@example.com", "correct horse battery staple")
@@ -361,7 +427,7 @@ async fn password_reset_is_single_use_and_revokes_sessions_transactionally(pool:
     auth.register("alice@example.com", "correct horse battery staple")
         .await
         .unwrap();
-    let verification = mailer.verification.lock().unwrap()[0].1.clone();
+    let verification = sent_token(&mailer.verification, 0).await;
     auth.verify_email(&verification).await.unwrap();
     let session = auth
         .login("alice@example.com", "correct horse battery staple")
@@ -370,7 +436,7 @@ async fn password_reset_is_single_use_and_revokes_sessions_transactionally(pool:
     auth.request_password_reset("alice@example.com")
         .await
         .unwrap();
-    let reset = mailer.resets.lock().unwrap()[0].1.clone();
+    let reset = sent_token(&mailer.resets, 0).await;
     auth.consume_password_reset(&reset, "replacement password correct")
         .await
         .unwrap();

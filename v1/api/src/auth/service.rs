@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use chrono::{DateTime, Utc};
 use rand::Rng;
@@ -32,6 +35,7 @@ pub struct AuthService {
     pool: PgPool,
     mailer: Arc<dyn EmailSender>,
     config: AuthConfig,
+    dummy_password_hash: String,
 }
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
@@ -54,14 +58,19 @@ pub enum AuthError {
 
 impl AuthService {
     pub fn new(pool: PgPool, mailer: Arc<dyn EmailSender>, config: AuthConfig) -> Self {
+        let dummy_password_hash =
+            hash_password("correct horse battery staple", &config.password_hash)
+                .expect("approved dummy password configuration");
         Self {
             pool,
             mailer,
             config,
+            dummy_password_hash,
         }
     }
 
     pub async fn register(&self, email: &str, password: &str) -> Result<(), AuthError> {
+        let started = Instant::now();
         validate_email(email)?;
         validate_password(password).map_err(|_| AuthError::Validation)?;
         let email = normalize_email(email);
@@ -115,12 +124,14 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         if let Some(token) = token {
-            let _ = self.mailer.send_verification(&email, &token).await;
+            self.queue_verification(email.clone(), token);
         }
+        self.finish_public_response(started).await;
         Ok(())
     }
 
     pub async fn resend_verification(&self, email: &str) -> Result<(), AuthError> {
+        let started = Instant::now();
         validate_email(email)?;
         let email = normalize_email(email);
         let mut transaction = self
@@ -153,8 +164,9 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         if let Some(token) = token {
-            let _ = self.mailer.send_verification(&email, &token).await;
+            self.queue_verification(email.clone(), token);
         }
+        self.finish_public_response(started).await;
         Ok(())
     }
 
@@ -188,7 +200,7 @@ impl AuthService {
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| AuthError::Persistence)?;
-        let password_hash = login_password_hash(
+        let password_hash = self.login_password_hash(
             user.as_ref()
                 .map(|(_, password_hash, _, _)| password_hash.as_str()),
         );
@@ -300,9 +312,10 @@ impl AuthService {
     }
 
     pub async fn request_password_reset(&self, email: &str) -> Result<(), AuthError> {
+        let started = Instant::now();
         validate_email(email)?;
         let email = normalize_email(email);
-        let _ = verify_password("not-a-cashmemo-password", login_password_hash(None));
+        let _ = verify_password("not-a-cashmemo-password", self.login_password_hash(None));
         let mut transaction = self
             .pool
             .begin()
@@ -325,8 +338,9 @@ impl AuthService {
             .await
             .map_err(|_| AuthError::Persistence)?;
         if let Some(token) = token {
-            let _ = self.mailer.send_password_reset(&email, &token).await;
+            self.queue_password_reset(email.clone(), token);
         }
+        self.finish_public_response(started).await;
         Ok(())
     }
 
@@ -406,6 +420,34 @@ impl AuthService {
             .bind(token_hash(raw_token)).execute(&mut **transaction).await.map_err(|_| AuthError::Persistence)?;
         Ok(user_id)
     }
+
+    fn login_password_hash<'a>(&'a self, stored: Option<&'a str>) -> &'a str {
+        stored.unwrap_or(&self.dummy_password_hash)
+    }
+
+    fn queue_verification(&self, email: String, raw_token: String) {
+        let mailer = self.mailer.clone();
+        tokio::spawn(async move {
+            let _ = mailer.send_verification(&email, &raw_token).await;
+        });
+    }
+
+    fn queue_password_reset(&self, email: String, raw_token: String) {
+        let mailer = self.mailer.clone();
+        tokio::spawn(async move {
+            let _ = mailer.send_password_reset(&email, &raw_token).await;
+        });
+    }
+
+    async fn finish_public_response(&self, started: Instant) {
+        if let Some(remaining) = self
+            .config
+            .public_response_floor
+            .checked_sub(started.elapsed())
+        {
+            tokio::time::sleep(remaining).await;
+        }
+    }
 }
 
 pub fn normalize_email(email: &str) -> String {
@@ -458,26 +500,32 @@ fn chrono_duration(duration: Duration) -> chrono::Duration {
     chrono::Duration::from_std(duration).expect("configured duration fits chrono")
 }
 
-fn login_password_hash(stored: Option<&str>) -> &str {
-    static DUMMY_PASSWORD_HASH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-        hash_password(
-            "correct horse battery staple",
-            &super::password::Argon2idConfig::default(),
-        )
-        .expect("approved dummy password config")
-    });
-    stored.unwrap_or(DUMMY_PASSWORD_HASH.as_str())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::postgres::PgPoolOptions;
 
-    #[test]
-    fn missing_login_uses_valid_argon2id_dummy_hash() {
+    #[tokio::test]
+    async fn missing_login_uses_valid_argon2id_dummy_hash() {
+        let config = AuthConfig::new(
+            Duration::from_secs(7 * 24 * 60 * 60),
+            Duration::from_secs(30 * 24 * 60 * 60),
+            Duration::from_secs(60 * 60),
+            super::super::password::Argon2idConfig::new(131_072, 3, 1).unwrap(),
+        )
+        .unwrap();
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://cashmemo:cashmemo@127.0.0.1:1/cashmemo")
+            .unwrap();
+        let service = AuthService::new(
+            pool,
+            Arc::new(super::super::email::UnconfiguredEmailSender),
+            config,
+        );
+        assert!(service.dummy_password_hash.contains("m=131072,t=3,p=1"));
         assert!(verify_password(
             "correct horse battery staple",
-            login_password_hash(None),
+            &service.dummy_password_hash,
         ));
     }
 }

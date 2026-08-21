@@ -43,6 +43,7 @@ pub struct AuthConfig {
     pub absolute_timeout: Duration,
     pub touch_interval: Duration,
     pub password_hash: Argon2idConfig,
+    pub public_response_floor: Duration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -93,7 +94,13 @@ impl AuthConfig {
             absolute_timeout,
             touch_interval,
             password_hash,
+            public_response_floor: Duration::from_millis(250),
         })
+    }
+
+    pub fn with_public_response_floor(mut self, floor: Duration) -> Self {
+        self.public_response_floor = floor;
+        self
     }
 
     pub fn for_tests() -> Self {
