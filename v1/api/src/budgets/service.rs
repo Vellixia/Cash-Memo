@@ -260,6 +260,31 @@ impl BudgetService {
             budgets,
         })
     }
+
+    pub async fn summary_for_month(
+        &self,
+        user_id: Uuid,
+        requested_month: Option<&str>,
+    ) -> Result<BudgetSummary, BudgetError> {
+        let month = match requested_month {
+            Some(month) => month.to_owned(),
+            None => {
+                let timezone: String =
+                    sqlx::query_scalar("SELECT timezone FROM users WHERE id = $1")
+                        .bind(user_id)
+                        .fetch_optional(&self.pool)
+                        .await
+                        .map_err(|_| BudgetError::Persistence)?
+                        .ok_or(BudgetError::NotFound)?;
+                let timezone: Tz = timezone.parse().map_err(|_| BudgetError::Persistence)?;
+                Utc::now()
+                    .with_timezone(&timezone)
+                    .format("%Y-%m")
+                    .to_string()
+            }
+        };
+        self.summary(user_id, &month).await
+    }
 }
 
 async fn load(pool: &PgPool, user_id: Uuid, budget_id: Uuid) -> Result<BudgetRow, BudgetError> {

@@ -136,11 +136,8 @@ async fn budget_summary(
     Query(query): Query<MonthQuery>,
 ) -> Result<Json<BudgetSummary>, HttpError> {
     let user_id = full_access_user_id(session, request_id.clone())?;
-    let month = query
-        .month
-        .ok_or_else(|| validation("month", request_id.clone()))?;
     service
-        .summary(user_id, &month)
+        .summary_for_month(user_id, query.month.as_deref())
         .await
         .map(Json)
         .map_err(|error| map_error(error, request_id))
