@@ -1,6 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_credential_types::{Credentials, provider::SharedCredentialsProvider};
 use aws_sdk_s3::{Client, config::Region, primitives::ByteStream};
+use url::Url;
 
 use super::{
     DeletionReceipt, DeletionReceiptStore, ReceiptError, ReceiptWrite, canonical_receipt_bytes,
@@ -15,6 +16,19 @@ pub struct S3ReceiptConfig {
     pub prefix: String,
     pub access_key_id: String,
     pub secret_access_key: String,
+    pub allow_insecure_local_endpoint: bool,
+}
+
+impl S3ReceiptConfig {
+    pub fn validate_endpoint(&self) -> Result<(), ReceiptError> {
+        let endpoint = Url::parse(&self.endpoint).map_err(|_| ReceiptError::Configuration)?;
+        let host = endpoint.host_str().ok_or(ReceiptError::Configuration)?;
+        match endpoint.scheme() {
+            "https" => Ok(()),
+            "http" if self.allow_insecure_local_endpoint && is_approved_local_host(host) => Ok(()),
+            _ => Err(ReceiptError::Configuration),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -38,6 +52,7 @@ impl S3DeletionReceiptStore {
         {
             return Err(ReceiptError::Configuration);
         }
+        config.validate_endpoint()?;
         let credentials = Credentials::new(
             config.access_key_id,
             config.secret_access_key,
@@ -51,8 +66,11 @@ impl S3DeletionReceiptStore {
             .endpoint_url(config.endpoint)
             .load()
             .await;
+        let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+            .force_path_style(true)
+            .build();
         Ok(Self {
-            client: Client::new(&sdk_config),
+            client: Client::from_conf(s3_config),
             bucket: config.bucket,
             prefix: config.prefix,
         })
@@ -83,6 +101,10 @@ impl S3DeletionReceiptStore {
             Err(_) => Err(ReceiptError::Storage),
         }
     }
+}
+
+fn is_approved_local_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "minio")
 }
 
 #[async_trait::async_trait]

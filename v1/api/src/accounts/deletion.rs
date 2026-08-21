@@ -33,6 +33,7 @@ pub struct DeletionClaim {
     pub user_id: Uuid,
     pub purge_started_at: DateTime<Utc>,
     pub token: String,
+    pub lease: Duration,
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
@@ -147,6 +148,7 @@ impl AccountDeletionService {
             user_id,
             purge_started_at,
             token,
+            lease,
         }))
     }
 
@@ -157,6 +159,21 @@ impl AccountDeletionService {
         key_version: u32,
         receipts: &dyn DeletionReceiptStore,
     ) -> Result<(), AccountDeletionError> {
+        let renewed: Option<DateTime<Utc>> = sqlx::query_scalar(
+            "UPDATE users SET purge_claimed_until = now() + $3::interval \
+             WHERE id = $1 AND status = 'purging' AND purge_claim_token = $2 \
+               AND purge_claimed_until > now() \
+             RETURNING purge_claimed_until",
+        )
+        .bind(claim.user_id)
+        .bind(&claim.token)
+        .bind(duration_interval(claim.lease))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| AccountDeletionError::Persistence)?;
+        if renewed.is_none() {
+            return Err(AccountDeletionError::ClaimLost);
+        }
         let receipt = DeletionReceipt::new(
             hmac_user_id(hmac_key, claim.user_id).map_err(|_| AccountDeletionError::Receipt)?,
             claim.purge_started_at,
@@ -167,7 +184,7 @@ impl AccountDeletionService {
             .await
             .map_err(|_| AccountDeletionError::Receipt)?;
         let deleted = sqlx::query(
-            "DELETE FROM users WHERE id = $1 AND status = 'purging' AND purge_claim_token = $2",
+            "DELETE FROM users WHERE id = $1 AND status = 'purging' AND purge_claim_token = $2 AND purge_claimed_until > now()",
         )
         .bind(claim.user_id)
         .bind(&claim.token)

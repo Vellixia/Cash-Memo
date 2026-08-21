@@ -13,6 +13,20 @@ struct FakeReceipts {
     writes: std::sync::Mutex<Vec<DeletionReceipt>>,
 }
 
+struct DelayedReceipts {
+    delay: Duration,
+    writes: std::sync::Mutex<usize>,
+}
+
+#[async_trait::async_trait]
+impl DeletionReceiptStore for DelayedReceipts {
+    async fn put_receipt(&self, _: &DeletionReceipt) -> Result<ReceiptWrite, ReceiptError> {
+        tokio::time::sleep(self.delay).await;
+        *self.writes.lock().unwrap() += 1;
+        Ok(ReceiptWrite::Created)
+    }
+}
+
 #[async_trait::async_trait]
 impl DeletionReceiptStore for FakeReceipts {
     async fn put_receipt(&self, receipt: &DeletionReceipt) -> Result<ReceiptWrite, ReceiptError> {
@@ -105,6 +119,87 @@ async fn claim_is_atomic_and_cancellation_fails_after_purging(pool: PgPool) {
     assert_eq!(
         deletion.cancel(user_id).await,
         Err(AccountDeletionError::NotPending)
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_login_and_deletion_leave_no_live_full_session(pool: PgPool) {
+    let (auth, user_id) = active_account(&pool).await;
+    let deletion = AccountDeletionService::new(pool.clone());
+    let login = auth.login("delete-me@example.com", "correct horse battery staple");
+    let request = deletion.request(user_id, "correct horse battery staple");
+    let (login, request) = tokio::join!(login, request);
+    request.unwrap();
+    if let Ok(login) = login
+        && let Ok(session) = auth.session(&login.raw_token).await
+    {
+        assert_ne!(session.access, SessionAccess::Full);
+    }
+    let active_sessions: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active_sessions, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn expired_or_slow_claimant_cannot_delete_after_takeover_or_lease_expiry(pool: PgPool) {
+    let (_auth, user_id) = active_account(&pool).await;
+    let deletion = AccountDeletionService::new(pool.clone());
+    deletion
+        .request(user_id, "correct horse battery staple")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET deletion_due_at = now() - INTERVAL '1 second' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let stale = deletion
+        .claim_next("stale", Duration::from_secs(1))
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::query("UPDATE users SET purge_claimed_until = now() - INTERVAL '1 second' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let replacement = deletion
+        .claim_next("replacement", Duration::from_secs(1))
+        .await
+        .unwrap()
+        .unwrap();
+    let receipts = FakeReceipts::default();
+    assert_eq!(
+        deletion.purge_claim(&stale, &[3; 32], 1, &receipts).await,
+        Err(AccountDeletionError::ClaimLost)
+    );
+    assert!(receipts.writes.lock().unwrap().is_empty());
+
+    let slow = DelayedReceipts {
+        delay: Duration::from_millis(75),
+        writes: std::sync::Mutex::new(0),
+    };
+    let short_claim = cashmemo_api::accounts::DeletionClaim {
+        lease: Duration::from_millis(25),
+        ..replacement
+    };
+    assert_eq!(
+        deletion.purge_claim(&short_claim, &[3; 32], 1, &slow).await,
+        Err(AccountDeletionError::ClaimLost)
+    );
+    assert_eq!(*slow.writes.lock().unwrap(), 1);
+    assert!(
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&pool)
+            .await
+            .unwrap()
+            .is_some()
     );
 }
 
@@ -214,6 +309,7 @@ async fn db_delete_retry_reuses_concrete_s3_receipt_before_live_cascade(pool: Pg
         prefix: "db-retry".into(),
         access_key_id: env::var("TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID").unwrap(),
         secret_access_key: env::var("TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY").unwrap(),
+        allow_insecure_local_endpoint: true,
     };
     let store = S3DeletionReceiptStore::connect(config.clone())
         .await

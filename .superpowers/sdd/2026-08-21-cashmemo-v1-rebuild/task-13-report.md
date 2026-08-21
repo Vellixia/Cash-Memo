@@ -30,3 +30,12 @@ Status: DONE
 
 - Verification uses only disposable PostgreSQL 16 and MinIO containers on local mapped ports.
 - No production endpoint or credentials were used. Containers are removed after verification.
+
+## Reviewer follow-up
+
+- Login now locks its user row and inserts the session in that transaction, sharing the deletion
+  request lock. The PG concurrency regression proves no Full session remains after transition.
+- Purge renews a live claim before receipt I/O and final deletion predicates a still-live lease.
+  Takeover and delayed-PUT expiry regressions prove a stale claimant cannot delete.
+- Receipt endpoints require HTTPS except explicitly enabled test/development loopback/MinIO HTTP;
+  the S3 client uses forced path-style addressing. Remote plaintext HTTP regression is rejected.

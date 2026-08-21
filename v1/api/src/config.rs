@@ -128,7 +128,7 @@ impl AppConfig {
 
 #[cfg(feature = "s3-receipts")]
 impl DeletionReceiptCommandConfig {
-    pub fn from_env() -> Result<Self, ConfigError> {
+    pub fn from_env(environment: AppEnvironment) -> Result<Self, ConfigError> {
         let required = |name: &'static str| {
             env::var(name)
                 .ok()
@@ -164,6 +164,7 @@ impl DeletionReceiptCommandConfig {
                 prefix: required("DELETION_RECEIPT_S3_PREFIX")?,
                 access_key_id: required("DELETION_RECEIPT_S3_ACCESS_KEY_ID")?,
                 secret_access_key: required("DELETION_RECEIPT_S3_SECRET_ACCESS_KEY")?,
+                allow_insecure_local_endpoint: environment != AppEnvironment::Production,
             },
             hmac_keys,
         })

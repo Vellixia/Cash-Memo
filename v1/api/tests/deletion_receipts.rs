@@ -26,6 +26,7 @@ mod s3 {
                 .expect("disposable key"),
             secret_access_key: env::var("TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY")
                 .expect("disposable secret"),
+            allow_insecure_local_endpoint: true,
         }
     }
 
@@ -100,6 +101,26 @@ mod s3 {
             store.put_receipt(&receipt).await,
             Err(ReceiptError::DivergentObject)
         );
+    }
+
+    #[test]
+    fn receipt_endpoint_rejects_remote_http_and_accepts_only_explicit_local_http() {
+        let mut config = S3ReceiptConfig {
+            endpoint: "http://storage.example.test".into(),
+            region: "us-east-1".into(),
+            bucket: "receipts".into(),
+            prefix: "receipts".into(),
+            access_key_id: "test".into(),
+            secret_access_key: "test".into(),
+            allow_insecure_local_endpoint: true,
+        };
+        assert!(config.validate_endpoint().is_err());
+        config.endpoint = "http://127.0.0.1:9000".into();
+        assert!(config.validate_endpoint().is_ok());
+        config.allow_insecure_local_endpoint = false;
+        assert!(config.validate_endpoint().is_err());
+        config.endpoint = "https://storage.example.test".into();
+        assert!(config.validate_endpoint().is_ok());
     }
 }
 

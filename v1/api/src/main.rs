@@ -103,7 +103,7 @@ async fn run() -> Result<(), ApiError> {
             use cashmemo_api::{
                 config::DeletionReceiptCommandConfig, receipts::s3::S3DeletionReceiptStore,
             };
-            let receipt_config = DeletionReceiptCommandConfig::from_env()?;
+            let receipt_config = DeletionReceiptCommandConfig::from_env(config.environment)?;
             let store = S3DeletionReceiptStore::connect(receipt_config.s3.clone())
                 .await
                 .map_err(|_| ApiError::AccountPurge)?;

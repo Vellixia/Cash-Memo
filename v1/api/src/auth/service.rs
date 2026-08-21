@@ -193,11 +193,16 @@ impl AuthService {
     pub async fn login(&self, email: &str, password: &str) -> Result<LoginSession, AuthError> {
         validate_email(email)?;
         let email = normalize_email(email);
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| AuthError::Persistence)?;
         let user: Option<(Uuid, String, bool, String)> = sqlx::query_as(
-            "SELECT id, password_hash, email_verified, status::TEXT FROM users WHERE email = $1",
+            "SELECT id, password_hash, email_verified, status::TEXT FROM users WHERE email = $1 FOR UPDATE",
         )
         .bind(email)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| AuthError::Persistence)?;
         let password_hash = self.login_password_hash(
@@ -223,7 +228,7 @@ impl AuthService {
         .bind(user_id)
         .bind(token_hash(&raw_token))
         .bind(duration_interval(self.config.idle_timeout))
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await
         .map_err(|_| AuthError::Persistence)?;
         let access = if status == "pending_deletion" {
@@ -231,6 +236,10 @@ impl AuthService {
         } else {
             SessionAccess::Full
         };
+        transaction
+            .commit()
+            .await
+            .map_err(|_| AuthError::Persistence)?;
         Ok(LoginSession {
             user_id,
             session_id,
