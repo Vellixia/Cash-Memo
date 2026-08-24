@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetOnboardingQueryKey,
@@ -18,22 +18,20 @@ export function PreferencesForm() {
   const update = useUpdatePreferences();
   const client = useQueryClient();
   const [timezoneOptions] = useState(getTimezoneOptions);
-  const [timezone, setTimezone] = useState(() => timezoneOptions[0] ?? "UTC");
-  const [timezoneEdited, setTimezoneEdited] = useState(false);
+  const [timezoneOverride, setTimezoneOverride] = useState<string>();
   const [chosenCurrency, setChosenCurrency] = useState("");
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const savedCurrency = onboarding.data?.data.default_currency_code ?? "";
   const currency = chosenCurrency.length > 0 ? chosenCurrency : savedCurrency;
-
-  useEffect(() => {
-    if (!timezoneEdited && onboarding.data?.data.timezone_configured) {
-      setTimezone(onboarding.data.data.timezone ?? "");
-    }
-  }, [onboarding.data, timezoneEdited]);
+  const savedTimezone = onboarding.data?.data.timezone_configured
+    ? (onboarding.data.data.timezone ?? "")
+    : (timezoneOptions[0] ?? "UTC");
+  const timezone = timezoneOverride ?? savedTimezone;
 
   async function submit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus(undefined);
+    if (!onboarding.data) return;
     if (!timezone.trim() || !currency) {
       setStatus({ kind: "error", text: "Choose timezone and default currency." });
       return;
@@ -55,6 +53,30 @@ export function PreferencesForm() {
     }
   }
 
+  if (onboarding.isPending || currencies.isPending) {
+    return (
+      <div className="dialog" role="status">
+        Loading preferences…
+      </div>
+    );
+  }
+  if (onboarding.isError || currencies.isError) {
+    return (
+      <div className="dialog">
+        <p role="alert">Could not load preferences.</p>
+        <Button
+          type="button"
+          onClick={() => {
+            if (onboarding.isError) void onboarding.refetch();
+            if (currencies.isError) void currencies.refetch();
+          }}
+        >
+          Retry preferences
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <form className="dialog preferences-form" onSubmit={(event) => void submit(event)}>
       <h2>Journal preferences</h2>
@@ -66,8 +88,7 @@ export function PreferencesForm() {
           className="input"
           value={timezone}
           onChange={(event) => {
-            setTimezone(event.target.value);
-            setTimezoneEdited(true);
+            setTimezoneOverride(event.target.value);
           }}
           list="settings-timezones"
           autoComplete="off"
@@ -88,17 +109,14 @@ export function PreferencesForm() {
           }}
         >
           <option value="">Choose currency</option>
-          {currencies.data?.data.map((item) => (
+          {currencies.data.data.map((item) => (
             <option key={item.code} value={item.code}>
               {item.code} — {item.display_name}
             </option>
           ))}
         </select>
       </FormField>
-      <Button
-        type="submit"
-        disabled={update.isPending || onboarding.isPending || currencies.isPending}
-      >
+      <Button type="submit" disabled={update.isPending}>
         Save preferences
       </Button>
       {status ? (
