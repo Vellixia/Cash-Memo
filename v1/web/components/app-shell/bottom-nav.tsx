@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [["Overview", "/app"], ["History", "/app/history"], ["Capture", "/app/capture"], ["Wallets", "/app/wallets"], ["Categories", "/app/categories"]] as const;
+const links = [["Overview", "/app"], ["History", "/app/history"], ["Capture", "/app/capture"], ["Budgets", "/app/budgets"], ["Recurring", "/app/recurring"], ["Settings", "/app/settings"]] as const;
 
 export function BottomNav() {
   const pathname = usePathname();

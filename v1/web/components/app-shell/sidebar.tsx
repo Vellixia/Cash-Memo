@@ -9,6 +9,8 @@ const links = [
   ["Capture", "/app/capture"],
   ["Wallets", "/app/wallets"],
   ["Categories", "/app/categories"],
+  ["Budgets", "/app/budgets"],
+  ["Recurring", "/app/recurring"],
   ["Settings", "/app/settings"],
 ] as const;
 
