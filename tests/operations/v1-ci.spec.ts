@@ -6,6 +6,8 @@ const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
   scripts: Record<string, string>;
 };
 const workflow = await readFile(".github/workflows/v1-ci.yml", "utf8");
+const recoverySafetyJob = workflow.match(/\n  recovery-safety:\n(?<job>[\s\S]*?)\n  docker-images:/)
+  ?.groups?.job;
 
 describe("Cashmemo V1 CI contract", () => {
   it("locks Cargo resolution before regenerating the OpenAPI contract", () => {
@@ -20,5 +22,9 @@ describe("Cashmemo V1 CI contract", () => {
     expect(workflow).toContain("tests/repository/canonical-layout.bats");
     expect(workflow).not.toContain("pnpm --dir v1/web");
     expect(workflow).not.toContain("pnpm v1:");
+  });
+
+  it("fetches reviewed Git history for base-pinned repository recovery tests", () => {
+    expect(recoverySafetyJob).toContain("fetch-depth: 0");
   });
 });
