@@ -37,7 +37,7 @@ x-dokploy-operations:
       required_environment: ["CASHMEMO_V1_DATABASE_URL"]
 
 x-api-environment: &api-environment
-  CASHMEMO_V1_DATABASE_URL: ${CASHMEMO_V1_DATABASE_URL:-postgres://cashmemo_v1:change-before-deploy@cashmemo-v1-postgres:5432/cashmemo_v1}
+  CASHMEMO_V1_DATABASE_URL: ${CASHMEMO_V1_DATABASE_URL:?CASHMEMO_V1_DATABASE_URL is required}
   CASHMEMO_V1_BIND_ADDR: 0.0.0.0:3000
   CASHMEMO_V1_PUBLIC_ORIGIN: ${CASHMEMO_V1_PUBLIC_ORIGIN:-https://cashmemo.example}
   CASHMEMO_V1_COOKIE_SECURE: ${CASHMEMO_V1_COOKIE_SECURE:-true}
@@ -85,7 +85,7 @@ services:
     environment:
       POSTGRES_DB: ${CASHMEMO_V1_POSTGRES_DB:-cashmemo_v1}
       POSTGRES_USER: ${CASHMEMO_V1_POSTGRES_USER:-cashmemo_v1}
-      POSTGRES_PASSWORD: ${CASHMEMO_V1_POSTGRES_PASSWORD:-change-before-deploy}
+      POSTGRES_PASSWORD: ${CASHMEMO_V1_POSTGRES_PASSWORD:?CASHMEMO_V1_POSTGRES_PASSWORD is required}
     volumes:
       - cashmemo-v1-postgres-data:/var/lib/postgresql
     networks:
@@ -118,7 +118,7 @@ services:
       - cashmemo-v1-edge
       - cashmemo-v1-private
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/api/v1/health/live"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/api/v1/health/ready"]
       interval: 15s
       timeout: 3s
       retries: 3
@@ -126,11 +126,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.cashmemo-v1-api.rule=Host(`${CASHMEMO_V1_HOST:-cashmemo.example}`) &&
-        PathPrefix(`/api/v1`)
+        (Path(`/api/v1`) || PathPrefix(`/api/v1/`))
       - traefik.http.routers.cashmemo-v1-api.priority=100
       - traefik.http.routers.cashmemo-v1-api.entrypoints=websecure
       - traefik.http.routers.cashmemo-v1-api.tls.certresolver=letsencrypt
       - traefik.http.services.cashmemo-v1-api.loadbalancer.server.port=3000
+      - traefik.docker.network=${CASHMEMO_V1_DOKPLOY_NETWORK:-dokploy-network}
     deploy:
       resources:
         limits:
@@ -183,6 +184,7 @@ networks:
     external: true
     name: ${CASHMEMO_V1_DOKPLOY_NETWORK:-dokploy-network}
   cashmemo-v1-private:
+    name: ${CASHMEMO_V1_PRIVATE_NETWORK:-cashmemo-v1-private}
     internal: true
 
 volumes:

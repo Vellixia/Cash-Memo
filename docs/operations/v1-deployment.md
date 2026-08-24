@@ -12,6 +12,13 @@ must never receive deletion-receipt or backup/S3 credentials. Only `purge-accoun
 dedicated receipt prefix credentials and HMAC key ring. Keep database and receipt credentials out of
 build arguments and image layers.
 
+The API serve allowlist is `CASHMEMO_V1_DATABASE_URL`, `CASHMEMO_V1_BIND_ADDR`,
+`CASHMEMO_V1_PUBLIC_ORIGIN`, cookie/session settings, SMTP/email settings, `CASHMEMO_V1_APP_ENV`,
+`CASHMEMO_V1_LOG_LEVEL`, auth rate limits, and `CASHMEMO_V1_ARGON2_*`. Bind address is a required
+non-secret container reachability control. Argon2 memory/time/parallelism are non-secret runtime
+controls that must be benchmarked and tuned on the actual production host while retaining approved
+security floors. Neither expands the financial-data or backup-secret boundary.
+
 ## Build, identify, and migrate
 
 Build both images from repository root:
@@ -33,7 +40,7 @@ deployment. Migration is never a permanent service and must complete successfull
 replacement:
 
 ```sh
-docker run --rm --network cashmemo-v1-private \
+docker run --rm --network "${CASHMEMO_V1_PRIVATE_NETWORK:-cashmemo-v1-private}" \
   -e CASHMEMO_V1_DATABASE_URL \
   "$CASHMEMO_V1_API_IMAGE" migrate
 ```
@@ -46,6 +53,8 @@ Production replacement and routing require the separate preservation gate before
 - `GET /api/v1/health/live` checks process liveness only and remains healthy during DB loss.
 - `GET /api/v1/health/ready` executes a minimal DB query and returns `503` when PostgreSQL is not
   ready.
+- Compose/Dokploy health uses `/api/v1/health/ready`, so DB loss removes API from routing. Operators
+  may probe `/api/v1/health/live` separately when diagnosing process liveness.
 - API handles SIGTERM with graceful connection draining. Compose grants 30 seconds; PostgreSQL gets
   60 seconds. Dokploy should remove a replica from routing on readiness failure before termination.
 
