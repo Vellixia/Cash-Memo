@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { z } from "zod";
+import type { z } from "zod";
 import {
   useConsumePasswordReset,
   useLogin,
@@ -13,18 +13,16 @@ import {
   useResendVerification,
   useVerifyEmail,
 } from "../../generated/api";
-import { getSafeReturnPath } from "../../lib/auth/session";
+import { getPostLoginPath } from "../../lib/auth/session";
+import {
+  credentialsSchema,
+  emailSchema,
+  newPasswordSchema,
+  verificationTokenSchema,
+} from "../../lib/validation/auth";
 import { Button } from "../../components/ui/button";
 import { FormField } from "../../components/ui/form-field";
 import { Input } from "../../components/ui/input";
-
-const credentialsSchema = z.object({
-  email: z.string().trim().pipe(z.email("Enter valid email")),
-  password: z.string().min(12, "Use at least 12 characters"),
-});
-const emailSchema = z.object({ email: z.string().trim().pipe(z.email("Enter valid email")) });
-const resetSchema = z.object({ password: z.string().min(12, "Use at least 12 characters") });
-const tokenSchema = z.object({ token: z.string().trim().min(1, "Verification link is missing") });
 
 type FormStatus = { kind: "error" | "success"; text: string } | undefined;
 
@@ -45,8 +43,8 @@ export function LoginForm() {
   async function submit(values: z.infer<typeof credentialsSchema>) {
     setStatus(undefined);
     try {
-      await mutation.mutateAsync({ data: values });
-      router.replace(getSafeReturnPath(params.get("returnTo")));
+      const response = await mutation.mutateAsync({ data: values });
+      router.replace(getPostLoginPath(response.data.access, params.get("returnTo")));
     } catch (error) { setStatus({ kind: "error", text: errorText(error) }); }
   }
 
@@ -101,8 +99,8 @@ export function VerifyEmailForm() {
   const [status, setStatus] = useState<FormStatus>();
   const verify = useVerifyEmail();
   const resend = useResendVerification();
-  const form = useForm<z.infer<typeof tokenSchema>>({ resolver: zodResolver(tokenSchema), mode: "onChange", defaultValues: { token: params.get("token") ?? "" } });
-  async function submit(values: z.infer<typeof tokenSchema>) { try { await verify.mutateAsync({ data: values }); setStatus({ kind: "success", text: "Email verified. You can sign in." }); } catch (error) { setStatus({ kind: "error", text: errorText(error) }); } }
+  const form = useForm<z.infer<typeof verificationTokenSchema>>({ resolver: zodResolver(verificationTokenSchema), mode: "onChange", defaultValues: { token: params.get("token") ?? "" } });
+  async function submit(values: z.infer<typeof verificationTokenSchema>) { try { await verify.mutateAsync({ data: values }); setStatus({ kind: "success", text: "Email verified. You can sign in." }); } catch (error) { setStatus({ kind: "error", text: errorText(error) }); } }
   async function resendLink() { const email = params.get("email") ?? ""; if (!emailSchema.safeParse({ email }).success) { setStatus({ kind: "error", text: "Enter email again to resend." }); return; } try { await resend.mutateAsync({ data: { email } }); setStatus({ kind: "success", text: "If an account matches, a new link is on the way." }); } catch (error) { setStatus({ kind: "error", text: errorText(error) }); } }
   return <form className="auth-form" onSubmit={(event) => { void form.handleSubmit(submit)(event); }} noValidate><h1>Verify email</h1><p className="muted">Use single-use link from your email.</p><FormField label="Verification token" htmlFor="token" error={form.formState.errors.token?.message}><Input id="token" type="text" autoComplete="off" {...form.register("token")} /></FormField>{status ? <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>{status.text}</p> : null}<Button type="submit" disabled={!form.formState.isValid || verify.isPending}>Verify email</Button><Button type="button" variant="quiet" onClick={() => { void resendLink(); }} disabled={resend.isPending}>Resend email</Button></form>;
 }
@@ -112,7 +110,9 @@ export function ResetPasswordForm() {
   const params = useSearchParams();
   const mutation = useConsumePasswordReset();
   const [status, setStatus] = useState<FormStatus>();
-  const form = useForm<z.infer<typeof resetSchema>>({ resolver: zodResolver(resetSchema), mode: "onChange", defaultValues: { password: "" } });
-  async function submit(values: z.infer<typeof resetSchema>) { const token = params.get("token") ?? ""; if (!token) { setStatus({ kind: "error", text: "Reset link is invalid or expired." }); return; } try { await mutation.mutateAsync({ data: { ...values, token } }); setStatus({ kind: "success", text: "Password changed. Sign in again." }); router.replace("/login"); } catch (error) { setStatus({ kind: "error", text: errorText(error) }); } }
+  const form = useForm<z.infer<typeof newPasswordSchema>>({ resolver: zodResolver(newPasswordSchema), mode: "onChange", defaultValues: { password: "" } });
+  async function submit(values: z.infer<typeof newPasswordSchema>) { const token = params.get("token") ?? ""; if (!token) { setStatus({ kind: "error", text: "Reset link is invalid or expired." }); return; } try { await mutation.mutateAsync({ data: { ...values, token } }); setStatus({ kind: "success", text: "Password changed. Sign in again." }); router.replace("/login"); } catch (error) { setStatus({ kind: "error", text: errorText(error) }); } }
   return <form className="auth-form" onSubmit={(event) => { void form.handleSubmit(submit)(event); }} noValidate><h1>Choose new password</h1><FormField label="New password" htmlFor="password" error={form.formState.errors.password?.message}><Input id="password" type="password" autoComplete="new-password" {...form.register("password")} /></FormField>{status ? <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>{status.text}</p> : null}<Button type="submit" disabled={!form.formState.isValid || mutation.isPending}>Change password</Button></form>;
 }
+
+export { credentialsSchema };

@@ -1,7 +1,10 @@
 import type { QueryClient } from "@tanstack/react-query";
+import type { AccountDeletionContract } from "../../generated/api/model/accountDeletionContract";
 
 const FALLBACK_RETURN_PATH = "/app";
 const DESTRUCTIVE_PATH = /(?:delete|deletion|purge|logout|sign-out)/i;
+export const SESSION_ACCESS_DELETION_ONLY = "DELETION_ONLY" as const;
+export const SESSION_ACCESS_FULL = "FULL" as const;
 
 /** Only allow same-origin, non-action paths through auth redirects. */
 export function isSafeReturnPath(value: string | null | undefined): value is string {
@@ -28,6 +31,30 @@ export function isSafeReturnPath(value: string | null | undefined): value is str
 
 export function getSafeReturnPath(value: string | null | undefined): string {
   return isSafeReturnPath(value) ? value : FALLBACK_RETURN_PATH;
+}
+
+export function getPostLoginPath(access: string, returnPath: string | null | undefined): string {
+  return access === SESSION_ACCESS_DELETION_ONLY
+    ? "/deletion"
+    : getSafeReturnPath(returnPath);
+}
+
+export function isPendingDeletionStatus(
+  status: AccountDeletionContract["status"],
+): boolean {
+  return status === "pending_deletion";
+}
+
+export function deletionActionsForStatus(
+  status: AccountDeletionContract["status"],
+): { canCancel: boolean; signOutOnly: boolean } {
+  return { canCancel: isPendingDeletionStatus(status), signOutOnly: true };
+}
+
+/** Fail closed for every deletion-status error; never render private fallback content. */
+export function getDeletionErrorDestination(error: unknown): "/login" {
+  void error;
+  return "/login";
 }
 
 export function clearSessionState(queryClient: QueryClient): void {
