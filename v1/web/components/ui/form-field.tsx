@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 
 export function FormField({
   label,
@@ -11,12 +11,22 @@ export function FormField({
   error?: string;
   children: ReactNode;
 }) {
+  const errorId = `${htmlFor}-error`;
+  const control = isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        "aria-describedby": error ? errorId : undefined,
+        "aria-invalid": error ? true : undefined,
+      })
+    : children;
   return (
     <div className="form-field">
       <label htmlFor={htmlFor}>{label}</label>
-      {children}
-      {error ? <p className="field-error" role="alert">{error}</p> : null}
+      {control}
+      {error ? (
+        <p className="field-error" id={errorId} role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
-

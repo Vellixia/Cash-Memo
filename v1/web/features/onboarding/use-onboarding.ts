@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetOnboardingQueryKey,
+  getListCategoriesQueryKey,
   useGetOnboarding,
   useSeedOnboardingCategories,
   useUpdatePreferences,
@@ -12,7 +13,12 @@ import type { OnboardingContract } from "../../generated/api/model/onboardingCon
 export type OnboardingStep = "timezone" | "currency" | "categories" | "wallet" | "complete";
 
 export function onboardingComplete(state: OnboardingContract): boolean {
-  return state.timezone_configured && state.default_currency_configured && state.categories_seeded && state.has_active_wallet;
+  return (
+    state.timezone_configured &&
+    state.default_currency_configured &&
+    state.categories_seeded &&
+    state.has_active_wallet
+  );
 }
 
 export function onboardingNextStep(state: OnboardingContract): OnboardingStep {
@@ -33,6 +39,7 @@ export function useOnboarding() {
   async function seedCategories() {
     await seed.mutateAsync();
     await queryClient.invalidateQueries({ queryKey: getGetOnboardingQueryKey() });
+    await queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
   }
 
   async function savePreferences(data: { timezone: string; default_currency_code: string }) {
