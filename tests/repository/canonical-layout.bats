@@ -4,6 +4,7 @@ setup() {
   repo="$BATS_TEST_DIRNAME/../.."
   manifest="$repo/docs/verification/legacy-removal-manifest.md"
   reviewed_base=b2d462eacc0307080aea68ce06dd2abc03058f8c
+  reviewed_hash=bfcec955cfa58e323312fa8e7250806f1a2354ae28dcbda90d5d9fccdad85d31
 }
 
 inventory_records() {
@@ -12,6 +13,11 @@ inventory_records() {
     $0 == "<!-- INVENTORY-END -->" { inside=0; next }
     inside && NF { print }
   ' "$manifest"
+}
+
+@test "canonical layout is bound to reviewed manifest identity" {
+  [ "$(shasum -a 256 "$manifest" | cut -d' ' -f1)" = "$reviewed_hash" ]
+  git -C "$repo" cat-file -e "$reviewed_base^{commit}"
 }
 
 @test "reviewed legacy removals are absent while every preservation artifact remains" {

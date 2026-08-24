@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint app components e2e features lib tests next.config.ts playwright.config.ts postcss.config.mjs vitest.config.ts --max-warnings 0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest"
   },
   "dependencies": {

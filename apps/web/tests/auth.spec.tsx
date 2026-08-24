@@ -14,8 +14,8 @@ import { credentialsSchema as sharedCredentialsSchema } from "../lib/validation/
 
 describe("auth navigation safety", () => {
   it("allows internal app return paths", () => {
-    expect(isSafeReturnPath("/app/history")).toBe(true);
-    expect(getSafeReturnPath("/app/history")).toBe("/app/history");
+    expect(isSafeReturnPath("/app/transactions")).toBe(true);
+    expect(getSafeReturnPath("/app/transactions")).toBe("/app/transactions");
   });
 
   it("rejects external, malformed, and destructive return paths", () => {
@@ -33,17 +33,17 @@ describe("auth navigation safety", () => {
   });
 
   it("routes deletion-only login access to the deletion screen", () => {
-    expect(getPostLoginPath("DELETION_ONLY", "/app/history")).toBe("/deletion");
+    expect(getPostLoginPath("DELETION_ONLY", "/app/transactions")).toBe("/deletion");
   });
 
   it("routes full login access through safe return path", () => {
-    expect(getPostLoginPath("FULL", "/app/history")).toBe("/app/history");
+    expect(getPostLoginPath("FULL", "/app/transactions")).toBe("/app/transactions");
     expect(getPostLoginPath("FULL", "//evil.example")).toBe("/app");
   });
 
   it("fails closed for unknown or missing login access", () => {
-    expect(getPostLoginPath("UNKNOWN", "/app/history")).toBe("/login");
-    expect(getPostLoginPath(undefined, "/app/history")).toBe("/login");
+    expect(getPostLoginPath("UNKNOWN", "/app/transactions")).toBe("/login");
+    expect(getPostLoginPath(undefined, "/app/transactions")).toBe("/login");
   });
 
   it("renders cancel action only for API pending_deletion status", () => {

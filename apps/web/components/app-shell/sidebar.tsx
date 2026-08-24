@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 
 const links = [
   ["Overview", "/app"],
-  ["History", "/app/history"],
-  ["Capture", "/app/capture"],
+  ["History", "/app/transactions"],
+  ["Add", "/app/transactions/new"],
   ["Wallets", "/app/wallets"],
   ["Categories", "/app/categories"],
   ["Budgets", "/app/budgets"],
@@ -18,7 +18,9 @@ export function Sidebar() {
   const pathname = usePathname();
   return (
     <aside className="sidebar">
-      <Link href="/app" className="brand">Cashmemo</Link>
+      <Link href="/app" className="brand">
+        Cashmemo
+      </Link>
       <nav aria-label="Primary navigation">
         {links.map(([label, href]) => (
           <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>

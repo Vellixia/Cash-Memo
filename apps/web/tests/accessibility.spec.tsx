@@ -86,6 +86,17 @@ describe("accessibility contract", () => {
     expect(screen.getByRole("main")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeTruthy();
     expect(document.querySelector('nav[aria-label="Mobile navigation"]')).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("link", { name: "History" })
+        .every((link) => link.getAttribute("href") === "/app/transactions"),
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("link", { name: "Add" })
+        .every((link) => link.getAttribute("href") === "/app/transactions/new"),
+    ).toBe(true);
+    expect(screen.queryByRole("link", { name: "Capture" })).toBeNull();
     expect(screen.getByRole("heading", { name: "New transaction", level: 1 })).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
 
@@ -109,9 +120,9 @@ describe("accessibility contract", () => {
   it("links recurring and account-deletion errors from real component forms", async () => {
     const recurring = renderWithQuery(<RecurringForm />);
     expect(screen.getByRole("heading", { name: "New recurring rule", level: 2 })).toBeTruthy();
-    const recurringForm = screen.getByRole("button", { name: "Create recurring rule" }).closest(
-      "form",
-    );
+    const recurringForm = screen
+      .getByRole("button", { name: "Create recurring rule" })
+      .closest("form");
     expect(recurringForm).toBeTruthy();
     if (!recurringForm) throw new Error("recurring submit must belong to its form");
     fireEvent.submit(recurringForm);

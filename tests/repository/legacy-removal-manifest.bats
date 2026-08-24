@@ -5,6 +5,7 @@ setup() {
   manifest="$repo/docs/verification/legacy-removal-manifest.md"
   reviewed_base=b2d462eacc0307080aea68ce06dd2abc03058f8c
   reviewed_hash=bfcec955cfa58e323312fa8e7250806f1a2354ae28dcbda90d5d9fccdad85d31
+  fixture_index=0
 }
 
 inventory_records() {
@@ -13,6 +14,23 @@ inventory_records() {
     $0 == "<!-- INVENTORY-END -->" { inside=0; next }
     inside && NF { print }
   ' "$manifest"
+}
+
+make_base_fixture() {
+  fixture_index=$((fixture_index + 1))
+  fixture="$BATS_TEST_TMPDIR/repository-$fixture_index"
+  git clone -q "$repo" "$fixture"
+  fixture=$(cd "$fixture" && pwd -P)
+  git -C "$fixture" switch -q -C rewrite/cashmemo-v1 "$reviewed_base"
+}
+
+fixture_hash() {
+  shasum -a 256 "$fixture/docs/verification/legacy-removal-manifest.md" | cut -d' ' -f1
+}
+
+commit_fixture_change() {
+  git -C "$fixture" add .
+  git -C "$fixture" -c user.name=test -c user.email=test@example.invalid commit -qm fixture-tamper
 }
 
 @test "reviewed manifest identity and inventory counts remain stable after apply" {
@@ -31,6 +49,18 @@ inventory_records() {
     [ "$reason" = "LEGACY_HISTORY_EXTERNAL_AUDIT_UNRESOLVED" ]
     [ "$attribution" = "$source" ]
   done < <(inventory_records)
+}
+
+@test "all preservation blobs remain byte-identical to reviewed base" {
+  count=0
+  while IFS=$'\t' read -r state path _reason _source; do
+    [ "$state" = "PRESERVE" ] || continue
+    base_blob=$(git -C "$repo" rev-parse "$reviewed_base:$path")
+    current_blob=$(git -C "$repo" hash-object "$repo/$path")
+    [ "$current_blob" = "$base_blob" ]
+    count=$((count + 1))
+  done < <(inventory_records)
+  [ "$count" -eq 44 ]
 }
 
 @test "applied removal entries cannot retain legacy content" {
@@ -95,4 +125,107 @@ inventory_records() {
     "$repo/scripts/preservation-audit.sh" --check-recorded-decision
   [ "$status" -ne 0 ]
   [ "$output" = "STOP_REQUIRES_DEDICATED_MIGRATION_PLAN" ]
+}
+
+@test "reviewed base fixture accepts exact manifest without mutation" {
+  make_base_fixture
+  before=$(git -C "$fixture" status --porcelain=v1 --untracked-files=no)
+
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --check "$reviewed_hash"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "LEGACY_REMOVAL_CHECK_PASS" ]
+  [ "$(fixture_hash)" = "$reviewed_hash" ]
+  [ "$(git -C "$fixture" status --porcelain=v1 --untracked-files=no)" = "$before" ]
+}
+
+@test "reviewed base fixture rejects incomplete malformed duplicate and preservation-tampered inventories" {
+  make_base_fixture
+  printf '%s\n' 'new legacy file' >"$fixture/apps/server/unlisted.ts"
+  git -C "$fixture" add apps/server/unlisted.ts
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --check "$(fixture_hash)"
+  [ "$status" -ne 0 ]
+  [ "$output" = "LEGACY_REMOVAL_MANIFEST_INCOMPLETE" ]
+
+  make_base_fixture
+  perl -0pi -e 's/ALREADY_REUSED\t\.dockerignore\tV1_SHARED_FOUNDATION\t-/ALREADY_REUSED\t.dockerignore/' \
+    "$fixture/docs/verification/legacy-removal-manifest.md"
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --check "$(fixture_hash)"
+  [ "$status" -ne 0 ]
+  [ "$output" = "LEGACY_REMOVAL_MANIFEST_INVALID" ]
+
+  make_base_fixture
+  perl -0pi -e 's/(<!-- INVENTORY-BEGIN -->\n)/$1ALREADY_REUSED\t.dockerignore\tV1_SHARED_FOUNDATION\t-\n/' \
+    "$fixture/docs/verification/legacy-removal-manifest.md"
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --check "$(fixture_hash)"
+  [ "$status" -ne 0 ]
+  [ "$output" = "LEGACY_REMOVAL_MANIFEST_DUPLICATE" ]
+
+  make_base_fixture
+  perl -0pi -e 's/PRESERVE\t(apps\/server\/src\/adapters\/postgres\/migrations\/)/REMOVE\t$1/' \
+    "$fixture/docs/verification/legacy-removal-manifest.md"
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --check "$(fixture_hash)"
+  [ "$status" -ne 0 ]
+  [ "$output" = "LEGACY_REMOVAL_PRESERVATION_INVALID" ]
+}
+
+@test "reviewed base fixture rejects wrong branch and dirty tracked tree without mutation" {
+  make_base_fixture
+  git -C "$fixture" switch -qc review-wrong-branch
+  before=$(git -C "$fixture" status --porcelain=v1)
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --plan "$reviewed_hash"
+  [ "$status" -ne 0 ]
+  [ "$output" = "LEGACY_REMOVAL_BRANCH_INVALID" ]
+  [ "$(git -C "$fixture" status --porcelain=v1)" = "$before" ]
+
+  make_base_fixture
+  printf '\ntracked review dirt\n' >>"$fixture/README.md"
+  before=$(git -C "$fixture" status --porcelain=v1)
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --plan "$reviewed_hash"
+  [ "$status" -ne 0 ]
+  [ "$output" = "LEGACY_REMOVAL_TRACKED_WORKTREE_DIRTY" ]
+  [ "$(git -C "$fixture" status --porcelain=v1)" = "$before" ]
+}
+
+@test "reviewed base fixture binds Task 23 evidence identity and named PASS state" {
+  make_base_fixture
+  printf '\ntampered identity\n' >>"$fixture/docs/verification/v1-acceptance.md"
+  commit_fixture_change
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --plan "$reviewed_hash"
+  [ "$status" -ne 0 ]
+  [ "$output" = "TASK_23_READINESS_EVIDENCE_INVALID" ]
+
+  make_base_fixture
+  perl -0pi -e 's/(\| Default real-stack Playwright gate\s+\|[^\n]*\| )PASS(\s+\|)/$1FAIL$2/' \
+    "$fixture/docs/verification/v1-merge-readiness.md"
+  grep -F '| FAIL' "$fixture/docs/verification/v1-merge-readiness.md" >/dev/null
+  commit_fixture_change
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --plan "$reviewed_hash"
+  [ "$status" -ne 0 ]
+  [ "$output" = "TASK_23_READINESS_EVIDENCE_INVALID" ]
+}
+
+@test "reviewed base fixture exposes exact path-safe git rm argv and ignores untracked serena" {
+  make_base_fixture
+  mkdir -p "$fixture/.serena"
+  printf '%s\n' 'user-owned' >"$fixture/.serena/note"
+  expected="$BATS_TEST_TMPDIR/expected-argv"
+  actual="$BATS_TEST_TMPDIR/actual-argv"
+  {
+    printf 'ARGV\t0\tgit\n'
+    printf 'ARGV\t1\t-C\n'
+    printf 'ARGV\t2\t%s\n' "$fixture"
+    printf 'ARGV\t3\trm\n'
+    printf 'ARGV\t4\t--\n'
+    awk -F '\t' '$1 == "REMOVE" { printf "ARGV\t%d\t%s\n", n++, $2 }' n=5 \
+      "$fixture/docs/verification/legacy-removal-manifest.md"
+  } >"$expected"
+
+  before=$(git -C "$fixture" status --porcelain=v1)
+  run "$fixture/scripts/apply-approved-legacy-removal.sh" --plan "$reviewed_hash"
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" >"$actual"
+  run diff -u "$expected" "$actual"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$fixture" status --porcelain=v1)" = "$before" ]
 }

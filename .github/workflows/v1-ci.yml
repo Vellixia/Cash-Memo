@@ -227,7 +227,8 @@ jobs:
         run: >-
           bats tests/operations/preservation-gate.bats
           tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats
-          tests/operations/deletion-receipt-replay.bats tests/repository/canonical-layout.bats
+          tests/operations/deletion-receipt-replay.bats
+          tests/repository/legacy-removal-manifest.bats tests/repository/canonical-layout.bats
 
   docker-images:
     name: V1 Docker build and scan (${{ matrix.image }})

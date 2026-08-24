@@ -16,6 +16,8 @@ describe("Cashmemo V1 CI contract", () => {
     expect(workflow).toContain("pnpm api:check");
     expect(workflow).toContain("pnpm test:operations");
     expect(workflow).toContain("pnpm --dir apps/web");
+    expect(workflow).toContain("tests/repository/legacy-removal-manifest.bats");
+    expect(workflow).toContain("tests/repository/canonical-layout.bats");
     expect(workflow).not.toContain("pnpm --dir v1/web");
     expect(workflow).not.toContain("pnpm v1:");
   });

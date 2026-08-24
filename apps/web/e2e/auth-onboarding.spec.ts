@@ -36,8 +36,15 @@ test("first visit registers through delivered verification link and creates firs
   await page.keyboard.press("Tab");
   await expect(history).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/app\/history$/);
-  await expect(page.getByRole("heading", { name: "History", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/transactions$/);
+  await expect(page.getByRole("heading", { name: "Transactions", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("Search")).toBeVisible();
+
+  const add = page.getByRole("link", { name: "Add" });
+  await add.click();
+  await expect(page).toHaveURL(/\/app\/transactions\/new$/);
+  await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("Amount")).toBeVisible();
 
   await page.goto("/app/wallets");
   await expect(page.getByRole("heading", { name: user.walletName, level: 2 })).toBeVisible();
