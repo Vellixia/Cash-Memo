@@ -8,4 +8,3 @@ export function Dialog({ title, children }: { title: string; children: ReactNode
     </section>
   );
 }
-

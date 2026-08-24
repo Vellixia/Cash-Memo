@@ -1,9 +1,12 @@
 # Cashmemo V1 Rebuild Design
 
-**Date:** 2026-08-21  
-**Status:** Approved in-chat design; awaiting written-spec review  
-**Classification:** ARCHITECTURAL  
-**Rewrite branch:** `rewrite/cashmemo-v1`  
+**Date:** 2026-08-21
+
+**Status:** Approved in-chat design; awaiting written-spec review
+
+**Classification:** ARCHITECTURAL
+
+**Rewrite branch:** `rewrite/cashmemo-v1`
 **Base branch and commit:** `new-cashmemo` at `c428e2dd334fcfbcb4e63d421919282a55227845`
 
 ## 1. Executive Summary

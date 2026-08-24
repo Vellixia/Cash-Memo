@@ -10,4 +10,3 @@ export function createNoStoreFetch(fetcher: FetchLike = fetch): FetchLike {
     return fetcher(input, { ...init, cache: "no-store", headers });
   };
 }
-

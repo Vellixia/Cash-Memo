@@ -3900,4 +3900,3 @@ const {mutation: mutationOptions} = options ?
       > => {
       return useMutation(getRestoreWalletMutationOptions(options), queryClient);
     }
-
