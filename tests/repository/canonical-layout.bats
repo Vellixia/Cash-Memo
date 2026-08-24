@@ -127,7 +127,7 @@ inventory_records() {
     "$repo/docs/operations/ci-gates.md"
   )
 
-  run grep -E '(^|[[:space:]])v1/(api|web)|pnpm v1:|pnpm --dir v1/' "${current_files[@]}"
+  run grep -E '(^|[[:space:]])v1/(api|web)|pnpm v1:|pnpm --dir v1/|apps/server/tests/integration/' "${current_files[@]}"
   [ "$status" -ne 0 ]
 
   run grep -F 'COPY apps/api ./apps/api' "$repo/infra/v1/api.Dockerfile"
@@ -136,6 +136,11 @@ inventory_records() {
   [ "$status" -eq 0 ]
   run grep -F 'pnpm --dir apps/web' "$repo/.github/workflows/v1-ci.yml"
   [ "$status" -eq 0 ]
+}
+
+@test "canonical web owns the only runnable ESLint configuration" {
+  [ ! -e "$repo/eslint.config.mjs" ]
+  [ -f "$repo/apps/web/eslint.config.mjs" ]
 }
 
 @test "canonical Orval output remains generated from Rust OpenAPI" {
