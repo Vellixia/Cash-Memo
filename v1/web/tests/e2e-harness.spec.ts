@@ -1,7 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { cashmemoApiCommand } from "../e2e/support/commands.mjs";
 import { normalizePublicOrigin } from "../e2e/support/environment.mjs";
+import { isolatedUser } from "../e2e/support/auth";
 
 interface ComposeConfig {
   services: {
@@ -13,6 +15,24 @@ interface ComposeConfig {
 }
 
 describe("real-stack E2E harness", () => {
+  it("selects the cashmemo-api binary for migrate and serve commands", () => {
+    expect(cashmemoApiCommand("migrate")).toEqual({
+      executable: "cargo",
+      args: ["run", "-p", "cashmemo-api", "--bin", "cashmemo-api", "--", "migrate"],
+    });
+    expect(cashmemoApiCommand("serve")).toEqual({
+      executable: "cargo",
+      args: ["run", "-p", "cashmemo-api", "--bin", "cashmemo-api", "--", "serve"],
+    });
+  });
+
+  it("keeps isolated Mailpit recipients within the RFC local-part limit", () => {
+    const user = isolatedUser("account-deletion");
+    const [localPart] = user.email.split("@");
+
+    expect(new TextEncoder().encode(localPart).length).toBeLessThanOrEqual(64);
+  });
+
   it("canonicalizes a trailing-slash public origin for every E2E consumer", () => {
     expect(normalizePublicOrigin("http://localhost:3000/")).toBe("http://localhost:3000");
   });

@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { cashmemoApiCommand } from "./commands.mjs";
 import { PUBLIC_ORIGIN } from "./environment.mjs";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -44,14 +45,16 @@ const compose = spawnSync(
 );
 if (compose.status !== 0) process.exit(compose.status ?? 1);
 
-const migrate = spawnSync("cargo", ["run", "-p", "cashmemo-api", "--", "migrate"], {
+const migrateCommand = cashmemoApiCommand("migrate");
+const migrate = spawnSync(migrateCommand.executable, migrateCommand.args, {
   cwd: repositoryRoot,
   env: apiEnvironment,
   stdio: "inherit",
 });
 if (migrate.status !== 0) process.exit(migrate.status ?? 1);
 
-const api = spawn("cargo", ["run", "-p", "cashmemo-api", "--", "serve"], {
+const serveCommand = cashmemoApiCommand("serve");
+const api = spawn(serveCommand.executable, serveCommand.args, {
   cwd: repositoryRoot,
   env: apiEnvironment,
   stdio: "inherit",

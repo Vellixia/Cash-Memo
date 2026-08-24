@@ -20,10 +20,10 @@ export default defineConfig({
       timeout: 180_000,
     },
     {
-      command: "pnpm dev --hostname 127.0.0.1 --port 3000",
+      command: "pnpm build && pnpm start --hostname 127.0.0.1 --port 3000",
       url: "http://localhost:3000",
       reuseExistingServer: false,
-      timeout: 120_000,
+      timeout: 180_000,
     },
   ],
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

@@ -25,7 +25,8 @@ test("revokes all sessions and cancels pending account deletion during grace", a
   await expect(page.getByText(/encrypted backups may retain deleted data/)).toBeVisible();
   await page.getByLabel("Current password").fill(user.password);
   await page.getByRole("button", { name: "Schedule account deletion" }).click();
-  await expect(page).toHaveURL(/\/deletion$/);
+  await expect(page).toHaveURL(/\/login$/);
+  await login(page, user, /\/deletion$/);
   await expect(page.getByRole("status")).toContainText("pending_deletion");
 
   await page.getByRole("button", { name: "Cancel deletion" }).click();

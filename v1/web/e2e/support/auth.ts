@@ -9,9 +9,10 @@ export interface E2EUser {
 }
 
 export function isolatedUser(label: string): E2EUser {
-  const suffix = `${String(Date.now())}-${crypto.randomUUID()}`;
+  const suffix = crypto.randomUUID();
+  const emailLabel = label.toLowerCase().replaceAll(/[^a-z0-9]/g, "").slice(0, 12) || "user";
   return {
-    email: `cashmemo-e2e+${label}-${suffix}@example.test`,
+    email: `cm+${emailLabel}-${suffix}@example.test`,
     password: `Cashmemo E2E password ${suffix}`,
     walletName: `${label} wallet ${suffix}`,
   };
@@ -22,6 +23,10 @@ export async function registerVerifyAndLogin(page: Page, user: E2EUser): Promise
   await page.goto("/");
   await expect(page).toHaveURL(/\/login\?returnTo=%2Fapp$/);
   await page.getByRole("link", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(
+    page.getByRole("heading", { name: "Create private journal", level: 1 }),
+  ).toBeVisible();
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Create account" }).click();
@@ -36,12 +41,16 @@ export async function registerVerifyAndLogin(page: Page, user: E2EUser): Promise
   await login(page, user);
 }
 
-export async function login(page: Page, user: E2EUser): Promise<void> {
+export async function login(
+  page: Page,
+  user: E2EUser,
+  expectedDestination = /\/app$/,
+): Promise<void> {
   if (!page.url().includes("/login")) await page.goto("/login");
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/app$/);
+  await expect(page).toHaveURL(expectedDestination);
 }
 
 export async function completeOnboarding(page: Page, user: E2EUser): Promise<void> {

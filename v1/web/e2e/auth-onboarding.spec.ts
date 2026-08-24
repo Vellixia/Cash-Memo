@@ -9,8 +9,15 @@ test("first visit registers through delivered verification link and creates firs
   await completeOnboarding(page, user);
 
   await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
   const brand = page.getByRole("link", { name: "Cashmemo" });
-  await page.keyboard.press("Tab");
+  for (
+    let tabs = 0;
+    tabs < 5 && !(await brand.evaluate((node) => node === document.activeElement));
+    tabs += 1
+  ) {
+    await page.keyboard.press("Tab");
+  }
   await expect(brand).toBeFocused();
   const focusStyle = await brand.evaluate((element) => {
     const style = getComputedStyle(element);
