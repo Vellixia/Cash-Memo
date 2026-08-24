@@ -33,10 +33,12 @@ export function getSafeReturnPath(value: string | null | undefined): string {
   return isSafeReturnPath(value) ? value : FALLBACK_RETURN_PATH;
 }
 
-export function getPostLoginPath(access: string, returnPath: string | null | undefined): string {
+export function getPostLoginPath(access: string | undefined, returnPath: string | null | undefined): string {
   return access === SESSION_ACCESS_DELETION_ONLY
     ? "/deletion"
-    : getSafeReturnPath(returnPath);
+    : access === SESSION_ACCESS_FULL
+      ? getSafeReturnPath(returnPath)
+      : "/login";
 }
 
 export function isPendingDeletionStatus(

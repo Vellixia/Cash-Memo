@@ -41,6 +41,11 @@ describe("auth navigation safety", () => {
     expect(getPostLoginPath("FULL", "//evil.example")).toBe("/app");
   });
 
+  it("fails closed for unknown or missing login access", () => {
+    expect(getPostLoginPath("UNKNOWN", "/app/history")).toBe("/login");
+    expect(getPostLoginPath(undefined, "/app/history")).toBe("/login");
+  });
+
   it("renders cancel action only for API pending_deletion status", () => {
     expect(deletionActionsForStatus("pending_deletion").canCancel).toBe(true);
     expect(deletionActionsForStatus("pending").canCancel).toBe(false);

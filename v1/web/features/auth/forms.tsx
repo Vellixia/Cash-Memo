@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -13,7 +14,7 @@ import {
   useResendVerification,
   useVerifyEmail,
 } from "../../generated/api";
-import { getPostLoginPath } from "../../lib/auth/session";
+import { clearSessionState, getPostLoginPath } from "../../lib/auth/session";
 import {
   credentialsSchema,
   emailSchema,
@@ -34,6 +35,7 @@ function errorText(error: unknown): string {
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<FormStatus>();
   const mutation = useLogin();
   const form = useForm<z.infer<typeof credentialsSchema>>({
@@ -44,7 +46,10 @@ export function LoginForm() {
     setStatus(undefined);
     try {
       const response = await mutation.mutateAsync({ data: values });
-      router.replace(getPostLoginPath(response.data.access, params.get("returnTo")));
+      const sessionPayload = response.data as { access?: string } | undefined;
+      const destination = getPostLoginPath(sessionPayload?.access, params.get("returnTo"));
+      if (destination === "/login") clearSessionState(queryClient);
+      router.replace(destination);
     } catch (error) { setStatus({ kind: "error", text: errorText(error) }); }
   }
 
