@@ -7,6 +7,8 @@ const links = [
   ["Overview", "/app"],
   ["History", "/app/history"],
   ["Capture", "/app/capture"],
+  ["Wallets", "/app/wallets"],
+  ["Categories", "/app/categories"],
   ["Settings", "/app/settings"],
 ] as const;
 
@@ -25,4 +27,3 @@ export function Sidebar() {
     </aside>
   );
 }
-
