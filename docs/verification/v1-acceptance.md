@@ -68,8 +68,8 @@ Three fresh disposable-harness retries with default six flows/four workers passe
 Full V1 web regression passed: `15` Vitest files / `84` tests, TypeScript, lint, deterministic
 OpenAPI/client drift.
 
-`next start` still prints standalone-output warning. It did not prevent API migration/serve or
-either full browser run, but should remain visible in follow-up verification.
+`next start` still prints standalone-output warning. It did not prevent API migration/serve or any
+full browser run, but should remain visible in follow-up verification.
 
 ## Immutable repository inputs
 
