@@ -1,0 +1,16 @@
+{
+  "name": "@cashmemo/v1-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "orval": "orval"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.90.21",
+    "axios": "1.13.2"
+  },
+  "devDependencies": {
+    "orval": "8.26.0"
+  }
+}

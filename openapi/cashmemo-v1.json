@@ -1,0 +1,1643 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cashmemo V1 API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/account/deletion": {
+      "get": {
+        "operationId": "get_account_deletion",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "request_account_deletion",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/account/deletion/cancel": {
+      "post": {
+        "operationId": "cancel_account_deletion",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password-reset/consume": {
+      "post": {
+        "operationId": "consume_password_reset",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password-reset/request": {
+      "post": {
+        "operationId": "request_password_reset",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "register",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sessions/current": {
+      "get": {
+        "operationId": "current_session",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sessions/revoke-all": {
+      "post": {
+        "operationId": "revoke_all_sessions",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verification/resend": {
+      "post": {
+        "operationId": "resend_verification",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "operationId": "verify_email",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/budgets": {
+      "get": {
+        "operationId": "list_budgets",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_budget",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/budgets/{budget_id}": {
+      "delete": {
+        "operationId": "delete_budget",
+        "parameters": [
+          {
+            "name": "budget_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "update_budget",
+        "parameters": [
+          {
+            "name": "budget_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "operationId": "list_categories",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_category",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{category_id}": {
+      "get": {
+        "operationId": "get_category",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_category",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "update_category",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{category_id}/archive": {
+      "post": {
+        "operationId": "archive_category",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/categories/{category_id}/restore": {
+      "post": {
+        "operationId": "restore_category",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/currencies": {
+      "get": {
+        "operationId": "list_currencies",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/health/live": {
+      "get": {
+        "operationId": "health_live",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "health_ready",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding": {
+      "get": {
+        "operationId": "get_onboarding",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding/seed-categories": {
+      "post": {
+        "operationId": "seed_onboarding_categories",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/recurring-transactions": {
+      "get": {
+        "operationId": "list_recurring_transactions",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_recurring_transaction",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/recurring-transactions/{id}": {
+      "get": {
+        "operationId": "get_recurring_transaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_recurring_transaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "update_recurring_transaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/recurring-transactions/{id}/pause": {
+      "post": {
+        "operationId": "pause_recurring_transaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/recurring-transactions/{id}/resume": {
+      "post": {
+        "operationId": "resume_recurring_transaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/reports/budget-summary": {
+      "get": {
+        "operationId": "get_budget_summary",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/reports/monthly-summary": {
+      "get": {
+        "operationId": "get_monthly_summary",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/preferences": {
+      "put": {
+        "operationId": "update_preferences",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions": {
+      "get": {
+        "operationId": "list_transactions",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_transaction",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/entry-defaults": {
+      "get": {
+        "operationId": "get_transaction_entry_defaults",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/recent": {
+      "get": {
+        "operationId": "get_recent_transactions",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/trash": {
+      "get": {
+        "operationId": "list_trashed_transactions",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{transaction_id}": {
+      "get": {
+        "operationId": "get_transaction",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "trash_transaction",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "update_transaction",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{transaction_id}/permanent": {
+      "delete": {
+        "operationId": "permanently_delete_transaction",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{transaction_id}/restore": {
+      "post": {
+        "operationId": "restore_transaction",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/wallets": {
+      "get": {
+        "operationId": "list_wallets",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_wallet",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/wallets/{wallet_id}": {
+      "get": {
+        "operationId": "get_wallet",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_wallet",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "update_wallet",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/wallets/{wallet_id}/archive": {
+      "post": {
+        "operationId": "archive_wallet",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/wallets/{wallet_id}/restore": {
+      "post": {
+        "operationId": "restore_wallet",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "422": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptedContract": {
+        "type": "object",
+        "required": [
+          "accepted"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AccountDeletionContract": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "deletion_due_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "BudgetContract": {
+        "type": "object",
+        "required": [
+          "id",
+          "category_id",
+          "currency",
+          "month",
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "month": {
+            "type": "string"
+          }
+        }
+      },
+      "BudgetProgressContract": {
+        "type": "object",
+        "required": [
+          "id",
+          "category_id",
+          "currency",
+          "budgeted",
+          "spent",
+          "remaining",
+          "progress"
+        ],
+        "properties": {
+          "budgeted": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "progress": {
+            "type": "string"
+          },
+          "remaining": {
+            "type": "string"
+          },
+          "spent": {
+            "type": "string"
+          }
+        }
+      },
+      "BudgetSummaryContract": {
+        "type": "object",
+        "required": [
+          "month",
+          "budgets"
+        ],
+        "properties": {
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetProgressContract"
+            }
+          },
+          "month": {
+            "type": "string"
+          }
+        }
+      },
+      "CategoryContract": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CredentialsContract": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "CurrencyContract": {
+        "type": "object",
+        "required": [
+          "code",
+          "display_name",
+          "exponent"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "exponent": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CurrencySummaryContract": {
+        "type": "object",
+        "required": [
+          "currency",
+          "income",
+          "expense",
+          "net",
+          "expense_categories"
+        ],
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "expense": {
+            "type": "string"
+          },
+          "expense_categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExpenseCategoryContract"
+            }
+          },
+          "income": {
+            "type": "string"
+          },
+          "net": {
+            "type": "string"
+          }
+        }
+      },
+      "EmailContract": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "EntryDefaults": {
+        "type": "object",
+        "properties": {
+          "last_used_wallet_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "fields": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        }
+      },
+      "ExpenseCategoryContract": {
+        "type": "object",
+        "required": [
+          "category_id",
+          "name",
+          "expense"
+        ],
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expense": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MonthlySummaryContract": {
+        "type": "object",
+        "required": [
+          "month",
+          "currencies"
+        ],
+        "properties": {
+          "currencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CurrencySummaryContract"
+            }
+          },
+          "month": {
+            "type": "string"
+          }
+        }
+      },
+      "OnboardingContract": {
+        "type": "object",
+        "required": [
+          "timezone_configured",
+          "default_currency_configured",
+          "categories_seeded",
+          "has_active_wallet"
+        ],
+        "properties": {
+          "categories_seeded": {
+            "type": "boolean"
+          },
+          "default_currency_configured": {
+            "type": "boolean"
+          },
+          "has_active_wallet": {
+            "type": "boolean"
+          },
+          "timezone_configured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PreferencesContract": {
+        "type": "object",
+        "required": [
+          "timezone",
+          "default_currency_code"
+        ],
+        "properties": {
+          "default_currency_code": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
+      },
+      "RecentTransactionsContract": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionContract"
+            }
+          }
+        }
+      },
+      "RecurringTransactionContract": {
+        "type": "object",
+        "required": [
+          "id",
+          "recurring_transaction_id",
+          "wallet_id",
+          "category_id",
+          "direction",
+          "amount",
+          "currency",
+          "frequency",
+          "start_date",
+          "next_due_date",
+          "status"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "next_due_date": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recurring_occurrence_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "recurring_transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "start_date": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "wallet_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "RecurringTransactionsContract": {
+        "type": "object",
+        "required": [
+          "recurring_transactions"
+        ],
+        "properties": {
+          "recurring_transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecurringTransactionContract"
+            }
+          }
+        }
+      },
+      "SessionContract": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "session_id",
+          "access"
+        ],
+        "properties": {
+          "access": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "TokenContract": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "TransactionContract": {
+        "type": "object",
+        "required": [
+          "id",
+          "wallet_id",
+          "category_id",
+          "direction",
+          "amount",
+          "currency",
+          "occurred_at"
+        ],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direction": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "purge_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recurring_occurrence_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "wallet_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "WalletContract": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "currency",
+          "opening_balance"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "opening_balance": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

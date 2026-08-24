@@ -10,6 +10,7 @@ pub mod error;
 pub mod http;
 pub mod money;
 pub mod onboarding;
+pub mod openapi;
 pub mod receipts;
 pub mod recurring;
 pub mod reporting;

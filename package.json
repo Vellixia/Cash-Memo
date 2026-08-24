@@ -9,6 +9,9 @@
     "pnpm": "11.13.1"
   },
   "scripts": {
+    "v1:openapi": "cargo run -p cashmemo-api --bin export_openapi -- openapi/cashmemo-v1.json",
+    "v1:api:generate": "pnpm v1:openapi && pnpm --dir v1/web orval",
+    "v1:api:check": "pnpm v1:api:generate && git diff --exit-code -- openapi/cashmemo-v1.json v1/web/generated/api",
     "acceptance:full-mvp": "node scripts/verify/run-gates.mjs acceptance full-mvp",
     "acceptance:us1": "node scripts/verify/run-gates.mjs acceptance us1",
     "acceptance:us2": "node scripts/verify/run-gates.mjs acceptance us2",

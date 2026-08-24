@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - v1/web
 
 allowBuilds:
   argon2: true
@@ -8,3 +9,18 @@ allowBuilds:
   esbuild: true
   protobufjs: false
   ssh2: false
+
+minimumReleaseAgeExclude:
+  - "@orval/angular@8.26.0"
+  - "@orval/axios@8.26.0"
+  - "@orval/core@8.26.0"
+  - "@orval/effect@8.26.0"
+  - "@orval/fetch@8.26.0"
+  - "@orval/hono@8.26.0"
+  - "@orval/mcp@8.26.0"
+  - "@orval/mock@8.26.0"
+  - "@orval/query@8.26.0"
+  - "@orval/solid-start@8.26.0"
+  - "@orval/swr@8.26.0"
+  - "@orval/zod@8.26.0"
+  - orval@8.26.0
