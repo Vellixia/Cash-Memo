@@ -1,10 +1,17 @@
 import { expect, test } from "@playwright/test";
 import { provisionUser } from "./support/auth";
 
+function cssTimeMilliseconds(value: string): number {
+  const amount = Number.parseFloat(value);
+  return value.endsWith("ms") ? amount : amount * 1_000;
+}
+
 test("updates a server-owned budget and pauses then resumes a recurring rule", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const user = await provisionUser(page, "budgets-recurring");
 
   await page.goto("/app/budgets");
+  await expect(page.getByRole("heading", { name: "Budgets", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "New budget", level: 2 })).toBeVisible();
   await expect(page.getByLabel("Month", { exact: true })).not.toHaveValue("");
   await page.getByLabel("Category").selectOption({ label: "Food & Drink" });
@@ -24,7 +31,22 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
   );
 
   await page.goto("/app/recurring");
-  await page.getByRole("button", { name: "New recurring rule" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Recurring transactions", level: 1 }),
+  ).toBeVisible();
+  const createRule = page.getByRole("button", { name: "New recurring rule" });
+  const reducedMotion = await createRule.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      animationDuration: style.animationDuration,
+      animationIterationCount: style.animationIterationCount,
+      transitionDuration: style.transitionDuration,
+    };
+  });
+  expect(cssTimeMilliseconds(reducedMotion.animationDuration)).toBeCloseTo(0.01, 5);
+  expect(cssTimeMilliseconds(reducedMotion.transitionDuration)).toBeCloseTo(0.01, 5);
+  expect(reducedMotion.animationIterationCount).toBe("1");
+  await createRule.click();
   await page.getByLabel("Wallet").selectOption({ label: `${user.walletName} — USD` });
   await page.getByLabel("Category").selectOption({ label: "Food & Drink" });
   await page.getByLabel("Amount").fill("15.00");

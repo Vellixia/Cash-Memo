@@ -1,9 +1,9 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { PUBLIC_ORIGIN } from "./environment.mjs";
 
 const MAILPIT_HTTP_URL =
   process.env.CASHMEMO_V1_E2E_MAILPIT_URL ??
   `http://127.0.0.1:${process.env.CASHMEMO_V1_E2E_MAILPIT_PORT ?? "8025"}`;
-const PUBLIC_ORIGIN = process.env.CASHMEMO_V1_E2E_PUBLIC_ORIGIN ?? "http://localhost:3000";
 
 interface MailpitAddress {
   Address?: string;

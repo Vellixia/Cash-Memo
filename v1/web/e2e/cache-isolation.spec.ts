@@ -1,6 +1,6 @@
-import { expect, test, type APIResponse } from "@playwright/test";
-import { apiUrl } from "./support/api";
-import { provisionUser } from "./support/auth";
+import { expect, test, type APIResponse, type Route } from "@playwright/test";
+import { apiUrl, connectPageToRealApi } from "./support/api";
+import { login, provisionUser } from "./support/auth";
 import { createTransaction } from "./support/transactions";
 
 async function opaqueFailure(response: APIResponse) {
@@ -9,6 +9,7 @@ async function opaqueFailure(response: APIResponse) {
 }
 
 test("session transition cannot reuse private cache and ownership failures reveal nothing", async ({
+  browser,
   page,
 }) => {
   const first = await provisionUser(page, "cache-owner");
@@ -19,6 +20,9 @@ test("session transition cannot reuse private cache and ownership failures revea
     direction: "expense",
     note: privateNote,
   });
+
+  await page.goto("/app");
+  await expect(page.getByText(privateNote, { exact: true })).toBeVisible();
 
   const walletApi = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/wallets",
@@ -40,13 +44,54 @@ test("session transition cannot reuse private cache and ownership failures revea
   expect(rscHeaders.cacheControl).toContain("no-store");
   expect(rscHeaders.contentType).toContain("text/x-component");
 
+  const ownerContext = await browser.newContext();
+  const ownerPage = await ownerContext.newPage();
+  await connectPageToRealApi(ownerPage);
+  await login(ownerPage, first);
+
+  const secondContext = await browser.newContext();
+  const secondPage = await secondContext.newPage();
+  const second = await provisionUser(secondPage, "cache-other");
+  await secondContext.close();
+
   await page.goto("/app/settings/sessions");
   await page.getByRole("button", { name: "Sign out this session" }).click();
   await expect(page).toHaveURL(/\/login$/);
 
-  const second = await provisionUser(page, "cache-other");
+  let releaseFinancialResponses!: () => void;
+  const financialResponsesHeld = new Promise<void>((resolve) => {
+    releaseFinancialResponses = resolve;
+  });
+  const delayedPaths = new Set([
+    "/api/v1/reports/budget-summary",
+    "/api/v1/reports/monthly-summary",
+    "/api/v1/transactions/recent",
+    "/api/v1/wallets",
+  ]);
+  let delayedRequestCount = 0;
+  const holdFinancialResponses = async (route: Route) => {
+    if (delayedPaths.has(new URL(route.request().url()).pathname)) {
+      delayedRequestCount += 1;
+      await financialResponsesHeld;
+    }
+    await route.fallback();
+  };
+  await page.route("**/api/v1/**", holdFinancialResponses);
+
+  await login(page, second);
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+  await expect(page.getByText("Loading recent transactions…", { exact: true })).toBeVisible();
+  await expect.poll(() => delayedRequestCount).toBeGreaterThanOrEqual(1);
+  await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
+
   await page.goto("/app/wallets");
+  await expect(page.getByText("Loading wallets…", { exact: true })).toBeVisible();
+  await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(second.walletName, { exact: true })).toHaveCount(0);
+  releaseFinancialResponses();
   await expect(page.getByRole("heading", { name: second.walletName, level: 2 })).toBeVisible();
+  await page.unroute("**/api/v1/**", holdFinancialResponses);
   await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
   await page.goto("/app");
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
@@ -94,10 +139,34 @@ test("session transition cannot reuse private cache and ownership failures revea
   expect(await opaqueFailure(knownPatch)).toEqual(await opaqueFailure(unknownPatch));
   expect(await opaqueFailure(knownDelete)).toEqual(await opaqueFailure(unknownDelete));
 
+  const ownerRead = await ownerPage.request.get(apiUrl(`/api/v1/transactions/${transactionId}`));
+  expect(ownerRead.ok()).toBe(true);
+  const original = (await ownerRead.json()) as {
+    amount: string;
+    deleted_at: string | null;
+    direction: string;
+    note: string | null;
+    purge_after: string | null;
+  };
+  expect({
+    amount: original.amount,
+    deletedAt: original.deleted_at,
+    direction: original.direction,
+    note: original.note,
+    purgeAfter: original.purge_after,
+  }).toEqual({
+    amount: "41.00",
+    deletedAt: null,
+    direction: "expense",
+    note: privateNote,
+    purgeAfter: null,
+  });
+
   const list = await page.request.get(apiUrl("/api/v1/transactions"));
   expect(list.ok()).toBe(true);
   expect(list.headers()["cache-control"]).toContain("no-store");
   const history = (await list.json()) as { items: { id: string; note?: string | null }[] };
   expect(history.items).not.toContainEqual(expect.objectContaining({ id: transactionId }));
   expect(history.items).not.toContainEqual(expect.objectContaining({ note: privateNote }));
+  await ownerContext.close();
 });

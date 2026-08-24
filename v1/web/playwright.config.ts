@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { PUBLIC_ORIGIN } from "./e2e/support/environment.mjs";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -7,7 +8,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {
-    baseURL: process.env.CASHMEMO_V1_E2E_PUBLIC_ORIGIN ?? "http://localhost:3000",
+    baseURL: PUBLIC_ORIGIN,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
