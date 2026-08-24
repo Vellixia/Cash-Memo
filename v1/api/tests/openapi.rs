@@ -40,6 +40,28 @@ fn rust_openapi_freezes_v1_contract_names() {
         .expect("entry defaults");
     assert!(defaults.contains_key("last_used_wallet_id"));
 
+    let onboarding_schema = schemas
+        .get("OnboardingContract")
+        .and_then(Value::as_object)
+        .expect("onboarding schema");
+    let onboarding_required = onboarding_schema
+        .get("required")
+        .and_then(Value::as_array)
+        .expect("onboarding required fields");
+    assert!(onboarding_required.contains(&serde_json::json!("default_currency_code")));
+    let onboarding = onboarding_schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .expect("onboarding properties");
+    let default_currency_code = onboarding
+        .get("default_currency_code")
+        .and_then(Value::as_object)
+        .expect("persisted default currency code");
+    assert_eq!(
+        default_currency_code.get("type"),
+        Some(&serde_json::json!(["string", "null"]))
+    );
+
     let serialized = serde_json::to_string(&document).expect("document JSON");
     for name in [
         "recurring-transactions",

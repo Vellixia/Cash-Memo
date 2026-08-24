@@ -143,6 +143,8 @@ pub struct RecentTransactionsContract {
 pub struct OnboardingContract {
     pub timezone_configured: bool,
     pub default_currency_configured: bool,
+    #[schema(required = true)]
+    pub default_currency_code: Option<String>,
     pub categories_seeded: bool,
     pub has_active_wallet: bool,
 }

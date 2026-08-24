@@ -34,6 +34,7 @@ pub struct OnboardingService {
 pub struct OnboardingState {
     pub timezone_configured: bool,
     pub default_currency_configured: bool,
+    pub default_currency_code: Option<String>,
     pub categories_seeded: bool,
     pub has_active_wallet: bool,
 }
@@ -60,10 +61,10 @@ impl OnboardingService {
     }
 
     pub async fn state(&self, user_id: Uuid) -> Result<OnboardingState, OnboardingError> {
-        sqlx::query_as(
+        sqlx::query_as::<_, (bool, Option<String>, bool, bool)>(
             "SELECT
                 u.timezone_configured_at IS NOT NULL,
-                u.default_currency_code IS NOT NULL,
+                u.default_currency_code,
                 (SELECT count(*) FROM categories c
                     WHERE c.user_id = u.id AND c.starter_key = ANY($2)) = $3,
                 EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = u.id AND w.archived_at IS NULL)
@@ -75,16 +76,14 @@ impl OnboardingService {
         .fetch_one(&self.pool)
         .await
         .map(
-            |(
-                timezone_configured,
-                default_currency_configured,
-                categories_seeded,
-                has_active_wallet,
-            )| OnboardingState {
-                timezone_configured,
-                default_currency_configured,
-                categories_seeded,
-                has_active_wallet,
+            |(timezone_configured, default_currency_code, categories_seeded, has_active_wallet)| {
+                OnboardingState {
+                    timezone_configured,
+                    default_currency_configured: default_currency_code.is_some(),
+                    default_currency_code,
+                    categories_seeded,
+                    has_active_wallet,
+                }
             },
         )
         .map_err(|_| OnboardingError::Persistence)

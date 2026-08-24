@@ -6044,12 +6044,19 @@
         "required": [
           "timezone_configured",
           "default_currency_configured",
+          "default_currency_code",
           "categories_seeded",
           "has_active_wallet"
         ],
         "properties": {
           "categories_seeded": {
             "type": "boolean"
+          },
+          "default_currency_code": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "default_currency_configured": {
             "type": "boolean"

@@ -7,6 +7,8 @@
 
 export interface OnboardingContract {
   categories_seeded: boolean;
+  /** @nullable */
+  default_currency_code: string | null;
   default_currency_configured: boolean;
   has_active_wallet: boolean;
   timezone_configured: boolean;

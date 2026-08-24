@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   state: {
     timezone_configured: true,
     default_currency_configured: false,
+    default_currency_code: null as string | null,
     categories_seeded: true,
     has_active_wallet: true,
   },
@@ -70,6 +71,7 @@ describe("derived onboarding", () => {
     mocks.state = {
       timezone_configured: true,
       default_currency_configured: false,
+      default_currency_code: null,
       categories_seeded: true,
       has_active_wallet: true,
     };
@@ -94,6 +96,7 @@ describe("derived onboarding", () => {
       onboardingComplete({
         timezone_configured: true,
         default_currency_configured: true,
+        default_currency_code: "USD",
         categories_seeded: true,
         has_active_wallet: true,
       }),
@@ -102,6 +105,7 @@ describe("derived onboarding", () => {
       onboardingComplete({
         timezone_configured: true,
         default_currency_configured: true,
+        default_currency_code: "USD",
         categories_seeded: true,
         has_active_wallet: false,
       }),
@@ -113,6 +117,7 @@ describe("derived onboarding", () => {
       onboardingNextStep({
         timezone_configured: false,
         default_currency_configured: true,
+        default_currency_code: "USD",
         categories_seeded: true,
         has_active_wallet: true,
       }),
@@ -121,6 +126,7 @@ describe("derived onboarding", () => {
       onboardingNextStep({
         timezone_configured: true,
         default_currency_configured: false,
+        default_currency_code: null,
         categories_seeded: true,
         has_active_wallet: true,
       }),
@@ -129,6 +135,7 @@ describe("derived onboarding", () => {
       onboardingNextStep({
         timezone_configured: true,
         default_currency_configured: true,
+        default_currency_code: "USD",
         categories_seeded: false,
         has_active_wallet: true,
       }),
@@ -137,6 +144,7 @@ describe("derived onboarding", () => {
       onboardingNextStep({
         timezone_configured: true,
         default_currency_configured: true,
+        default_currency_code: "USD",
         categories_seeded: true,
         has_active_wallet: false,
       }),
@@ -147,6 +155,7 @@ describe("derived onboarding", () => {
     mocks.state = {
       timezone_configured: true,
       default_currency_configured: false,
+      default_currency_code: null,
       categories_seeded: true,
       has_active_wallet: true,
     };
@@ -168,6 +177,7 @@ describe("derived onboarding", () => {
     mocks.state = {
       timezone_configured: false,
       default_currency_configured: true,
+      default_currency_code: "USD",
       categories_seeded: true,
       has_active_wallet: true,
     };
@@ -205,6 +215,7 @@ describe("derived onboarding", () => {
     mocks.state = {
       timezone_configured: true,
       default_currency_configured: true,
+      default_currency_code: "USD",
       categories_seeded: false,
       has_active_wallet: true,
     };
@@ -222,17 +233,18 @@ describe("derived onboarding", () => {
     expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ["/api/v1/categories"] });
   });
 
-  it("creates first wallet with an explicitly selected registry currency", async () => {
+  it("reloads first-wallet onboarding with persisted default currency preselected", async () => {
     mocks.state = {
       timezone_configured: true,
       default_currency_configured: true,
+      default_currency_code: "EUR",
       categories_seeded: true,
       has_active_wallet: false,
     };
     renderOnboarding();
 
+    expect(screen.getByLabelText<HTMLSelectElement>("Currency").value).toBe("EUR");
     fireEvent.change(screen.getByLabelText("Wallet name"), { target: { value: "Cash" } });
-    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "USD" } });
     fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "125.00" } });
     const submit = screen.getByRole("button", { name: "Create first wallet" });
     await waitFor(() => {
@@ -242,7 +254,7 @@ describe("derived onboarding", () => {
 
     await waitFor(() => {
       expect(mocks.walletCreate).toHaveBeenCalledWith({
-        data: { name: "Cash", currency: "USD", opening_balance: "125.00" },
+        data: { name: "Cash", currency: "EUR", opening_balance: "125.00" },
       });
     });
     expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ["/api/v1/onboarding"] });

@@ -28,6 +28,7 @@ async fn onboarding_state_is_derived_from_persisted_preferences_categories_and_w
         json!({
             "timezone_configured": false,
             "default_currency_configured": false,
+            "default_currency_code": null,
             "categories_seeded": false,
             "has_active_wallet": false,
         })
@@ -66,6 +67,7 @@ async fn onboarding_state_is_derived_from_persisted_preferences_categories_and_w
         json!({
             "timezone_configured": true,
             "default_currency_configured": true,
+            "default_currency_code": "IDR",
             "categories_seeded": false,
             "has_active_wallet": true,
         })

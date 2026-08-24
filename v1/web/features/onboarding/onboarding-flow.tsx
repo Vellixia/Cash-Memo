@@ -42,7 +42,8 @@ export function OnboardingFlow() {
   const [currency, setCurrency] = useState("");
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const currencyList = currencies.data?.data ?? [];
-  const defaultCurrency = currency;
+  const defaultCurrency =
+    currency.length > 0 ? currency : (onboarding.state?.default_currency_code ?? "");
   const timezoneOptions = getTimezoneOptions();
 
   useEffect(() => {
