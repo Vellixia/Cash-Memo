@@ -19,10 +19,14 @@ export function PreferencesForm() {
   const client = useQueryClient();
   const [timezoneOptions] = useState(getTimezoneOptions);
   const [timezoneOverride, setTimezoneOverride] = useState<string>();
-  const [chosenCurrency, setChosenCurrency] = useState("");
+  const [chosenCurrency, setChosenCurrency] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<{
+    timezone?: string;
+    currency?: string;
+  }>({});
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const savedCurrency = onboarding.data?.data.default_currency_code ?? "";
-  const currency = chosenCurrency.length > 0 ? chosenCurrency : savedCurrency;
+  const currency = chosenCurrency ?? savedCurrency;
   const savedTimezone = onboarding.data?.data.timezone_configured
     ? (onboarding.data.data.timezone ?? "")
     : (timezoneOptions[0] ?? "UTC");
@@ -32,10 +36,12 @@ export function PreferencesForm() {
     event.preventDefault();
     setStatus(undefined);
     if (!onboarding.data) return;
-    if (!timezone.trim() || !currency) {
-      setStatus({ kind: "error", text: "Choose timezone and default currency." });
-      return;
-    }
+    const errors = {
+      timezone: timezone.trim() ? undefined : "Choose a timezone.",
+      currency: currency ? undefined : "Choose a default currency.",
+    };
+    setFieldErrors(errors);
+    if (errors.timezone || errors.currency) return;
     try {
       await update.mutateAsync({
         data: { timezone: timezone.trim(), default_currency_code: currency },
@@ -67,6 +73,7 @@ export function PreferencesForm() {
         <Button
           type="button"
           onClick={() => {
+            setFieldErrors({});
             if (onboarding.isError) void onboarding.refetch();
             if (currencies.isError) void currencies.refetch();
           }}
@@ -82,30 +89,32 @@ export function PreferencesForm() {
       <h2>Journal preferences</h2>
       <p>Timezone defines server reporting months, local dates, and recurring schedules.</p>
       <p>Default currency only preselects new entries; it never converts or combines currencies.</p>
-      <FormField label="Timezone" htmlFor="settings-timezone">
+      <FormField label="Timezone" htmlFor="settings-timezone" error={fieldErrors.timezone}>
         <input
           id="settings-timezone"
           className="input"
           value={timezone}
           onChange={(event) => {
             setTimezoneOverride(event.target.value);
+            setFieldErrors((current) => ({ ...current, timezone: undefined }));
           }}
           list="settings-timezones"
           autoComplete="off"
         />
-        <datalist id="settings-timezones">
-          {timezoneOptions.map((option) => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
       </FormField>
-      <FormField label="Default currency" htmlFor="settings-currency">
+      <datalist id="settings-timezones">
+        {timezoneOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+      <FormField label="Default currency" htmlFor="settings-currency" error={fieldErrors.currency}>
         <select
           id="settings-currency"
           className="input"
           value={currency}
           onChange={(event) => {
             setChosenCurrency(event.target.value);
+            setFieldErrors((current) => ({ ...current, currency: undefined }));
           }}
         >
           <option value="">Choose currency</option>

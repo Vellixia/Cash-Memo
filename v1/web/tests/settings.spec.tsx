@@ -148,6 +148,30 @@ describe("settings", () => {
     expect(screen.getByLabelText("Timezone").getAttribute("aria-invalid")).toBeNull();
   });
 
+  it("links required preference errors to both controls and clears each error on edit", async () => {
+    const { PreferencesForm } = await import("../features/settings/preferences-form");
+    setup(<PreferencesForm />);
+    fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+
+    const timezone = screen.getByLabelText("Timezone");
+    const currency = screen.getByLabelText("Default currency");
+    expect(timezone.getAttribute("aria-invalid")).toBe("true");
+    expect(timezone.getAttribute("aria-describedby")).toBe("settings-timezone-error");
+    expect(screen.getByText("Choose a timezone.").id).toBe("settings-timezone-error");
+    expect(currency.getAttribute("aria-invalid")).toBe("true");
+    expect(currency.getAttribute("aria-describedby")).toBe("settings-currency-error");
+    expect(screen.getByText("Choose a default currency.").id).toBe("settings-currency-error");
+    expect(api.preferences).not.toHaveBeenCalled();
+
+    fireEvent.change(timezone, { target: { value: "Asia/Jakarta" } });
+    expect(timezone.getAttribute("aria-invalid")).toBeNull();
+    expect(currency.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(currency, { target: { value: "IDR" } });
+    expect(currency.getAttribute("aria-invalid")).toBeNull();
+  });
+
   it("clears private query state after current-session and all-session logout", async () => {
     const { SessionControls } = await import("../features/settings/session-controls");
     const current = setup(<SessionControls />);
