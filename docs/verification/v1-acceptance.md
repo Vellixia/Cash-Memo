@@ -3,12 +3,17 @@
 Status: **PASS** for current repository acceptance gates. This record covers only disposable local
 V1 services; it is not deployment or production evidence.
 
-Recorded: `2026-08-25T02:18:49+0700 WIB`.
+Baseline recorded: `2026-08-25T02:18:49+0700 WIB`.
 
-Verification source commit: `0dcc7aa9c45cb9921077f5dc6e090ad33950af69`. Host/toolchain: macOS
+Baseline source commit: `0dcc7aa9c45cb9921077f5dc6e090ad33950af69`. Host/toolchain: macOS
 `Darwin 25.6.0 arm64`; Rust `rustc 1.95.0`, Cargo `1.95.0`; pnpm `11.13.1`; installed Node
 `v24.14.0` used for final E2E retry. Initial clean gate inherited Node `v22.19.0`, which pnpm
 correctly warned does not meet required `24.14.0`.
+
+Follow-up implementation under test: `cf4e6f58efa7b386d64fca796f89b753b41718f8`
+(`test: stabilize V1 parallel acceptance`). Its fresh default six-flow/four-worker browser gate
+passed at `2026-08-25T02:42:27+0700 WIB`. This is an implementation evidence SHA, not a claim that a
+later documentation-only commit was tested.
 
 ## Clean local gate
 
@@ -58,9 +63,10 @@ production defaults/configuration unchanged. Regression test proves parent envir
 mutated. E2E expectation timeout is `30s`, below per-test `60s` timeout. Existing Rust `http_safety`
 test still proves normal rate limiting returns `429` after six attempts.
 
-Two fresh disposable-harness retries with default six flows/four workers passed under Node
-`v24.14.0`; neither used worker-count workaround. Full V1 web regression passed: `15` Vitest files /
-`84` tests, TypeScript, lint, deterministic OpenAPI/client drift.
+Three fresh disposable-harness retries with default six flows/four workers passed under Node
+`v24.14.0`; latest pass was at `2026-08-25T02:42:27+0700 WIB`. None used worker-count workaround.
+Full V1 web regression passed: `15` Vitest files / `84` tests, TypeScript, lint, deterministic
+OpenAPI/client drift.
 
 `next start` still prints standalone-output warning. It did not prevent API migration/serve or
 either full browser run, but should remain visible in follow-up verification.

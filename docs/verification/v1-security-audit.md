@@ -1,10 +1,15 @@
 # Cashmemo V1 local security and database audit
 
-Status: **PASS for named Rust audit binaries; browser acceptance remains separately failing.**
+Status: **PASS for named Rust audit binaries.** Browser acceptance separately passes on follow-up
+implementation `cf4e6f58efa7b386d64fca796f89b753b41718f8`; see acceptance evidence.
 
 Recorded: `2026-08-25T02:18:49+0700 WIB`
 
-Verification source commit: `0dcc7aa9c45cb9921077f5dc6e090ad33950af69`
+Baseline source commit: `0dcc7aa9c45cb9921077f5dc6e090ad33950af69`
+
+Follow-up implementation under browser-test: `cf4e6f58efa7b386d64fca796f89b753b41718f8`
+(`test: stabilize V1 parallel acceptance`). Its default six-flow/four-worker browser gate passed
+fresh at `2026-08-25T02:42:27+0700 WIB`.
 
 This audit used isolated `cashmemo_e2e` PostgreSQL only. It did not inspect a Dokploy environment,
 production database, deployed image, route, backup, or user data.
@@ -26,7 +31,7 @@ precision behavior and is not named by brief aggregate command.
 | Session issuance, revocation, reset/logout behavior, cookie bounds         | `auth` passed; `account_deletion` also passed concurrent login/deletion closure.                             |
 | Exact money, currency precision, scale/range rejection, no float authority | `money` passed.                                                                                              |
 | Recurrence cadence and idempotent occurrence generation                    | `recurring` passed.                                                                                          |
-| Deletion/purge races, lease takeover, retryable receipt/DB failures        | `account_deletion` passed all five cases, including atomic claim and concurrent-login closure.               |
+| Deletion/purge races, lease takeover, retryable receipt/DB failures        | `account_deletion` passed all six cases, including atomic claim and concurrent-login closure.                |
 | Empty/identified V1 target allowance; unknown non-empty target rejection   | `migrations` passed. Playwright preflight independently exercised protection when SQLx metadata was present. |
 
 This is source-and-disposable-test evidence, not claim that production sessions, balances,

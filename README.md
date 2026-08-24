@@ -12,7 +12,7 @@ Current verification records:
   on disposable services.
 - [Security/database audit](docs/verification/v1-security-audit.md) — named Rust audit binaries pass
   on disposable V1 PostgreSQL.
-- [Merge readiness](docs/verification/v1-merge-readiness.md) — **NOT READY**: E2E, preservation,
+- [Merge readiness](docs/verification/v1-merge-readiness.md) — **NOT READY**: preservation,
   canonical-promotion, and legacy-removal criteria remain.
 - [Production-cutover readiness](docs/verification/v1-production-readiness.md) — **NOT READY**: no
   production environment audit or action occurred.
