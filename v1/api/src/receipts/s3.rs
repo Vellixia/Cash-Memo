@@ -4,8 +4,8 @@ use aws_sdk_s3::{Client, config::Region, primitives::ByteStream};
 use url::Url;
 
 use super::{
-    DeletionReceipt, DeletionReceiptStore, ReceiptError, ReceiptWrite, canonical_receipt_bytes,
-    receipt_object_key,
+    DeletionReceipt, DeletionReceiptReader, DeletionReceiptStore, ReceiptError, ReceiptObject,
+    ReceiptWrite, canonical_receipt_bytes, receipt_object_key,
 };
 
 #[derive(Clone, Debug)]
@@ -132,5 +132,58 @@ impl DeletionReceiptStore for S3DeletionReceiptStore {
             Some(_) => Err(ReceiptError::DivergentObject),
             None => Err(ReceiptError::Storage),
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl DeletionReceiptReader for S3DeletionReceiptStore {
+    async fn list_receipts(&self) -> Result<Vec<ReceiptObject>, ReceiptError> {
+        let prefix = format!("{}/", self.prefix.trim_end_matches('/'));
+        let mut continuation = None;
+        let mut keys = Vec::new();
+        loop {
+            let response = self
+                .client
+                .list_objects_v2()
+                .bucket(&self.bucket)
+                .prefix(&prefix)
+                .set_continuation_token(continuation)
+                .send()
+                .await
+                .map_err(|_| ReceiptError::Storage)?;
+            keys.extend(
+                response
+                    .contents()
+                    .iter()
+                    .filter_map(|item| item.key().map(str::to_owned)),
+            );
+            if !response.is_truncated().unwrap_or(false) {
+                break;
+            }
+            continuation = response.next_continuation_token().map(str::to_owned);
+            if continuation.is_none() {
+                return Err(ReceiptError::Storage);
+            }
+        }
+        keys.sort();
+        let mut receipts = Vec::with_capacity(keys.len());
+        for key in keys {
+            let body = self
+                .client
+                .get_object()
+                .bucket(&self.bucket)
+                .key(&key)
+                .send()
+                .await
+                .map_err(|_| ReceiptError::Storage)?
+                .body
+                .collect()
+                .await
+                .map_err(|_| ReceiptError::Storage)?
+                .into_bytes()
+                .to_vec();
+            receipts.push(ReceiptObject { key, body });
+        }
+        Ok(receipts)
     }
 }

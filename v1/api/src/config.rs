@@ -1,3 +1,5 @@
+#[cfg(feature = "s3-receipts")]
+use std::collections::BTreeSet;
 use std::{env, net::SocketAddr, time::Duration};
 
 use thiserror::Error;
@@ -229,6 +231,13 @@ impl DeletionReceiptCommandConfig {
             })
             .collect::<Result<Vec<_>, ConfigError>>()?;
         if hmac_keys.is_empty() {
+            return Err(ConfigError::InvalidDeletionReceiptKeys);
+        }
+        let mut versions = BTreeSet::new();
+        if hmac_keys
+            .iter()
+            .any(|(version, _)| *version == 0 || !versions.insert(*version))
+        {
             return Err(ConfigError::InvalidDeletionReceiptKeys);
         }
         Ok(Self {

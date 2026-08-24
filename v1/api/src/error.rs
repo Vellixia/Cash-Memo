@@ -196,6 +196,10 @@ pub enum ApiError {
     RecurringProcess,
     #[error("account purge failed")]
     AccountPurge,
+    #[error("receipt replay is not ready for restored database traffic")]
+    ReceiptReplayNotReady,
+    #[error("receipt replay requires isolated restored database acknowledgement")]
+    ReceiptReplayIsolation,
     #[error(transparent)]
     Server(#[from] std::io::Error),
 }

@@ -7,6 +7,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[cfg(feature = "s3-receipts")]
+pub mod replay;
+#[cfg(feature = "s3-receipts")]
 pub mod s3;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,6 +47,17 @@ pub enum ReceiptError {
 #[async_trait]
 pub trait DeletionReceiptStore: Send + Sync {
     async fn put_receipt(&self, receipt: &DeletionReceipt) -> Result<ReceiptWrite, ReceiptError>;
+}
+
+/// Read-only receipt access used only by an isolated restore replay command.
+#[async_trait]
+pub trait DeletionReceiptReader: Send + Sync {
+    async fn list_receipts(&self) -> Result<Vec<ReceiptObject>, ReceiptError>;
+}
+
+pub struct ReceiptObject {
+    pub key: String,
+    pub body: Vec<u8>,
 }
 
 pub fn hmac_user_id(key: &[u8], user_id: Uuid) -> Result<[u8; 32], ReceiptError> {

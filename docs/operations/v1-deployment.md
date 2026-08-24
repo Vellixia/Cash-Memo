@@ -45,8 +45,8 @@ docker run --rm --network "${CASHMEMO_V1_PRIVATE_NETWORK:-cashmemo-v1-private}" 
   "$CASHMEMO_V1_API_IMAGE" migrate
 ```
 
-Production replacement and routing require the separate preservation gate before this command. Task
-20 verification does not deploy, migrate production, or activate routes.
+Production replacement and routing require the separate [preservation gate](preservation-gate.md)
+before this command. Task 20 verification does not deploy, migrate production, or activate routes.
 
 ## Health and shutdown
 

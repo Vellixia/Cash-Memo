@@ -48,6 +48,11 @@ pub enum Command {
         #[arg(long, value_parser = clap::value_parser!(u64).range(1..=MAX_RECURRING_BATCH_SIZE))]
         batch_size: u64,
     },
+    #[cfg(feature = "s3-receipts")]
+    ReplayDeletionReceipts {
+        #[arg(long)]
+        acknowledge_isolated_restored_database: bool,
+    },
 }
 
 #[tokio::main]
@@ -142,6 +147,39 @@ async fn run() -> Result<(), ApiError> {
                 processed += 1;
             }
             print_summary("purge-accounts", processed);
+        }
+        #[cfg(feature = "s3-receipts")]
+        Command::ReplayDeletionReceipts {
+            acknowledge_isolated_restored_database,
+        } => {
+            use cashmemo_api::{
+                config::DeletionReceiptCommandConfig,
+                receipts::{replay::replay_deletion_receipts, s3::S3DeletionReceiptStore},
+            };
+            if !acknowledge_isolated_restored_database
+                || std::env::var("CASHMEMO_V1_RESTORED_DATABASE_ISOLATED")
+                    .ok()
+                    .as_deref()
+                    != Some("acknowledged")
+            {
+                return Err(ApiError::ReceiptReplayIsolation);
+            }
+            let environment = cashmemo_api::config::AppEnvironment::from_env()?;
+            let receipt_config = DeletionReceiptCommandConfig::from_env(environment)?;
+            let store = S3DeletionReceiptStore::connect(receipt_config.s3.clone())
+                .await
+                .map_err(|_| ApiError::AccountPurge)?;
+            let pool = connect_command_database().await?;
+            let summary = replay_deletion_receipts(&pool, &store, &receipt_config.hmac_keys)
+                .await
+                .map_err(|_| ApiError::AccountPurge)?;
+            println!(
+                "{}",
+                serde_json::to_string(&summary).expect("ReplaySummary serializes")
+            );
+            if !summary.ready() {
+                return Err(ApiError::ReceiptReplayNotReady);
+            }
         }
     }
 

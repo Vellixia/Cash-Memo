@@ -1,0 +1,27 @@
+[global]
+# Set these during deployment. Do not infer retention from this example.
+repo1-type=s3
+repo1-s3-endpoint=REQUIRED_EXTERNAL_S3_COMPATIBLE_ENDPOINT
+repo1-s3-bucket=REQUIRED_PRIVATE_VERSIONED_BUCKET
+repo1-s3-region=REQUIRED_REGION
+repo1-s3-key=INJECT_AT_RUNTIME
+repo1-s3-key-secret=INJECT_AT_RUNTIME
+repo1-s3-uri-style=path
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass=INJECT_AT_RUNTIME
+repo1-retention-full=REQUIRED_AT_IMPLEMENTATION
+repo1-retention-full-type=REQUIRED_AT_IMPLEMENTATION
+# Define this explicitly if differentials need an override.
+# repo1-retention-diff=REQUIRED_IF_OVERRIDE_USED
+# Set archive/WAL retention deliberately; receipt expiry depends on it.
+repo1-retention-archive=REQUIRED_AT_IMPLEMENTATION
+archive-async=y
+spool-path=/var/spool/pgbackrest
+
+# PostgreSQL configuration (not a pgBackRest setting) must use:
+# archive_mode=on
+# archive_command='pgbackrest --stanza=cashmemo-v1 archive-push %p'
+
+[cashmemo-v1]
+pg1-path=/var/lib/postgresql/data
+pg1-socket-path=/var/run/postgresql
