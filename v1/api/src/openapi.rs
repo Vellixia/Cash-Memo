@@ -142,6 +142,8 @@ pub struct RecentTransactionsContract {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct OnboardingContract {
     pub timezone_configured: bool,
+    #[schema(required = true)]
+    pub timezone: Option<String>,
     pub default_currency_configured: bool,
     #[schema(required = true)]
     pub default_currency_code: Option<String>,

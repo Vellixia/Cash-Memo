@@ -33,6 +33,7 @@ pub struct OnboardingService {
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct OnboardingState {
     pub timezone_configured: bool,
+    pub timezone: Option<String>,
     pub default_currency_configured: bool,
     pub default_currency_code: Option<String>,
     pub categories_seeded: bool,
@@ -61,9 +62,10 @@ impl OnboardingService {
     }
 
     pub async fn state(&self, user_id: Uuid) -> Result<OnboardingState, OnboardingError> {
-        sqlx::query_as::<_, (bool, Option<String>, bool, bool)>(
+        sqlx::query_as::<_, (bool, Option<String>, Option<String>, bool, bool)>(
             "SELECT
                 u.timezone_configured_at IS NOT NULL,
+                CASE WHEN u.timezone_configured_at IS NOT NULL THEN u.timezone END,
                 u.default_currency_code,
                 (SELECT count(*) FROM categories c
                     WHERE c.user_id = u.id AND c.starter_key = ANY($2)) = $3,
@@ -76,9 +78,16 @@ impl OnboardingService {
         .fetch_one(&self.pool)
         .await
         .map(
-            |(timezone_configured, default_currency_code, categories_seeded, has_active_wallet)| {
+            |(
+                timezone_configured,
+                timezone,
+                default_currency_code,
+                categories_seeded,
+                has_active_wallet,
+            )| {
                 OnboardingState {
                     timezone_configured,
+                    timezone,
                     default_currency_configured: default_currency_code.is_some(),
                     default_currency_code,
                     categories_seeded,

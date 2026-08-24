@@ -8,6 +8,9 @@ import { Button } from "../../components/ui/button";
 import { FormField } from "../../components/ui/form-field";
 import { WalletForm } from "../wallets/wallet-form";
 import { useOnboarding, onboardingComplete } from "./use-onboarding";
+import { getTimezoneOptions } from "./timezones";
+
+export { getTimezoneOptions } from "./timezones";
 
 function errorText(error: unknown): string {
   const value = error as {
@@ -17,28 +20,15 @@ function errorText(error: unknown): string {
   return value.response?.data?.error?.message ?? value.message ?? "Request unavailable. Try again.";
 }
 
-export function getTimezoneOptions(): string[] {
-  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  let supported: string[];
-  try {
-    supported =
-      typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-  } catch {
-    supported = [];
-  }
-  return Array.from(
-    new Set(
-      [browserTimezone, ...supported, "UTC"].filter((value): value is string => Boolean(value)),
-    ),
-  );
-}
-
 export function OnboardingFlow() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const onboarding = useOnboarding();
   const currencies = useListCurrencies({ query: { retry: 1 } });
-  const [timezone, setTimezone] = useState(() => getTimezoneOptions()[0] ?? "UTC");
+  const [timezone, setTimezone] = useState(
+    () => onboarding.state?.timezone ?? getTimezoneOptions().at(0) ?? "UTC",
+  );
+  const [timezoneEdited, setTimezoneEdited] = useState(false);
   const [currency, setCurrency] = useState("");
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const currencyList = currencies.data?.data ?? [];
@@ -49,6 +39,12 @@ export function OnboardingFlow() {
   useEffect(() => {
     if (onboarding.state && onboardingComplete(onboarding.state)) router.replace("/app");
   }, [onboarding.state, router]);
+
+  useEffect(() => {
+    if (!timezoneEdited && onboarding.state?.timezone_configured) {
+      setTimezone(onboarding.state.timezone ?? "");
+    }
+  }, [onboarding.state, timezoneEdited]);
 
   if (onboarding.isPending)
     return (
@@ -128,6 +124,7 @@ export function OnboardingFlow() {
                 value={timezone}
                 onChange={(event) => {
                   setTimezone(event.target.value);
+                  setTimezoneEdited(true);
                 }}
                 autoComplete="off"
               />

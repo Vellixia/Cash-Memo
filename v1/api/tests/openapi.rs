@@ -49,6 +49,7 @@ fn rust_openapi_freezes_v1_contract_names() {
         .and_then(Value::as_array)
         .expect("onboarding required fields");
     assert!(onboarding_required.contains(&serde_json::json!("default_currency_code")));
+    assert!(onboarding_required.contains(&serde_json::json!("timezone")));
     let onboarding = onboarding_schema
         .get("properties")
         .and_then(Value::as_object)
@@ -59,6 +60,14 @@ fn rust_openapi_freezes_v1_contract_names() {
         .expect("persisted default currency code");
     assert_eq!(
         default_currency_code.get("type"),
+        Some(&serde_json::json!(["string", "null"]))
+    );
+    let timezone = onboarding
+        .get("timezone")
+        .and_then(Value::as_object)
+        .expect("persisted reporting timezone");
+    assert_eq!(
+        timezone.get("type"),
         Some(&serde_json::json!(["string", "null"]))
     );
 

@@ -6043,6 +6043,7 @@
         "type": "object",
         "required": [
           "timezone_configured",
+          "timezone",
           "default_currency_configured",
           "default_currency_code",
           "categories_seeded",
@@ -6063,6 +6064,12 @@
           },
           "has_active_wallet": {
             "type": "boolean"
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "timezone_configured": {
             "type": "boolean"

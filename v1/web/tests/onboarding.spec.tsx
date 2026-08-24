@@ -2,35 +2,40 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { onboardingComplete, onboardingNextStep } from "../features/onboarding/use-onboarding";
+import type { OnboardingContract } from "../generated/api/model/onboardingContract";
 
-const mocks = vi.hoisted(() => ({
-  queryState: "success",
-  state: {
+const mocks = vi.hoisted(() => {
+  const state: OnboardingContract = {
     timezone_configured: true,
+    timezone: "Asia/Jakarta",
     default_currency_configured: false,
-    default_currency_code: null as string | null,
+    default_currency_code: null,
     categories_seeded: true,
     has_active_wallet: true,
-  },
-  currencies: [
-    { code: "USD", display_name: "US Dollar", exponent: 2 },
-    { code: "EUR", display_name: "Euro", exponent: 2 },
-  ],
-  save: vi.fn().mockResolvedValue({ data: {} }),
-  seed: vi.fn().mockResolvedValue({ data: undefined }),
-  walletCreate: vi.fn().mockResolvedValue({
-    data: {
-      id: "wallet-1",
-      name: "Cash",
-      currency: "USD",
-      opening_balance: "125.00",
-      archived_at: null,
-      balance: { amount: "125.00", as_of: "2026-08-24T00:00:00Z", currency: "USD" },
-    },
-  }),
-  invalidate: vi.fn().mockResolvedValue(undefined),
-  refetch: vi.fn().mockResolvedValue(undefined),
-}));
+  };
+  return {
+    queryState: "success",
+    state,
+    currencies: [
+      { code: "USD", display_name: "US Dollar", exponent: 2 },
+      { code: "EUR", display_name: "Euro", exponent: 2 },
+    ],
+    save: vi.fn().mockResolvedValue({ data: {} }),
+    seed: vi.fn().mockResolvedValue({ data: undefined }),
+    walletCreate: vi.fn().mockResolvedValue({
+      data: {
+        id: "wallet-1",
+        name: "Cash",
+        currency: "USD",
+        opening_balance: "125.00",
+        archived_at: null,
+        balance: { amount: "125.00", as_of: "2026-08-24T00:00:00Z", currency: "USD" },
+      },
+    }),
+    invalidate: vi.fn().mockResolvedValue(undefined),
+    refetch: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 vi.mock("../generated/api", () => ({
   getGetOnboardingQueryKey: () => ["/api/v1/onboarding"],
@@ -63,13 +68,14 @@ function renderOnboarding() {
   };
 }
 
-import { getTimezoneOptions, OnboardingFlow } from "../features/onboarding/onboarding-flow";
+import { OnboardingFlow } from "../features/onboarding/onboarding-flow";
 
 describe("derived onboarding", () => {
   beforeEach(() => {
     mocks.queryState = "success";
     mocks.state = {
       timezone_configured: true,
+      timezone: "America/New_York",
       default_currency_configured: false,
       default_currency_code: null,
       categories_seeded: true,
@@ -95,6 +101,7 @@ describe("derived onboarding", () => {
     expect(
       onboardingComplete({
         timezone_configured: true,
+        timezone: "Asia/Jakarta",
         default_currency_configured: true,
         default_currency_code: "USD",
         categories_seeded: true,
@@ -104,6 +111,7 @@ describe("derived onboarding", () => {
     expect(
       onboardingComplete({
         timezone_configured: true,
+        timezone: "Asia/Jakarta",
         default_currency_configured: true,
         default_currency_code: "USD",
         categories_seeded: true,
@@ -116,6 +124,7 @@ describe("derived onboarding", () => {
     expect(
       onboardingNextStep({
         timezone_configured: false,
+        timezone: null,
         default_currency_configured: true,
         default_currency_code: "USD",
         categories_seeded: true,
@@ -125,6 +134,7 @@ describe("derived onboarding", () => {
     expect(
       onboardingNextStep({
         timezone_configured: true,
+        timezone: "Asia/Jakarta",
         default_currency_configured: false,
         default_currency_code: null,
         categories_seeded: true,
@@ -134,6 +144,7 @@ describe("derived onboarding", () => {
     expect(
       onboardingNextStep({
         timezone_configured: true,
+        timezone: "Asia/Jakarta",
         default_currency_configured: true,
         default_currency_code: "USD",
         categories_seeded: false,
@@ -143,6 +154,7 @@ describe("derived onboarding", () => {
     expect(
       onboardingNextStep({
         timezone_configured: true,
+        timezone: "Asia/Jakarta",
         default_currency_configured: true,
         default_currency_code: "USD",
         categories_seeded: true,
@@ -154,6 +166,7 @@ describe("derived onboarding", () => {
   it("requires explicit currency choice and sends only selected registry value", async () => {
     mocks.state = {
       timezone_configured: true,
+      timezone: "America/New_York",
       default_currency_configured: false,
       default_currency_code: null,
       categories_seeded: true,
@@ -168,7 +181,7 @@ describe("derived onboarding", () => {
     fireEvent.click(save);
     await waitFor(() => {
       expect(mocks.save).toHaveBeenCalledWith({
-        data: { timezone: getTimezoneOptions()[0] ?? "UTC", default_currency_code: "EUR" },
+        data: { timezone: "America/New_York", default_currency_code: "EUR" },
       });
     });
   });
@@ -176,6 +189,7 @@ describe("derived onboarding", () => {
   it("offers searchable IANA timezone choices and persists chosen value", async () => {
     mocks.state = {
       timezone_configured: false,
+      timezone: null,
       default_currency_configured: true,
       default_currency_code: "USD",
       categories_seeded: true,
@@ -214,6 +228,7 @@ describe("derived onboarding", () => {
   it("reports failed starter seeding, retries, and refreshes onboarding plus categories", async () => {
     mocks.state = {
       timezone_configured: true,
+      timezone: "Asia/Jakarta",
       default_currency_configured: true,
       default_currency_code: "USD",
       categories_seeded: false,
@@ -236,6 +251,7 @@ describe("derived onboarding", () => {
   it("reloads first-wallet onboarding with persisted default currency preselected", async () => {
     mocks.state = {
       timezone_configured: true,
+      timezone: "Asia/Jakarta",
       default_currency_configured: true,
       default_currency_code: "EUR",
       categories_seeded: true,

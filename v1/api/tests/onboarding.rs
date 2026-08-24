@@ -27,6 +27,7 @@ async fn onboarding_state_is_derived_from_persisted_preferences_categories_and_w
         response_json(response).await,
         json!({
             "timezone_configured": false,
+            "timezone": null,
             "default_currency_configured": false,
             "default_currency_code": null,
             "categories_seeded": false,
@@ -66,6 +67,7 @@ async fn onboarding_state_is_derived_from_persisted_preferences_categories_and_w
         response_json(response).await,
         json!({
             "timezone_configured": true,
+            "timezone": "Asia/Jakarta",
             "default_currency_configured": true,
             "default_currency_code": "IDR",
             "categories_seeded": false,
@@ -124,7 +126,9 @@ async fn preferences_reject_invalid_iana_timezones_and_unsupported_currencies(po
         .await
         .unwrap();
     assert_eq!(updated.status(), StatusCode::OK);
-    assert_eq!(response_json(updated).await["timezone_configured"], true);
+    let updated = response_json(updated).await;
+    assert_eq!(updated["timezone_configured"], true);
+    assert_eq!(updated["timezone"], "Asia/Jakarta");
     let stored: (String, Option<String>) =
         sqlx::query_as("SELECT timezone, default_currency_code FROM users WHERE id = $1")
             .bind(user_id)

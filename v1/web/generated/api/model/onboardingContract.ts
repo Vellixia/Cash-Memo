@@ -11,5 +11,7 @@ export interface OnboardingContract {
   default_currency_code: string | null;
   default_currency_configured: boolean;
   has_active_wallet: boolean;
+  /** @nullable */
+  timezone: string | null;
   timezone_configured: boolean;
 }
