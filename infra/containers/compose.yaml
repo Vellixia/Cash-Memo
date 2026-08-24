@@ -1,4 +1,0 @@
-# Compatibility entry point only. Cashmemo development containers are deployed through Dokploy;
-# this file does not define or create local PostgreSQL, Infisical, OTel/OpenObserve, or object fakes.
-include:
-  - ../dokploy/compose.yaml

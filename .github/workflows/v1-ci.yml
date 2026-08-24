@@ -3,7 +3,7 @@ name: Cashmemo V1 CI
 on:
   pull_request:
   push:
-    branches: [main, "001-cashmemo-mvp"]
+    branches: [main, "rewrite/cashmemo-v1"]
 
 permissions:
   contents: read
@@ -73,10 +73,10 @@ jobs:
           path: ~/.cache/pnpm
           key: ${{ runner.os }}-cashmemo-v1-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir v1/web lint
-      - run: pnpm --dir v1/web typecheck
-      - run: pnpm --dir v1/web test --run
-      - run: pnpm --dir v1/web build
+      - run: pnpm --dir apps/web lint
+      - run: pnpm --dir apps/web typecheck
+      - run: pnpm --dir apps/web test --run
+      - run: pnpm --dir apps/web build
 
   openapi:
     name: Rust OpenAPI and Orval drift
@@ -104,7 +104,8 @@ jobs:
             target
           key: ${{ runner.os }}-cashmemo-v1-openapi-${{ hashFiles('Cargo.lock', 'pnpm-lock.yaml') }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm v1:api:check
+      - run: pnpm api:check
+      - run: pnpm test:operations
 
   migration-safety:
     name: Migration target safety
@@ -175,11 +176,11 @@ jobs:
             ${{ runner.os }}-cashmemo-v1-playwright-${{ hashFiles('Cargo.lock', 'pnpm-lock.yaml') }}
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium and system dependencies
-        run: pnpm --dir v1/web exec playwright install --with-deps chromium
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium
       - name: Start disposable PostgreSQL and Mailpit from V1 test Compose
         run: docker compose -f infra/v1/test-compose.yml up -d --wait postgres mailpit
       - name: Run six real-stack flows through Mailpit verification
-        run: pnpm --dir v1/web exec playwright test
+        run: pnpm --dir apps/web exec playwright test
       - name: Collect real-stack diagnostics on failure
         if: failure()
         run: docker compose -f infra/v1/test-compose.yml logs --no-color
@@ -226,7 +227,7 @@ jobs:
         run: >-
           bats tests/operations/preservation-gate.bats
           tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats
-          tests/operations/deletion-receipt-replay.bats
+          tests/operations/deletion-receipt-replay.bats tests/repository/canonical-layout.bats
 
   docker-images:
     name: V1 Docker build and scan (${{ matrix.image }})
@@ -274,4 +275,4 @@ jobs:
           path: ~/.cache/pnpm
           key: ${{ runner.os }}-cashmemo-v1-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir v1/web audit --prod --audit-level high
+      - run: pnpm --dir apps/web audit --prod --audit-level high

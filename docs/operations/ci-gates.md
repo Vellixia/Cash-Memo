@@ -1,6 +1,6 @@
 # Cashmemo V1 CI gates
 
-`.github/workflows/v1-ci.yml` protects isolated Cashmemo V1 work. It has read-only GitHub token
+`.github/workflows/v1-ci.yml` protects current Cashmemo V1 work. It has read-only GitHub token
 permissions, cancels superseded runs for same ref, and uses pinned checkout, Node, cache, and
 scanner actions. It does not deploy, contact Dokploy, route traffic, or use production or legacy
 database credentials.
@@ -20,21 +20,21 @@ database credentials.
   for preservation, production-replacement, restore, and replay wrappers. These use disposable test
   evidence only; API serve receives no backup or receipt-recovery credentials.
 - **Docker and security** build V1 API and web images, scan both images for high/critical fixed
-  vulnerabilities, and audit V1 web production dependencies. These are focused checks; existing
-  legacy security workflows remain independent and are not a V1 quality gate.
+  vulnerabilities, and audit V1 web production dependencies.
 
 ## Local gate
 
-`v1:verify` is intentionally strict: it generates/checks OpenAPI and Orval output, formats and
+`verify` is intentionally strict: it generates/checks OpenAPI and Orval output, formats and
 Clippy-checks Rust, runs every Rust test, then runs V1 frontend lint/typecheck/Vitest/build. Rust
 integration tests require a disposable PostgreSQL target. Start only test PostgreSQL first, then run
 gate:
 
 ```sh
 docker compose -f infra/v1/test-compose.yml up -d --wait postgres
-DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e pnpm v1:verify
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e pnpm verify
 docker compose -f infra/v1/test-compose.yml down --volumes
-pnpm --dir v1/web exec playwright test
+pnpm --dir apps/web exec playwright test
+bats tests/repository/canonical-layout.bats
 ```
 
 If local Docker provides standalone Compose rather than plugin, replace `docker compose` with

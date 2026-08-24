@@ -1,36 +1,41 @@
 {
-  "name": "@cashmemo/web",
-  "version": "0.0.0",
+  "name": "@cashmemo/v1-web",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
-    "preview:https": "vite preview --https",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "orval": "orval",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint app components e2e features lib tests next.config.ts playwright.config.ts postcss.config.mjs vitest.config.ts --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
   },
   "dependencies": {
-    "@cashmemo/contracts": "workspace:*",
-    "@cashmemo/domain": "workspace:*",
-    "@cashmemo/privacy-rules": "workspace:*",
-    "@tanstack/react-query": "5.101.4",
-    "dexie": "4.4.4",
+    "@tanstack/react-query": "5.90.21",
+    "@hookform/resolvers": "5.2.2",
+    "axios": "1.19.0",
+    "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "7.85.0",
-    "react-router-dom": "7.18.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
-    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.2",
+    "@types/node": "24.13.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.0.5",
-    "jsdom": "30.0.1",
-    "vite": "8.2.1",
-    "vite-plugin-pwa": "1.3.0",
+    "eslint": "10.8.1",
+    "globals": "17.9.0",
+    "jsdom": "27.1.0",
+    "orval": "8.26.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.66.0",
     "vitest": "4.1.10"
   }
 }

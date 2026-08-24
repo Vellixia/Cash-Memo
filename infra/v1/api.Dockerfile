@@ -2,7 +2,7 @@ FROM rust:1.90-bookworm AS builder
 
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
-COPY v1/api ./v1/api
+COPY apps/api ./apps/api
 RUN cargo build --locked --release --features s3-receipts --bin cashmemo-api \
     && strip target/release/cashmemo-api
 

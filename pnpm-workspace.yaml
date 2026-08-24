@@ -1,7 +1,5 @@
 packages:
-  - apps/*
-  - packages/*
-  - v1/web
+  - apps/web
 
 allowBuilds:
   argon2: true

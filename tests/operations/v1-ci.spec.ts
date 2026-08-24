@@ -9,10 +9,14 @@ const workflow = await readFile(".github/workflows/v1-ci.yml", "utf8");
 
 describe("Cashmemo V1 CI contract", () => {
   it("locks Cargo resolution before regenerating the OpenAPI contract", () => {
-    expect(packageJson.scripts["v1:openapi"]).toBe(
+    expect(packageJson.scripts.openapi).toBe(
       "cargo run --locked -p cashmemo-api --bin export_openapi -- openapi/cashmemo-v1.json",
     );
-    expect(packageJson.scripts["v1:api:check"]).toContain("pnpm v1:api:generate");
-    expect(workflow).toContain("pnpm v1:api:check");
+    expect(packageJson.scripts["api:check"]).toContain("pnpm api:generate");
+    expect(workflow).toContain("pnpm api:check");
+    expect(workflow).toContain("pnpm test:operations");
+    expect(workflow).toContain("pnpm --dir apps/web");
+    expect(workflow).not.toContain("pnpm --dir v1/web");
+    expect(workflow).not.toContain("pnpm v1:");
   });
 });
