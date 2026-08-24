@@ -1,11 +1,14 @@
 use axum::{
     Json, Router,
-    extract::{Extension, State},
+    extract::{Extension, Request, State},
     http::StatusCode,
     middleware,
+    middleware::Next,
+    response::Response,
     routing::get,
 };
 use sqlx::PgPool;
+use std::time::Instant;
 
 use crate::{
     accounts::{AccountDeletionService, routes as account_routes},
@@ -91,7 +94,25 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
             OriginPolicy::new(config.allowed_origins),
             enforce_exact_origin,
         ))
+        .layer(middleware::from_fn(log_request))
         .layer(middleware::from_fn(attach))
+}
+
+async fn log_request(request: Request, next: Next) -> Response {
+    let request_id = request
+        .extensions()
+        .get::<RequestId>()
+        .cloned()
+        .unwrap_or_default();
+    let started = Instant::now();
+    let response = next.run(request).await;
+    tracing::info!(
+        event = "http_request",
+        latency_ms = started.elapsed().as_millis() as u64,
+        request_id = request_id.as_str(),
+        status = response.status().as_u16(),
+    );
+    response
 }
 
 async fn list_currencies(

@@ -26,8 +26,10 @@ serde_json = "1.0.143"
 sqlx = { version = "0.8.6", default-features = false, features = ["chrono", "macros", "migrate", "postgres", "runtime-tokio-rustls", "rust_decimal", "uuid"] }
 sha2 = "0.10.9"
 thiserror = "2.0.16"
-tokio = { version = "1.47.1", features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio = { version = "1.47.1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 tower = { version = "0.5.2", features = ["util"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 utoipa = { version = "5.5.0", features = ["chrono", "uuid"] }
 uuid = { version = "1.18.0", features = ["serde", "v4"] }
 url = "2.5.8"

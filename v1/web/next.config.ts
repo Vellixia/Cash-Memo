@@ -7,6 +7,7 @@ const noStoreHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   poweredByHeader: false,
   headers() {
     return Promise.resolve([

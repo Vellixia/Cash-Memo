@@ -1,0 +1,190 @@
+name: cashmemo-v1
+
+# Dokploy schedules must use these bounded commands against CASHMEMO_V1_API_IMAGE.
+# This extension is operator metadata, not a set of long-running Compose services.
+x-dokploy-operations:
+  migrate:
+    command: ["migrate"]
+    required_environment: ["CASHMEMO_V1_DATABASE_URL"]
+  schedules:
+    process-recurring:
+      command:
+        [
+          "process-recurring",
+          "--batch-size",
+          "500",
+          "--max-occurrences-per-recurring-transaction",
+          "50",
+        ]
+      required_environment: ["CASHMEMO_V1_DATABASE_URL"]
+    purge-trash:
+      command: ["purge-trash", "--batch-size", "500"]
+      required_environment: ["CASHMEMO_V1_DATABASE_URL"]
+    purge-accounts:
+      command: ["purge-accounts", "--batch-size", "100"]
+      required_environment:
+        - CASHMEMO_V1_DATABASE_URL
+        - CASHMEMO_V1_APP_ENV
+        - CASHMEMO_V1_DELETION_RECEIPT_S3_ENDPOINT
+        - CASHMEMO_V1_DELETION_RECEIPT_S3_REGION
+        - CASHMEMO_V1_DELETION_RECEIPT_S3_BUCKET
+        - CASHMEMO_V1_DELETION_RECEIPT_S3_PREFIX
+        - CASHMEMO_V1_DELETION_RECEIPT_S3_ACCESS_KEY_ID
+        - CASHMEMO_V1_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY
+        - CASHMEMO_V1_DELETION_RECEIPT_HMAC_KEYS
+    cleanup-auth-tokens:
+      command: ["cleanup-auth-tokens", "--batch-size", "1000"]
+      required_environment: ["CASHMEMO_V1_DATABASE_URL"]
+
+x-api-environment: &api-environment
+  CASHMEMO_V1_DATABASE_URL: ${CASHMEMO_V1_DATABASE_URL:-postgres://cashmemo_v1:change-before-deploy@cashmemo-v1-postgres:5432/cashmemo_v1}
+  CASHMEMO_V1_BIND_ADDR: 0.0.0.0:3000
+  CASHMEMO_V1_PUBLIC_ORIGIN: ${CASHMEMO_V1_PUBLIC_ORIGIN:-https://cashmemo.example}
+  CASHMEMO_V1_COOKIE_SECURE: ${CASHMEMO_V1_COOKIE_SECURE:-true}
+  CASHMEMO_V1_SESSION_IDLE_SECONDS: ${CASHMEMO_V1_SESSION_IDLE_SECONDS:-604800}
+  CASHMEMO_V1_SESSION_ABSOLUTE_SECONDS: ${CASHMEMO_V1_SESSION_ABSOLUTE_SECONDS:-2592000}
+  CASHMEMO_V1_SESSION_TOUCH_SECONDS: ${CASHMEMO_V1_SESSION_TOUCH_SECONDS:-3600}
+  CASHMEMO_V1_SMTP_HOST: ${CASHMEMO_V1_SMTP_HOST:-smtp.example}
+  CASHMEMO_V1_SMTP_PORT: ${CASHMEMO_V1_SMTP_PORT:-587}
+  CASHMEMO_V1_SMTP_SECURITY: ${CASHMEMO_V1_SMTP_SECURITY:-starttls}
+  CASHMEMO_V1_SMTP_USERNAME: ${CASHMEMO_V1_SMTP_USERNAME:-}
+  CASHMEMO_V1_SMTP_PASSWORD: ${CASHMEMO_V1_SMTP_PASSWORD:-}
+  CASHMEMO_V1_SMTP_FROM: ${CASHMEMO_V1_SMTP_FROM:-cashmemo@example.test}
+  CASHMEMO_V1_APP_ENV: ${CASHMEMO_V1_APP_ENV:-production}
+  CASHMEMO_V1_LOG_LEVEL: ${CASHMEMO_V1_LOG_LEVEL:-info}
+  CASHMEMO_V1_AUTH_WINDOW_SECS: ${CASHMEMO_V1_AUTH_WINDOW_SECS:-60}
+  CASHMEMO_V1_AUTH_MAX_KEYS: ${CASHMEMO_V1_AUTH_MAX_KEYS:-10000}
+  CASHMEMO_V1_AUTH_REGISTER_LIMIT: ${CASHMEMO_V1_AUTH_REGISTER_LIMIT:-5}
+  CASHMEMO_V1_AUTH_VERIFICATION_RESEND_LIMIT: ${CASHMEMO_V1_AUTH_VERIFICATION_RESEND_LIMIT:-5}
+  CASHMEMO_V1_AUTH_LOGIN_LIMIT: ${CASHMEMO_V1_AUTH_LOGIN_LIMIT:-5}
+  CASHMEMO_V1_AUTH_RESET_REQUEST_LIMIT: ${CASHMEMO_V1_AUTH_RESET_REQUEST_LIMIT:-5}
+  CASHMEMO_V1_ARGON2_MEMORY_KIB: ${CASHMEMO_V1_ARGON2_MEMORY_KIB:-65536}
+  CASHMEMO_V1_ARGON2_TIME_COST: ${CASHMEMO_V1_ARGON2_TIME_COST:-3}
+  CASHMEMO_V1_ARGON2_PARALLELISM: ${CASHMEMO_V1_ARGON2_PARALLELISM:-1}
+
+x-service-hardening: &service-hardening
+  init: true
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  cashmemo-v1-postgres:
+    image: ${CASHMEMO_V1_POSTGRES_IMAGE:-postgres:18.4-alpine}
+    environment:
+      POSTGRES_DB: ${CASHMEMO_V1_POSTGRES_DB:-cashmemo_v1}
+      POSTGRES_USER: ${CASHMEMO_V1_POSTGRES_USER:-cashmemo_v1}
+      POSTGRES_PASSWORD: ${CASHMEMO_V1_POSTGRES_PASSWORD:-change-before-deploy}
+    volumes:
+      - cashmemo-v1-postgres-data:/var/lib/postgresql
+    networks:
+      - cashmemo-v1-private
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  cashmemo-v1-api:
+    <<: *service-hardening
+    image: ${CASHMEMO_V1_API_IMAGE:-cashmemo-v1-api:local}
+    command: ["serve"]
+    environment: *api-environment
+    depends_on:
+      cashmemo-v1-postgres:
+        condition: service_healthy
+    networks:
+      - cashmemo-v1-edge
+      - cashmemo-v1-private
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/api/v1/health/live"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.cashmemo-v1-api.rule=Host(`${CASHMEMO_V1_HOST:-cashmemo.example}`) &&
+        PathPrefix(`/api/v1`)
+      - traefik.http.routers.cashmemo-v1-api.priority=100
+      - traefik.http.routers.cashmemo-v1-api.entrypoints=websecure
+      - traefik.http.routers.cashmemo-v1-api.tls.certresolver=letsencrypt
+      - traefik.http.services.cashmemo-v1-api.loadbalancer.server.port=3000
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 768M
+        reservations:
+          memory: 128M
+
+  cashmemo-v1-web:
+    <<: *service-hardening
+    image: ${CASHMEMO_V1_WEB_IMAGE:-cashmemo-v1-web:local}
+    environment:
+      HOSTNAME: 0.0.0.0
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      cashmemo-v1-api:
+        condition: service_healthy
+    networks:
+      - cashmemo-v1-edge
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.cashmemo-v1-web.rule=Host(`${CASHMEMO_V1_HOST:-cashmemo.example}`)
+      - traefik.http.routers.cashmemo-v1-web.priority=1
+      - traefik.http.routers.cashmemo-v1-web.entrypoints=websecure
+      - traefik.http.routers.cashmemo-v1-web.tls.certresolver=letsencrypt
+      - traefik.http.services.cashmemo-v1-web.loadbalancer.server.port=3000
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          memory: 128M
+
+networks:
+  cashmemo-v1-edge:
+    external: true
+    name: ${CASHMEMO_V1_DOKPLOY_NETWORK:-dokploy-network}
+  cashmemo-v1-private:
+    internal: true
+
+volumes:
+  cashmemo-v1-postgres-data:
+    name: ${CASHMEMO_V1_POSTGRES_VOLUME:-cashmemo-v1-postgres-data}

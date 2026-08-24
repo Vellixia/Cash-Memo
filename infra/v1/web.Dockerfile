@@ -1,0 +1,31 @@
+FROM node:24.14.0-bookworm-slim AS dependencies
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+WORKDIR /src
+RUN corepack enable && corepack prepare pnpm@11.13.1 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY v1/web/package.json ./v1/web/package.json
+RUN pnpm install --frozen-lockfile --filter @cashmemo/v1-web...
+
+FROM dependencies AS builder
+
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY v1/web ./v1/web
+RUN pnpm --dir v1/web build
+
+FROM node:24.14.0-bookworm-slim AS runtime
+
+ENV HOSTNAME=0.0.0.0
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+WORKDIR /app
+COPY --from=builder --chown=node:node /src/v1/web/.next/standalone ./
+COPY --from=builder --chown=node:node /src/v1/web/.next/static ./v1/web/.next/static
+COPY --from=builder --chown=node:node /src/v1/web/public ./v1/web/public
+
+USER node
+EXPOSE 3000
+STOPSIGNAL SIGTERM
+CMD ["node", "v1/web/server.js"]

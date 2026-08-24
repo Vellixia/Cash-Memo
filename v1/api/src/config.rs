@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub public_origin: Url,
     pub smtp: SmtpEmailConfig,
     pub environment: AppEnvironment,
+    pub cookie_secure: bool,
+    pub log_level: LogLevel,
     pub auth: crate::auth::AuthConfig,
     /// V1 runs one Rust API replica. These in-memory limits are not distributed;
     /// add a shared limiter before scaling to multiple replicas.
@@ -32,7 +34,7 @@ pub enum AppEnvironment {
 }
 
 impl AppEnvironment {
-    fn from_env() -> Result<Self, ConfigError> {
+    pub fn from_env() -> Result<Self, ConfigError> {
         match env::var("CASHMEMO_V1_APP_ENV")
             .unwrap_or_else(|_| "development".to_owned())
             .to_ascii_lowercase()
@@ -42,6 +44,42 @@ impl AppEnvironment {
             "test" => Ok(Self::Test),
             "production" => Ok(Self::Production),
             _ => Err(ConfigError::InvalidAppEnvironment),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        match env::var("CASHMEMO_V1_LOG_LEVEL")
+            .unwrap_or_else(|_| "info".to_owned())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "error" => Ok(Self::Error),
+            "warn" => Ok(Self::Warn),
+            "info" => Ok(Self::Info),
+            "debug" => Ok(Self::Debug),
+            "trace" => Ok(Self::Trace),
+            _ => Err(ConfigError::InvalidLogLevel),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
         }
     }
 }
@@ -86,8 +124,7 @@ pub struct RateLimitSettings {
 
 impl AppConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
-        let database_url =
-            env::var("CASHMEMO_V1_DATABASE_URL").map_err(|_| ConfigError::MissingDatabaseUrl)?;
+        let database_url = database_url_from_env()?;
         let bind_addr = env::var("CASHMEMO_V1_BIND_ADDR")
             .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
             .parse()
@@ -96,7 +133,15 @@ impl AppConfig {
             &env::var("CASHMEMO_V1_PUBLIC_ORIGIN").map_err(|_| ConfigError::MissingPublicOrigin)?,
         )?;
         let environment = AppEnvironment::from_env()?;
-        let http_safety = HttpSafetyConfig::from_env()?;
+        let cookie_secure = parse_bool(
+            "CASHMEMO_V1_COOKIE_SECURE",
+            environment == AppEnvironment::Production,
+        )?;
+        if environment == AppEnvironment::Production && !cookie_secure {
+            return Err(ConfigError::InsecureProductionCookie);
+        }
+        let log_level = LogLevel::from_env()?;
+        let http_safety = HttpSafetyConfig::from_env(&public_origin)?;
         let smtp = SmtpEmailConfig::from_env(environment)?;
         let password_hash = crate::auth::Argon2idConfig::new(
             parse_positive_u32("CASHMEMO_V1_ARGON2_MEMORY_KIB", 65_536)?,
@@ -126,10 +171,19 @@ impl AppConfig {
             public_origin,
             smtp,
             environment,
+            cookie_secure,
+            log_level,
             auth,
             http_safety,
         })
     }
+}
+
+pub fn database_url_from_env() -> Result<String, ConfigError> {
+    env::var("CASHMEMO_V1_DATABASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(ConfigError::MissingDatabaseUrl)
 }
 
 fn parse_public_origin(value: &str) -> Result<Url, ConfigError> {
@@ -156,7 +210,7 @@ impl DeletionReceiptCommandConfig {
                 .filter(|value| !value.trim().is_empty())
                 .ok_or(ConfigError::MissingDeletionReceiptConfig(name))
         };
-        let hmac_keys = required("DELETION_RECEIPT_HMAC_KEYS")?
+        let hmac_keys = required("CASHMEMO_V1_DELETION_RECEIPT_HMAC_KEYS")?
             .split(',')
             .map(|item| {
                 let (version, hex) = item
@@ -179,12 +233,12 @@ impl DeletionReceiptCommandConfig {
         }
         Ok(Self {
             s3: crate::receipts::s3::S3ReceiptConfig {
-                endpoint: required("DELETION_RECEIPT_S3_ENDPOINT")?,
-                region: required("DELETION_RECEIPT_S3_REGION")?,
-                bucket: required("DELETION_RECEIPT_S3_BUCKET")?,
-                prefix: required("DELETION_RECEIPT_S3_PREFIX")?,
-                access_key_id: required("DELETION_RECEIPT_S3_ACCESS_KEY_ID")?,
-                secret_access_key: required("DELETION_RECEIPT_S3_SECRET_ACCESS_KEY")?,
+                endpoint: required("CASHMEMO_V1_DELETION_RECEIPT_S3_ENDPOINT")?,
+                region: required("CASHMEMO_V1_DELETION_RECEIPT_S3_REGION")?,
+                bucket: required("CASHMEMO_V1_DELETION_RECEIPT_S3_BUCKET")?,
+                prefix: required("CASHMEMO_V1_DELETION_RECEIPT_S3_PREFIX")?,
+                access_key_id: required("CASHMEMO_V1_DELETION_RECEIPT_S3_ACCESS_KEY_ID")?,
+                secret_access_key: required("CASHMEMO_V1_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY")?,
                 allow_insecure_local_endpoint: environment != AppEnvironment::Production,
             },
             hmac_keys,
@@ -294,34 +348,27 @@ impl Default for HttpSafetyConfig {
 }
 
 impl HttpSafetyConfig {
-    fn from_env() -> Result<Self, ConfigError> {
-        let mut config = Self::default();
-        if let Ok(origins) = env::var("CASHMEMO_V1_ALLOWED_ORIGINS") {
-            config.allowed_origins = origins
-                .split(',')
-                .map(str::trim)
-                .filter(|origin| !origin.is_empty())
-                .map(str::to_owned)
-                .collect();
-            if config.allowed_origins.is_empty() {
-                return Err(ConfigError::EmptyAllowedOrigins);
-            }
-        }
-
+    fn from_env(public_origin: &Url) -> Result<Self, ConfigError> {
         let window =
             Duration::from_secs(parse_positive("CASHMEMO_V1_AUTH_WINDOW_SECS", 60)? as u64);
         let max_keys = parse_positive("CASHMEMO_V1_AUTH_MAX_KEYS", 10_000)?;
-        config.auth_rate_limits = AuthRateLimitSettings {
-            register: rate_limit("CASHMEMO_V1_AUTH_REGISTER_LIMIT", window, max_keys)?,
-            verification_resend: rate_limit(
-                "CASHMEMO_V1_AUTH_VERIFICATION_RESEND_LIMIT",
-                window,
-                max_keys,
-            )?,
-            login: rate_limit("CASHMEMO_V1_AUTH_LOGIN_LIMIT", window, max_keys)?,
-            reset_request: rate_limit("CASHMEMO_V1_AUTH_RESET_REQUEST_LIMIT", window, max_keys)?,
-        };
-        Ok(config)
+        Ok(Self {
+            allowed_origins: vec![public_origin.origin().ascii_serialization()],
+            auth_rate_limits: AuthRateLimitSettings {
+                register: rate_limit("CASHMEMO_V1_AUTH_REGISTER_LIMIT", window, max_keys)?,
+                verification_resend: rate_limit(
+                    "CASHMEMO_V1_AUTH_VERIFICATION_RESEND_LIMIT",
+                    window,
+                    max_keys,
+                )?,
+                login: rate_limit("CASHMEMO_V1_AUTH_LOGIN_LIMIT", window, max_keys)?,
+                reset_request: rate_limit(
+                    "CASHMEMO_V1_AUTH_RESET_REQUEST_LIMIT",
+                    window,
+                    max_keys,
+                )?,
+            },
+        })
     }
 }
 
@@ -373,6 +420,15 @@ fn parse_positive_u32(name: &'static str, default: u32) -> Result<u32, ConfigErr
     }
 }
 
+fn parse_bool(name: &'static str, default: bool) -> Result<bool, ConfigError> {
+    match env::var(name) {
+        Ok(value) if value.eq_ignore_ascii_case("true") => Ok(true),
+        Ok(value) if value.eq_ignore_ascii_case("false") => Ok(false),
+        Ok(_) => Err(ConfigError::InvalidBooleanEnvironment { name }),
+        Err(_) => Ok(default),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("CASHMEMO_V1_DATABASE_URL is required")]
@@ -385,8 +441,6 @@ pub enum ConfigError {
         "CASHMEMO_V1_PUBLIC_ORIGIN must be an HTTP(S) origin without credentials, path, query, or fragment"
     )]
     InvalidPublicOrigin,
-    #[error("CASHMEMO_V1_ALLOWED_ORIGINS must contain at least one origin")]
-    EmptyAllowedOrigins,
     #[error("CASHMEMO_V1_SMTP_HOST is required")]
     MissingSmtpHost,
     #[error("CASHMEMO_V1_SMTP_FROM is required")]
@@ -399,6 +453,12 @@ pub enum ConfigError {
     InvalidSmtpSecurity,
     #[error("CASHMEMO_V1_APP_ENV must be development, test, or production")]
     InvalidAppEnvironment,
+    #[error("CASHMEMO_V1_LOG_LEVEL must be error, warn, info, debug, or trace")]
+    InvalidLogLevel,
+    #[error("CASHMEMO_V1_COOKIE_SECURE must be true in production")]
+    InsecureProductionCookie,
+    #[error("{name} must be true or false")]
+    InvalidBooleanEnvironment { name: &'static str },
     #[error("plaintext SMTP is allowed only for development/test local Mailpit")]
     PlaintextSmtpNotAllowed,
     #[error("Argon2id parameters do not meet the approved security floor")]
@@ -408,7 +468,7 @@ pub enum ConfigError {
     #[error("{0} is required only for purge/replay commands")]
     MissingDeletionReceiptConfig(&'static str),
     #[error(
-        "DELETION_RECEIPT_HMAC_KEYS must be comma-separated version:hex keys of at least 32 bytes"
+        "CASHMEMO_V1_DELETION_RECEIPT_HMAC_KEYS must be comma-separated version:hex keys of at least 32 bytes"
     )]
     InvalidDeletionReceiptKeys,
     #[error("{name} must be a positive integer, got {value}")]

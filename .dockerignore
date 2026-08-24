@@ -1,5 +1,10 @@
 node_modules/
+**/node_modules/
 .pnpm-store/
+target/
+**/target/
+**/.next/
+**/test-results/
 .git/
 .github/*
 !.github/workflows/
