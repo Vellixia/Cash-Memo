@@ -1,11 +1,13 @@
 use std::{env, net::SocketAddr, time::Duration};
 
 use thiserror::Error;
+use url::Url;
 
 #[derive(Debug)]
 pub struct AppConfig {
     pub database_url: String,
     pub bind_addr: SocketAddr,
+    pub public_origin: Url,
     pub smtp: SmtpEmailConfig,
     pub environment: AppEnvironment,
     pub auth: crate::auth::AuthConfig,
@@ -90,6 +92,9 @@ impl AppConfig {
             .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
             .parse()
             .map_err(ConfigError::InvalidBindAddress)?;
+        let public_origin = parse_public_origin(
+            &env::var("CASHMEMO_V1_PUBLIC_ORIGIN").map_err(|_| ConfigError::MissingPublicOrigin)?,
+        )?;
         let environment = AppEnvironment::from_env()?;
         let http_safety = HttpSafetyConfig::from_env()?;
         let smtp = SmtpEmailConfig::from_env(environment)?;
@@ -118,12 +123,28 @@ impl AppConfig {
         Ok(Self {
             database_url,
             bind_addr,
+            public_origin,
             smtp,
             environment,
             auth,
             http_safety,
         })
     }
+}
+
+fn parse_public_origin(value: &str) -> Result<Url, ConfigError> {
+    let origin = Url::parse(value).map_err(|_| ConfigError::InvalidPublicOrigin)?;
+    let valid_scheme = matches!(origin.scheme(), "http" | "https");
+    let is_origin_only = origin.host().is_some()
+        && origin.username().is_empty()
+        && origin.password().is_none()
+        && origin.path() == "/"
+        && origin.query().is_none()
+        && origin.fragment().is_none();
+    if !valid_scheme || !is_origin_only {
+        return Err(ConfigError::InvalidPublicOrigin);
+    }
+    Ok(origin)
 }
 
 #[cfg(feature = "s3-receipts")]
@@ -358,6 +379,12 @@ pub enum ConfigError {
     MissingDatabaseUrl,
     #[error("CASHMEMO_V1_BIND_ADDR is not a valid socket address")]
     InvalidBindAddress(#[source] std::net::AddrParseError),
+    #[error("CASHMEMO_V1_PUBLIC_ORIGIN is required")]
+    MissingPublicOrigin,
+    #[error(
+        "CASHMEMO_V1_PUBLIC_ORIGIN must be an HTTP(S) origin without credentials, path, query, or fragment"
+    )]
+    InvalidPublicOrigin,
     #[error("CASHMEMO_V1_ALLOWED_ORIGINS must contain at least one origin")]
     EmptyAllowedOrigins,
     #[error("CASHMEMO_V1_SMTP_HOST is required")]
@@ -386,4 +413,36 @@ pub enum ConfigError {
     InvalidDeletionReceiptKeys,
     #[error("{name} must be a positive integer, got {value}")]
     InvalidPositiveEnvironment { name: &'static str, value: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_public_origin;
+
+    #[test]
+    fn public_origin_accepts_only_http_origin_without_url_components() {
+        assert_eq!(
+            parse_public_origin("http://localhost:3000/")
+                .unwrap()
+                .as_str(),
+            "http://localhost:3000/"
+        );
+        assert_eq!(
+            parse_public_origin("https://cashmemo.example")
+                .unwrap()
+                .as_str(),
+            "https://cashmemo.example/"
+        );
+
+        for invalid in [
+            "cashmemo.example",
+            "ftp://cashmemo.example",
+            "https://user@cashmemo.example",
+            "https://cashmemo.example/app",
+            "https://cashmemo.example/?source=test",
+            "https://cashmemo.example/#fragment",
+        ] {
+            assert!(parse_public_origin(invalid).is_err(), "accepted {invalid}");
+        }
+    }
 }

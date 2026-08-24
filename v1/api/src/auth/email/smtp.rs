@@ -3,6 +3,7 @@ use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::Mailbox,
     transport::smtp::authentication::Credentials,
 };
+use url::Url;
 
 use crate::config::{SmtpEmailConfig, SmtpSecurity};
 
@@ -11,10 +12,11 @@ use super::{EmailError, EmailSender};
 pub struct SmtpEmailSender {
     transport: AsyncSmtpTransport<Tokio1Executor>,
     from: Mailbox,
+    public_origin: Url,
 }
 
 impl SmtpEmailSender {
-    pub fn new(config: &SmtpEmailConfig) -> Result<Self, EmailError> {
+    pub fn new(config: &SmtpEmailConfig, public_origin: &Url) -> Result<Self, EmailError> {
         let mut builder = match config.security {
             SmtpSecurity::StartTls => {
                 AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&config.host)
@@ -32,6 +34,7 @@ impl SmtpEmailSender {
         Ok(Self {
             transport: builder.build(),
             from: config.from.parse().map_err(|_| EmailError::Delivery)?,
+            public_origin: public_origin.clone(),
         })
     }
 
@@ -50,13 +53,23 @@ impl SmtpEmailSender {
     }
 }
 
+fn verification_body(public_origin: &Url, raw_token: &str) -> String {
+    let mut verification_url = public_origin
+        .join("verify-email")
+        .expect("validated origin accepts a relative verification path");
+    verification_url
+        .query_pairs_mut()
+        .append_pair("token", raw_token);
+    format!("Verify your Cashmemo email:\n{verification_url}")
+}
+
 #[async_trait]
 impl EmailSender for SmtpEmailSender {
     async fn send_verification(&self, to: &str, raw_token: &str) -> Result<(), EmailError> {
         self.send(
             to,
             "Verify your Cashmemo email",
-            format!("Verification token: {raw_token}"),
+            verification_body(&self.public_origin, raw_token),
         )
         .await
     }
@@ -68,5 +81,22 @@ impl EmailSender for SmtpEmailSender {
             format!("Password reset token: {raw_token}"),
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+
+    use super::verification_body;
+
+    #[test]
+    fn verification_body_contains_public_percent_encoded_url() {
+        let origin = Url::parse("https://cashmemo.example/").unwrap();
+
+        assert_eq!(
+            verification_body(&origin, "raw +/=?& token"),
+            "Verify your Cashmemo email:\nhttps://cashmemo.example/verify-email?token=raw+%2B%2F%3D%3F%26+token"
+        );
     }
 }

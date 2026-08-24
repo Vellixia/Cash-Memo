@@ -1,4 +1,31 @@
 services:
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: cashmemo_e2e
+      POSTGRES_USER: cashmemo_e2e
+      POSTGRES_PASSWORD: cashmemo_e2e
+    ports:
+      - "127.0.0.1:${CASHMEMO_V1_E2E_POSTGRES_PORT:-54329}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cashmemo_e2e -d cashmemo_e2e"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.30.7
+    ports:
+      - "127.0.0.1:${CASHMEMO_V1_E2E_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${CASHMEMO_V1_E2E_MAILPIT_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
   deletion-receipts:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address :9001

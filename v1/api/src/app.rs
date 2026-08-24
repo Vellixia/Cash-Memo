@@ -44,7 +44,8 @@ pub fn build_app(state: AppState) -> Router {
 }
 
 pub fn build_app_with_config(state: AppState, config: &AppConfig) -> Router {
-    let mailer = SmtpEmailSender::new(&config.smtp).expect("validated SMTP configuration");
+    let mailer = SmtpEmailSender::new(&config.smtp, &config.public_origin)
+        .expect("validated SMTP configuration");
     let auth = AuthService::new(
         state.pool.clone(),
         std::sync::Arc::new(mailer),

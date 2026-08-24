@@ -12,6 +12,7 @@ use cashmemo_api::auth::{
 use cashmemo_api::config::{AppEnvironment, SmtpEmailConfig, SmtpSecurity};
 use sqlx::PgPool;
 use tower::ServiceExt;
+use url::Url;
 use uuid::Uuid;
 
 #[derive(Default)]
@@ -166,7 +167,7 @@ fn smtp_security_mode_requires_explicit_plaintext_for_mailpit() {
         .validate_for_environment(AppEnvironment::Development)
         .is_err()
     );
-    assert!(SmtpEmailSender::new(&mailpit).is_ok());
+    assert!(SmtpEmailSender::new(&mailpit, &Url::parse("http://localhost:3000/").unwrap()).is_ok());
     assert_eq!(SmtpSecurity::default(), SmtpSecurity::StartTls);
 }
 

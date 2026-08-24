@@ -17,9 +17,9 @@ const links = [
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="sidebar" aria-label="Primary navigation">
+    <aside className="sidebar">
       <Link href="/app" className="brand">Cashmemo</Link>
-      <nav>
+      <nav aria-label="Primary navigation">
         {links.map(([label, href]) => (
           <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>
             {label}

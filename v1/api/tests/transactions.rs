@@ -356,6 +356,7 @@ async fn purge_trash_command_deletes_only_expired_rows_within_batch_bound(pool: 
             format!("{database_url_prefix}/{database_name}"),
         )
         .env("CASHMEMO_V1_APP_ENV", "test")
+        .env("CASHMEMO_V1_PUBLIC_ORIGIN", "http://localhost:3000")
         .env("CASHMEMO_V1_SMTP_HOST", "localhost")
         .env("CASHMEMO_V1_SMTP_FROM", "test@example.test")
         .output()
