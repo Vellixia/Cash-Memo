@@ -4,6 +4,7 @@ use rust_decimal::Decimal;
 use serde::Serialize;
 use sqlx::{FromRow, PgConnection, PgPool};
 use thiserror::Error;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{currency::CurrencyCode, money::Money, transactions::TransactionDirection};
@@ -13,7 +14,7 @@ pub struct RecurringTransactionService {
     pool: PgPool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Cadence {
     Daily,
@@ -95,7 +96,7 @@ pub struct UpdateRecurringTransaction {
     pub start_date: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RecurringTransaction {
     pub id: Uuid,
     pub wallet_id: Uuid,
@@ -110,7 +111,7 @@ pub struct RecurringTransaction {
     pub status: RecurringStatus,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum RecurringStatus {
     Active,

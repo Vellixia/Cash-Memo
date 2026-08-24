@@ -9,8 +9,7 @@ Status: DONE
 - Frozen all current V1 route paths with stable operation IDs, including only
   `/api/v1/reports/budget-summary`, `/api/v1/health/live`, and `/api/v1/health/ready`.
 - Published canonical `ErrorBody.fields`, `EntryDefaults.last_used_wallet_id`, and recurrence
-  names `recurring-transactions`, `recurring_transactions`, `recurring_transaction_id`, and
-  `recurring_occurrence_id`.
+  names `recurring-transactions`, `recurring_transactions`, and `recurring_occurrence_id`.
 - Added checked-in `openapi/cashmemo-v1.json`, Orval config, credentials-enabled Axios mutator
   with canonical error normalization, and generated TanStack Query/Axios client under
   `v1/web/generated/api/`.
@@ -48,4 +47,18 @@ No legacy route, data, routing, deployment, or production endpoint changed.
 - `cargo clippy -p cashmemo-api --all-targets --all-features -- -D warnings`: pass.
 - `pnpm v1:api:generate`: pass.
 - `pnpm v1:api:check`: pass with no drift.
+- Strict generated-client `tsc --noEmit`: pass.
+
+## P1 recurrence correction
+
+- Removed invented `recurring_transaction_id` and `recurring_occurrence_id` fields from the
+  recurring template response. The authoritative Rust `RecurringTransaction` now owns the
+  response schema and contains exactly `id`, `wallet_id`, `category_id`, `direction`, `amount`,
+  `currency`, `note`, `frequency`, `start_date`, `next_due_date`, and `status`.
+- Added `recurring_contract_matches_authoritative_response_shape`, which serializes the actual
+  Rust response and compares JSON properties and required fields against OpenAPI.
+- Regenerated OpenAPI and Orval models/hooks; recurring operations now use typed
+  `RecurringTransaction` output and nested Rust-derived enum/string schemas.
+- `cargo test -p cashmemo-api --test openapi`: 3 passed.
+- `cargo fmt --all`: pass.
 - Strict generated-client `tsc --noEmit`: pass.

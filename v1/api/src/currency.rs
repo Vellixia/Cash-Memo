@@ -1,8 +1,10 @@
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use serde::Serialize;
 use sqlx::PgPool;
 use thiserror::Error;
+use utoipa::openapi::{RefOr, schema::Schema};
+use utoipa::{PartialSchema, ToSchema};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CurrencyCode(String);
@@ -39,6 +41,18 @@ impl Serialize for CurrencyCode {
         S: serde::Serializer,
     {
         serializer.serialize_str(self.as_str())
+    }
+}
+
+impl PartialSchema for CurrencyCode {
+    fn schema() -> RefOr<Schema> {
+        String::schema()
+    }
+}
+
+impl ToSchema for CurrencyCode {
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("CurrencyCode")
     }
 }
 

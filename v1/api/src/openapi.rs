@@ -16,6 +16,12 @@ use utoipa::openapi::{
 };
 use uuid::Uuid;
 
+use crate::{
+    currency::CurrencyCode,
+    recurring::{Cadence, RecurringStatus, RecurringTransaction},
+    transactions::TransactionDirection,
+};
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorBody {
     pub code: String,
@@ -36,25 +42,8 @@ pub struct EntryDefaults {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct RecurringTransactionContract {
-    pub id: Uuid,
-    pub recurring_transaction_id: Uuid,
-    pub recurring_occurrence_id: Option<Uuid>,
-    pub wallet_id: Uuid,
-    pub category_id: Uuid,
-    pub direction: String,
-    pub amount: String,
-    pub currency: String,
-    pub note: Option<String>,
-    pub frequency: String,
-    pub start_date: String,
-    pub next_due_date: String,
-    pub status: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
 pub struct RecurringTransactionsContract {
-    pub recurring_transactions: Vec<RecurringTransactionContract>,
+    pub recurring_transactions: Vec<RecurringTransaction>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -350,7 +339,11 @@ impl ApiDoc {
             .schema_from::<ErrorBody>()
             .schema_from::<ErrorEnvelope>()
             .schema_from::<EntryDefaults>()
-            .schema_from::<RecurringTransactionContract>()
+            .schema_from::<CurrencyCode>()
+            .schema_from::<Cadence>()
+            .schema_from::<RecurringStatus>()
+            .schema_from::<TransactionDirection>()
+            .schema_from::<RecurringTransaction>()
             .schema_from::<RecurringTransactionsContract>()
             .schema_from::<TransactionContract>()
             .schema_from::<WalletContract>()
@@ -571,18 +564,17 @@ fn contract(operation_id: &str) -> Contract {
             }
         }
         "permanently_delete_transaction" => no_content(),
-        "list_recurring_transactions" => list("RecurringTransactionContract", &[]),
-        "create_recurring_transaction" => create(
-            "CreateRecurringTransactionRequest",
-            "RecurringTransactionContract",
-        ),
+        "list_recurring_transactions" => list("RecurringTransaction", &[]),
+        "create_recurring_transaction" => {
+            create("CreateRecurringTransactionRequest", "RecurringTransaction")
+        }
         "get_recurring_transaction"
         | "update_recurring_transaction"
         | "pause_recurring_transaction"
         | "resume_recurring_transaction" => Contract {
             request: (operation_id == "update_recurring_transaction")
                 .then_some("UpdateRecurringTransactionRequest"),
-            response: Some(("RecurringTransactionContract", false)),
+            response: Some(("RecurringTransaction", false)),
             success_status: "200",
             query: &[],
             errors: AUTH_ERRORS,

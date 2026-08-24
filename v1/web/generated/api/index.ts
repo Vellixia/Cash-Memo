@@ -52,7 +52,7 @@ import type {
   PasswordResetRequest,
   PreferencesRequest,
   RecentTransactionsContract,
-  RecurringTransactionContract,
+  RecurringTransaction,
   SessionContract,
   TokenRequest,
   TransactionContract,
@@ -2005,7 +2005,7 @@ export const listRecurringTransactions = (
 ) => {
 
 
-      return customAxios<RecurringTransactionContract[]>(
+      return customAxios<RecurringTransaction[]>(
       {url: `/api/v1/recurring-transactions`, method: 'GET', signal
     },
       );
@@ -2092,7 +2092,7 @@ export const createRecurringTransaction = (
 ) => {
 
 
-      return customAxios<RecurringTransactionContract>(
+      return customAxios<RecurringTransaction>(
       {url: `/api/v1/recurring-transactions`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
       data: createRecurringTransactionRequest, signal
@@ -2152,7 +2152,7 @@ export const getRecurringTransaction = (
 ) => {
 
 
-      return customAxios<RecurringTransactionContract>(
+      return customAxios<RecurringTransaction>(
       {url: `/api/v1/recurring-transactions/${id}`, method: 'GET', signal
     },
       );
@@ -2298,7 +2298,7 @@ export const updateRecurringTransaction = (
 ) => {
 
 
-      return customAxios<RecurringTransactionContract>(
+      return customAxios<RecurringTransaction>(
       {url: `/api/v1/recurring-transactions/${id}`, method: 'PATCH',
       headers: {'Content-Type': 'application/json', },
       data: updateRecurringTransactionRequest, signal
@@ -2358,7 +2358,7 @@ export const pauseRecurringTransaction = (
 ) => {
 
 
-      return customAxios<RecurringTransactionContract>(
+      return customAxios<RecurringTransaction>(
       {url: `/api/v1/recurring-transactions/${id}/pause`, method: 'POST', signal
     },
       );
@@ -2416,7 +2416,7 @@ export const resumeRecurringTransaction = (
 ) => {
 
 
-      return customAxios<RecurringTransactionContract>(
+      return customAxios<RecurringTransaction>(
       {url: `/api/v1/recurring-transactions/${id}/resume`, method: 'POST', signal
     },
       );

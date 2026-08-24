@@ -2511,7 +2511,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/RecurringTransactionContract"
+                    "$ref": "#/components/schemas/RecurringTransaction"
                   }
                 }
               }
@@ -2617,7 +2617,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecurringTransactionContract"
+                  "$ref": "#/components/schemas/RecurringTransaction"
                 }
               }
             }
@@ -2724,7 +2724,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecurringTransactionContract"
+                  "$ref": "#/components/schemas/RecurringTransaction"
                 }
               }
             }
@@ -2937,7 +2937,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecurringTransactionContract"
+                  "$ref": "#/components/schemas/RecurringTransaction"
                 }
               }
             }
@@ -3044,7 +3044,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecurringTransactionContract"
+                  "$ref": "#/components/schemas/RecurringTransaction"
                 }
               }
             }
@@ -3151,7 +3151,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecurringTransactionContract"
+                  "$ref": "#/components/schemas/RecurringTransaction"
                 }
               }
             }
@@ -5573,6 +5573,15 @@
           }
         }
       },
+      "Cadence": {
+        "type": "string",
+        "enum": [
+          "daily",
+          "weekly",
+          "monthly",
+          "yearly"
+        ]
+      },
       "CategoryArchiveContract": {
         "type": "object",
         "required": [
@@ -5779,6 +5788,9 @@
             "type": "string"
           }
         }
+      },
+      "CurrencyCode": {
+        "type": "string"
       },
       "CurrencyContract": {
         "type": "object",
@@ -6094,11 +6106,17 @@
           }
         }
       },
-      "RecurringTransactionContract": {
+      "RecurringStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "paused"
+        ]
+      },
+      "RecurringTransaction": {
         "type": "object",
         "required": [
           "id",
-          "recurring_transaction_id",
           "wallet_id",
           "category_id",
           "direction",
@@ -6118,13 +6136,13 @@
             "format": "uuid"
           },
           "currency": {
-            "type": "string"
+            "$ref": "#/components/schemas/CurrencyCode"
           },
           "direction": {
-            "type": "string"
+            "$ref": "#/components/schemas/TransactionDirection"
           },
           "frequency": {
-            "type": "string"
+            "$ref": "#/components/schemas/Cadence"
           },
           "id": {
             "type": "string",
@@ -6139,22 +6157,11 @@
               "null"
             ]
           },
-          "recurring_occurrence_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
-          "recurring_transaction_id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "start_date": {
             "type": "string"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/RecurringStatus"
           },
           "wallet_id": {
             "type": "string",
@@ -6171,7 +6178,7 @@
           "recurring_transactions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RecurringTransactionContract"
+              "$ref": "#/components/schemas/RecurringTransaction"
             }
           }
         }
@@ -6270,6 +6277,13 @@
             "format": "uuid"
           }
         }
+      },
+      "TransactionDirection": {
+        "type": "string",
+        "enum": [
+          "income",
+          "expense"
+        ]
       },
       "UpdateBudgetRequest": {
         "type": "object",

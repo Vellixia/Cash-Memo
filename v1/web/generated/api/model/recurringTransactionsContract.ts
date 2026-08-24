@@ -4,8 +4,8 @@
  * Cashmemo V1 API
  * OpenAPI spec version: 1.0.0
  */
-import type { RecurringTransactionContract } from './recurringTransactionContract';
+import type { RecurringTransaction } from './recurringTransaction';
 
 export interface RecurringTransactionsContract {
-  recurring_transactions: RecurringTransactionContract[];
+  recurring_transactions: RecurringTransaction[];
 }

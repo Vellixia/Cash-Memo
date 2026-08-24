@@ -1,5 +1,6 @@
 use cashmemo_api::openapi::ApiDoc;
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 #[test]
 fn rust_openapi_freezes_v1_contract_names() {
@@ -43,7 +44,6 @@ fn rust_openapi_freezes_v1_contract_names() {
     for name in [
         "recurring-transactions",
         "recurring_transactions",
-        "recurring_transaction_id",
         "recurring_occurrence_id",
     ] {
         assert!(serialized.contains(name), "missing {name}");
@@ -99,6 +99,71 @@ fn rust_openapi_freezes_v1_contract_names() {
     let first = serde_json::to_vec(&ApiDoc::openapi()).expect("first export");
     let second = serde_json::to_vec(&ApiDoc::openapi()).expect("second export");
     assert_eq!(first, second, "Rust export must be deterministic");
+}
+
+#[test]
+fn recurring_contract_matches_authoritative_response_shape() {
+    use cashmemo_api::{
+        currency::CurrencyCode,
+        recurring::{Cadence, RecurringStatus, RecurringTransaction},
+        transactions::TransactionDirection,
+    };
+
+    let response = RecurringTransaction {
+        id: uuid::Uuid::nil(),
+        wallet_id: uuid::Uuid::nil(),
+        category_id: uuid::Uuid::nil(),
+        direction: TransactionDirection::Expense,
+        amount: "10.00".to_owned(),
+        currency: CurrencyCode::parse("USD").expect("valid currency"),
+        note: Some("note".to_owned()),
+        frequency: Cadence::Monthly,
+        start_date: "2026-08-24".to_owned(),
+        next_due_date: "2026-09-24".to_owned(),
+        status: RecurringStatus::Active,
+    };
+    let serialized = serde_json::to_value(response).expect("recurring response serializes");
+    let response_properties = serialized
+        .as_object()
+        .expect("recurring response object")
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    let document = serde_json::to_value(ApiDoc::openapi()).expect("OpenAPI serializes");
+    let schema = document
+        .pointer("/components/schemas/RecurringTransaction")
+        .expect("authoritative recurring schema");
+    let schema_properties = schema["properties"]
+        .as_object()
+        .expect("recurring schema properties")
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(schema_properties, response_properties);
+
+    let required = schema["required"]
+        .as_array()
+        .expect("recurring schema required fields")
+        .iter()
+        .map(|field| field.as_str().expect("required field name").to_owned())
+        .collect::<BTreeSet<_>>();
+    let expected_required = [
+        "id",
+        "wallet_id",
+        "category_id",
+        "direction",
+        "amount",
+        "currency",
+        "frequency",
+        "start_date",
+        "next_due_date",
+        "status",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<BTreeSet<_>>();
+    assert_eq!(required, expected_required);
 }
 
 #[test]

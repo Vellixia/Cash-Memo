@@ -3,6 +3,7 @@ use rust_decimal::Decimal;
 use serde::Serialize;
 use sqlx::{FromRow, PgConnection, PgPool};
 use thiserror::Error;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{currency::CurrencyCode, money::Money};
@@ -60,7 +61,7 @@ pub struct UpdateTransaction {
     pub occurred_at: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Transaction {
     pub id: Uuid,
     pub wallet_id: Uuid,
@@ -79,7 +80,7 @@ pub struct EntryDefaults {
     pub last_used_wallet_id: Option<Uuid>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum TransactionDirection {
     Income,
