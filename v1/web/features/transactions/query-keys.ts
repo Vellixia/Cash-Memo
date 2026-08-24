@@ -1,7 +1,20 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { getListTransactionsQueryKey, getListTrashedTransactionsQueryKey } from "../../generated/api";
+import {
+  getGetBudgetSummaryQueryKey,
+  getGetMonthlySummaryQueryKey,
+  getGetWalletQueryKey,
+  getListBudgetsQueryKey,
+  getListCategoriesQueryKey,
+  getListTransactionsQueryKey,
+  getListTrashedTransactionsQueryKey,
+  getListWalletsQueryKey,
+} from "../../generated/api";
 
-interface Scope { wallet_id: string; category_id: string; occurred_at: string }
+interface Scope {
+  wallet_id: string;
+  category_id: string;
+  occurred_at: string;
+}
 
 function month(occurredAt: string) {
   return occurredAt.slice(0, 7);
@@ -13,11 +26,18 @@ function monthEnd(value: string) {
 }
 
 function keys(scope: Scope) {
-  const from = `${month(scope.occurred_at)}-01`;
+  const scopeMonth = month(scope.occurred_at);
+  const from = `${scopeMonth}-01`;
   return [
     getListTransactionsQueryKey({ wallet_id: scope.wallet_id }),
     getListTransactionsQueryKey({ category_id: scope.category_id }),
-    getListTransactionsQueryKey({ from, to: monthEnd(month(scope.occurred_at)) }),
+    getListTransactionsQueryKey({ from, to: monthEnd(scopeMonth) }),
+    getGetWalletQueryKey(scope.wallet_id),
+    getListWalletsQueryKey(),
+    getListCategoriesQueryKey(),
+    getListBudgetsQueryKey({ month: scopeMonth }),
+    getGetBudgetSummaryQueryKey({ month: scopeMonth }),
+    getGetMonthlySummaryQueryKey({ month: scopeMonth }),
   ];
 }
 
@@ -26,8 +46,15 @@ export async function invalidateTransactionScopes(
   { previous, next }: { previous?: Scope; next?: Scope },
 ) {
   const scopes = [previous, next].filter((scope): scope is Scope => Boolean(scope));
+  const queryKeys = scopes
+    .flatMap(keys)
+    .filter(
+      (queryKey, index, keysForScopes) =>
+        keysForScopes.findIndex((value) => JSON.stringify(value) === JSON.stringify(queryKey)) ===
+        index,
+    );
   await Promise.all([
-    ...scopes.flatMap((scope) => keys(scope).map((queryKey) => client.invalidateQueries({ queryKey }))),
+    ...queryKeys.map((queryKey) => client.invalidateQueries({ queryKey })),
     client.invalidateQueries({ queryKey: getListTrashedTransactionsQueryKey() }),
   ]);
 }
