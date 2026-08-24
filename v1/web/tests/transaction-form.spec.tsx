@@ -135,6 +135,22 @@ describe("transaction entry", () => {
     expect(amount.value).toBe("1.234");
   });
 
+  it("keeps amount text and shows its linked error after changing from exponent 3 to 0", async () => {
+    renderForm();
+    const amount = screen.getByLabelText<HTMLInputElement>("Amount");
+    fireEvent.change(screen.getByLabelText("Wallet"), { target: { value: "wallet-3" } });
+    fireEvent.change(amount, { target: { value: "1.234" } });
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+    fireEvent.change(screen.getByLabelText("Wallet"), { target: { value: "wallet-2" } });
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain("no more than 0 decimal places");
+    });
+    expect(amount.value).toBe("1.234");
+    expect(amount.getAttribute("aria-describedby")).toBe("transaction-amount-error");
+  });
+
   it("uses sole active wallet but leaves wallet required when no server default or sole wallet exists", () => {
     mocks.defaults.last_used_wallet_id = null;
     mocks.wallets = [{ id: "only", name: "Only", currency: "USD", archived_at: null }];
@@ -257,6 +273,10 @@ describe("transaction entry", () => {
     const keys = spy.mock.calls.map(([input]) => input?.queryKey);
     expect(keys).toContainEqual(["/api/v1/wallets", "old-wallet"]);
     expect(keys).toContainEqual(["/api/v1/wallets", "new-wallet"]);
+    expect(keys).toContainEqual([
+      "/api/v1/transactions",
+      { from: "2026-01-01T00:00:00.000Z", to: "2026-01-31T23:59:59.999Z" },
+    ]);
     expect(keys).toContainEqual(["/api/v1/reports/budget-summary", { month: "2026-01" }]);
     expect(keys).toContainEqual(["/api/v1/reports/monthly-summary", { month: "2026-02" }]);
   });

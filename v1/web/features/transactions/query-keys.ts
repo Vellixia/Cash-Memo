@@ -9,6 +9,7 @@ import {
   getListTrashedTransactionsQueryKey,
   getListWalletsQueryKey,
 } from "../../generated/api";
+import { historyMonthBounds } from "./history-params";
 
 interface Scope {
   wallet_id: string;
@@ -20,18 +21,12 @@ function month(occurredAt: string) {
   return occurredAt.slice(0, 7);
 }
 
-function monthEnd(value: string) {
-  const [year, monthNumber] = value.split("-").map(Number);
-  return `${value}-${String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, "0")}`;
-}
-
 function keys(scope: Scope) {
   const scopeMonth = month(scope.occurred_at);
-  const from = `${scopeMonth}-01`;
   return [
     getListTransactionsQueryKey({ wallet_id: scope.wallet_id }),
     getListTransactionsQueryKey({ category_id: scope.category_id }),
-    getListTransactionsQueryKey({ from, to: monthEnd(scopeMonth) }),
+    getListTransactionsQueryKey(historyMonthBounds(scopeMonth)),
     getGetWalletQueryKey(scope.wallet_id),
     getListWalletsQueryKey(),
     getListCategoriesQueryKey(),

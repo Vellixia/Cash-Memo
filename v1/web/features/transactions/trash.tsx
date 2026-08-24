@@ -11,6 +11,11 @@ import {
 import type { TransactionContract } from "../../generated/api/model/transactionContract";
 import { invalidateTransactionScopes } from "./query-keys";
 
+function errorText(error: unknown) {
+  const value = error as { message?: string };
+  return value.message ?? "Request unavailable. Try again.";
+}
+
 export function TransactionTrash() {
   const queryClient = useQueryClient();
   const list = useListTrashedTransactions(undefined, { query: { retry: 1 } });
@@ -19,19 +24,27 @@ export function TransactionTrash() {
   const [confirming, setConfirming] = useState<string>();
   const [items, setItems] = useState<TransactionContract[] | undefined>();
   const transactions = items ?? list.data?.data.items ?? [];
-  const [status, setStatus] = useState<string>();
+  const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   async function restoreItem(item: TransactionContract) {
-    await restore.mutateAsync({ transactionId: item.id });
-    setItems((current) => (current ?? transactions).filter((value) => value.id !== item.id));
-    await invalidateTransactionScopes(queryClient, { next: item });
-    setStatus("Transaction restored.");
+    try {
+      await restore.mutateAsync({ transactionId: item.id });
+      setItems((current) => (current ?? transactions).filter((value) => value.id !== item.id));
+      await invalidateTransactionScopes(queryClient, { next: item });
+      setStatus({ kind: "success", text: "Transaction restored." });
+    } catch (error) {
+      setStatus({ kind: "error", text: errorText(error) });
+    }
   }
   async function deleteItem(item: TransactionContract) {
-    await remove.mutateAsync({ transactionId: item.id });
-    setItems((current) => (current ?? transactions).filter((value) => value.id !== item.id));
-    setConfirming(undefined);
-    await invalidateTransactionScopes(queryClient, { previous: item });
-    setStatus("Transaction permanently deleted.");
+    try {
+      await remove.mutateAsync({ transactionId: item.id });
+      setItems((current) => (current ?? transactions).filter((value) => value.id !== item.id));
+      setConfirming(undefined);
+      await invalidateTransactionScopes(queryClient, { previous: item });
+      setStatus({ kind: "success", text: "Transaction permanently deleted." });
+    } catch (error) {
+      setStatus({ kind: "error", text: errorText(error) });
+    }
   }
   if (list.isPending) return <p className="loading-state">Loading Trash…</p>;
   if (list.isError)
@@ -55,8 +68,11 @@ export function TransactionTrash() {
         </div>
       </div>
       {status ? (
-        <p role="status" className="success">
-          {status}
+        <p
+          role={status.kind === "error" ? "alert" : "status"}
+          className={status.kind === "error" ? "field-error" : "success"}
+        >
+          {status.text}
         </p>
       ) : null}
       {transactions.length === 0 ? (

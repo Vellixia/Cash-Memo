@@ -12,7 +12,10 @@ import {
 } from "../../generated/api";
 import type { TransactionContract } from "../../generated/api/model/transactionContract";
 import { TransactionFilters, readHistoryFilters } from "./filters";
+import { serializeHistoryFilters } from "./history-params";
 import { invalidateTransactionScopes } from "./query-keys";
+
+export { serializeHistoryFilters } from "./history-params";
 
 function errorText(error: unknown) {
   const value = error as { message?: string };
@@ -20,25 +23,6 @@ function errorText(error: unknown) {
 }
 function isFuture(value: string) {
   return new Date(value).getTime() > Date.now();
-}
-
-function rfc3339Boundary(value: string | undefined, end = false) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
-    return undefined;
-  return `${value}T${end ? "23:59:59.999" : "00:00:00.000"}Z`;
-}
-
-export function serializeHistoryFilters(filters: ReturnType<typeof readHistoryFilters>) {
-  return {
-    ...(rfc3339Boundary(filters.from) ? { from: rfc3339Boundary(filters.from) } : {}),
-    ...(rfc3339Boundary(filters.to, true) ? { to: rfc3339Boundary(filters.to, true) } : {}),
-    ...(filters.type ? { type: filters.type } : {}),
-    ...(filters.wallet ? { wallet_id: filters.wallet } : {}),
-    ...(filters.category ? { category_id: filters.category } : {}),
-    ...(filters.q ? { q: filters.q } : {}),
-  };
 }
 
 export function TransactionHistory() {
