@@ -6,10 +6,15 @@
    with `pgbackrest --stanza=cashmemo-v1 --type=time --target=TIMESTAMP restore`.
 3. Start restored PostgreSQL only. Do not start `serve`; use narrow read-only receipt-bucket
    credentials and HMAC keyring only with `scripts/replay-deletion-receipts.sh`.
-4. Store unsigned replay JSON. `unreadable_receipts` and `unprocessed_matches` must both be zero.
-   Any nonzero value keeps target isolated and requires investigation/replay.
-5. Run `scripts/verify-restore.sh --evidence restore-evidence.json`. Application traffic remains
-   disabled until separate operator approval and production replacement gate.
+4. Set command-only `CASHMEMO_V1_RESTORE_EVIDENCE_FILE`, restored target ID/database name and
+   fingerprint, backup/PITR proof IDs, operator/approval IDs, and
+   `CASHMEMO_V1_RESTORE_EVIDENCE_HMAC_KEY`. Wrapper atomically writes strict signed evidence to that
+   file after recording all four unsigned `ReplaySummary` counters.
+5. Run
+   `scripts/verify-restore.sh --evidence "$CASHMEMO_V1_RESTORE_EVIDENCE_FILE" --target-id "$CASHMEMO_V1_RESTORED_TARGET_ID" --database-name "$CASHMEMO_V1_RESTORED_DATABASE_NAME" --database-fingerprint "$CASHMEMO_V1_RESTORED_DATABASE_FINGERPRINT"`.
+   Verification requires zero `unreadable_receipts` and `unprocessed_matches`; any failure keeps
+   target isolated. Application traffic remains disabled until separate operator approval and
+   production replacement gate.
 
 Weekly full, daily differential, and continuous WAL archiving are required. Run a monthly isolated
 restore/PITR drill. RPO/RTO are targets until those drills prove them.

@@ -7,8 +7,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::{
-    DeletionReceipt, DeletionReceiptReader, ReceiptError, ReceiptObject, canonical_receipt_bytes,
-    hmac_user_id, receipt_object_key,
+    DeletionReceipt, DeletionReceiptReader, canonical_receipt_bytes, hmac_user_id,
+    receipt_object_key,
 };
 
 /// Unsigned operational result. It contains no identifier, receipt payload, or key material.
@@ -52,17 +52,27 @@ pub async fn replay_deletion_receipts(
     hmac_keyring: &[(u32, Vec<u8>)],
 ) -> Result<ReplaySummary, ReplayError> {
     validate_keyring(hmac_keyring)?;
-    let objects = receipt_store
-        .list_receipts()
-        .await
-        .map_err(map_receipt_error)?;
+    let keys = match receipt_store.list_receipt_keys().await {
+        Ok(keys) => keys,
+        Err(_) => {
+            return Ok(ReplaySummary {
+                unreadable_receipts: 1,
+                ..ReplaySummary::default()
+            });
+        }
+    };
     let mut summary = ReplaySummary {
-        receipts_scanned: objects.len() as u64,
+        receipts_scanned: keys.len() as u64,
         ..ReplaySummary::default()
     };
-    let mut receipts = Vec::with_capacity(objects.len());
-    for object in objects {
-        match parse_receipt(&object, hmac_keyring) {
+    let mut receipts = Vec::with_capacity(keys.len());
+    for key in keys {
+        match receipt_store
+            .read_receipt(&key)
+            .await
+            .ok()
+            .and_then(|body| parse_receipt(&key, &body, hmac_keyring))
+        {
             Some(receipt) => receipts.push(receipt),
             None => summary.unreadable_receipts += 1,
         }
@@ -122,8 +132,8 @@ fn validate_keyring(hmac_keyring: &[(u32, Vec<u8>)]) -> Result<(), ReplayError> 
     Ok(())
 }
 
-fn parse_receipt(object: &ReceiptObject, keyring: &[(u32, Vec<u8>)]) -> Option<DeletionReceipt> {
-    let wire: ReceiptWire = serde_json::from_slice(&object.body).ok()?;
+fn parse_receipt(key: &str, body: &[u8], keyring: &[(u32, Vec<u8>)]) -> Option<DeletionReceipt> {
+    let wire: ReceiptWire = serde_json::from_slice(body).ok()?;
     let hmac_user_id = decode_hmac(&wire.hmac_user_id)?;
     let purged_at = DateTime::parse_from_rfc3339(&wire.purged_at)
         .ok()?
@@ -136,8 +146,7 @@ fn parse_receipt(object: &ReceiptObject, keyring: &[(u32, Vec<u8>)]) -> Option<D
     }
     let receipt = DeletionReceipt::new(hmac_user_id, purged_at, wire.key_version);
     let canonical = canonical_receipt_bytes(&receipt).ok()?;
-    (canonical == object.body && receipt_object_key_from_object(&receipt, &object.key))
-        .then_some(receipt)
+    (canonical == body && receipt_object_key_from_object(&receipt, key)).then_some(receipt)
 }
 
 fn receipt_object_key_from_object(receipt: &DeletionReceipt, actual_key: &str) -> bool {
@@ -156,11 +165,4 @@ fn decode_hmac(value: &str) -> Option<[u8; 32]> {
         *slot = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
     }
     Some(decoded)
-}
-
-fn map_receipt_error(error: ReceiptError) -> ReplayError {
-    match error {
-        ReceiptError::Configuration => ReplayError::Configuration,
-        ReceiptError::DivergentObject | ReceiptError::Storage => ReplayError::Storage,
-    }
 }

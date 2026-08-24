@@ -10,3 +10,5 @@ seven-day safety margin. Retain every HMAC key version while any receipt remains
 
 Use [restore runbook](../../infra/backup/restore-runbook.md) for every restore. Receipt replay uses
 only an isolated restored DB, command-only keyring, and narrow receipt-bucket read credentials.
+Replay wrapper writes target-bound, HMAC-signed restore evidence atomically; verify that artifact
+before any restored target receives application traffic.

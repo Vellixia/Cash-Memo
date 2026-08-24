@@ -4,8 +4,8 @@ use aws_sdk_s3::{Client, config::Region, primitives::ByteStream};
 use url::Url;
 
 use super::{
-    DeletionReceipt, DeletionReceiptReader, DeletionReceiptStore, ReceiptError, ReceiptObject,
-    ReceiptWrite, canonical_receipt_bytes, receipt_object_key,
+    DeletionReceipt, DeletionReceiptReader, DeletionReceiptStore, ReceiptError, ReceiptWrite,
+    canonical_receipt_bytes, receipt_object_key,
 };
 
 #[derive(Clone, Debug)]
@@ -137,7 +137,7 @@ impl DeletionReceiptStore for S3DeletionReceiptStore {
 
 #[async_trait::async_trait]
 impl DeletionReceiptReader for S3DeletionReceiptStore {
-    async fn list_receipts(&self) -> Result<Vec<ReceiptObject>, ReceiptError> {
+    async fn list_receipt_keys(&self) -> Result<Vec<String>, ReceiptError> {
         let prefix = format!("{}/", self.prefix.trim_end_matches('/'));
         let mut continuation = None;
         let mut keys = Vec::new();
@@ -166,24 +166,21 @@ impl DeletionReceiptReader for S3DeletionReceiptStore {
             }
         }
         keys.sort();
-        let mut receipts = Vec::with_capacity(keys.len());
-        for key in keys {
-            let body = self
-                .client
-                .get_object()
-                .bucket(&self.bucket)
-                .key(&key)
-                .send()
-                .await
-                .map_err(|_| ReceiptError::Storage)?
-                .body
-                .collect()
-                .await
-                .map_err(|_| ReceiptError::Storage)?
-                .into_bytes()
-                .to_vec();
-            receipts.push(ReceiptObject { key, body });
-        }
-        Ok(receipts)
+        Ok(keys)
+    }
+
+    async fn read_receipt(&self, key: &str) -> Result<Vec<u8>, ReceiptError> {
+        self.client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|_| ReceiptError::Storage)?
+            .body
+            .collect()
+            .await
+            .map_err(|_| ReceiptError::Storage)
+            .map(|body| body.into_bytes().to_vec())
     }
 }

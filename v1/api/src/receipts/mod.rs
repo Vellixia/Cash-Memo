@@ -6,7 +6,6 @@ use sha2::Sha256;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[cfg(feature = "s3-receipts")]
 pub mod replay;
 #[cfg(feature = "s3-receipts")]
 pub mod s3;
@@ -52,12 +51,8 @@ pub trait DeletionReceiptStore: Send + Sync {
 /// Read-only receipt access used only by an isolated restore replay command.
 #[async_trait]
 pub trait DeletionReceiptReader: Send + Sync {
-    async fn list_receipts(&self) -> Result<Vec<ReceiptObject>, ReceiptError>;
-}
-
-pub struct ReceiptObject {
-    pub key: String,
-    pub body: Vec<u8>,
+    async fn list_receipt_keys(&self) -> Result<Vec<String>, ReceiptError>;
+    async fn read_receipt(&self, key: &str) -> Result<Vec<u8>, ReceiptError>;
 }
 
 pub fn hmac_user_id(key: &[u8], user_id: Uuid) -> Result<[u8; 32], ReceiptError> {
