@@ -29,3 +29,23 @@ Status: DONE
 ## Scope
 
 No legacy route, data, routing, deployment, or production endpoint changed.
+
+## P1 correction
+
+- Replaced synthetic `void` operation metadata with concrete Rust request/query/response schemas.
+- Added JSON request bodies, typed response content, canonical `ErrorEnvelope` error responses,
+  path/query parameters, and route-appropriate `201`, `204`, `401`, `403`, `404`, `409`, `422`,
+  `429`, `500`, and `503` statuses.
+- Representative history, transaction-create, budget-create, and account-deletion assertions now
+  fail if bodies, query filters, typed responses, or canonical errors drift.
+- Orval output now has typed input/output hooks; only expected health/204 operations retain
+  `customAxios<void>`, and no generated hook uses `TError = void`.
+
+## P1 verification
+
+- `cargo test -p cashmemo-api --test openapi`: 2 passed.
+- `cargo fmt --all -- --check`: pass.
+- `cargo clippy -p cashmemo-api --all-targets --all-features -- -D warnings`: pass.
+- `pnpm v1:api:generate`: pass.
+- `pnpm v1:api:check`: pass with no drift.
+- Strict generated-client `tsc --noEmit`: pass.

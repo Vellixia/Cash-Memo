@@ -5,7 +5,6 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface PreferencesContract {
-  default_currency_code: string;
-  timezone: string;
-}
+export type GetBudgetSummaryParams = {
+month?: string;
+};

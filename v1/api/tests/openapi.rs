@@ -100,3 +100,74 @@ fn rust_openapi_freezes_v1_contract_names() {
     let second = serde_json::to_vec(&ApiDoc::openapi()).expect("second export");
     assert_eq!(first, second, "Rust export must be deterministic");
 }
+
+#[test]
+fn representative_operations_have_typed_http_contracts() {
+    let document = serde_json::to_value(ApiDoc::openapi()).expect("OpenAPI serializes");
+    let operation = |path: &str, method: &str| {
+        document
+            .pointer(&format!("/paths/{}/{}", path.replace('/', "~1"), method))
+            .unwrap_or_else(|| panic!("missing {method} {path}"))
+            .clone()
+    };
+
+    let history = operation("/api/v1/transactions", "get");
+    let history_params = history
+        .get("parameters")
+        .and_then(Value::as_array)
+        .expect("history query params");
+    for name in [
+        "cursor",
+        "limit",
+        "q",
+        "from",
+        "to",
+        "type",
+        "wallet_id",
+        "category_id",
+    ] {
+        assert!(history_params.iter().any(|param| param["name"] == name));
+    }
+    let create_transaction = operation("/api/v1/transactions", "post");
+    assert_eq!(
+        create_transaction["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/CreateTransactionRequest"
+    );
+    assert_eq!(
+        create_transaction["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/TransactionContract"
+    );
+    assert_error_response(&create_transaction, "422");
+
+    let budget = operation("/api/v1/budgets", "post");
+    assert_eq!(
+        budget["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/CreateBudgetRequest"
+    );
+    assert_eq!(
+        budget["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/BudgetContract"
+    );
+    assert_error_response(&budget, "409");
+
+    let deletion = operation("/api/v1/account/deletion", "post");
+    assert_eq!(
+        deletion["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/DeletionRequest"
+    );
+    assert_eq!(
+        deletion["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AccountDeletionContract"
+    );
+    for status in ["401", "403", "409", "422", "429", "500", "503"] {
+        assert_error_response(&deletion, status);
+    }
+}
+
+fn assert_error_response(operation: &Value, status: &str) {
+    assert_eq!(
+        operation["responses"][status]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/ErrorEnvelope",
+        "response {status} must use canonical error envelope"
+    );
+}

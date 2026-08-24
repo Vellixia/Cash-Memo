@@ -6,7 +6,7 @@
  */
 import type { WalletBalanceContract } from './walletBalanceContract';
 
-export interface WalletContract {
+export interface WalletArchiveContract {
   /** @nullable */
   archived_at?: string | null;
   balance: WalletBalanceContract;
@@ -14,4 +14,6 @@ export interface WalletContract {
   id: string;
   name: string;
   opening_balance: string;
+  /** @minimum 0 */
+  paused_recurring_count: number;
 }

@@ -4,14 +4,13 @@
  * Cashmemo V1 API
  * OpenAPI spec version: 1.0.0
  */
-import type { WalletBalanceContract } from './walletBalanceContract';
 
-export interface WalletContract {
+export interface CategoryArchiveContract {
   /** @nullable */
   archived_at?: string | null;
-  balance: WalletBalanceContract;
-  currency: string;
   id: string;
+  kind: string;
   name: string;
-  opening_balance: string;
+  /** @minimum 0 */
+  paused_recurring_count: number;
 }

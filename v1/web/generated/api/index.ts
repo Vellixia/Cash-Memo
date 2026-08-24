@@ -23,6 +23,48 @@ import type {
   UseQueryResult
 } from '@tanstack/react-query';
 
+import type {
+  AcceptedContract,
+  AccountDeletionContract,
+  BudgetContract,
+  BudgetSummaryContract,
+  CategoryArchiveContract,
+  CategoryContract,
+  CreateBudgetRequest,
+  CreateCategoryRequest,
+  CreateRecurringTransactionRequest,
+  CreateTransactionRequest,
+  CreateWalletRequest,
+  CredentialsRequest,
+  CurrencyContract,
+  DeletionRequest,
+  EmailRequest,
+  EntryDefaults,
+  ErrorEnvelope,
+  GetBudgetSummaryParams,
+  GetMonthlySummaryParams,
+  HistoryPageContract,
+  ListBudgetsParams,
+  ListTransactionsParams,
+  ListTrashedTransactionsParams,
+  MonthlySummaryContract,
+  OnboardingContract,
+  PasswordResetRequest,
+  PreferencesRequest,
+  RecentTransactionsContract,
+  RecurringTransactionContract,
+  SessionContract,
+  TokenRequest,
+  TransactionContract,
+  UpdateBudgetRequest,
+  UpdateCategoryRequest,
+  UpdateRecurringTransactionRequest,
+  UpdateTransactionRequest,
+  UpdateWalletRequest,
+  WalletArchiveContract,
+  WalletContract
+} from './model';
+
 import { customAxios } from '../../lib/api/axios';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -53,7 +95,7 @@ export const getAccountDeletion = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<AccountDeletionContract>(
       {url: `/api/v1/account/deletion`, method: 'GET', signal
     },
       );
@@ -69,7 +111,7 @@ export const getGetAccountDeletionQueryKey = () => {
     }
 
 
-export const getGetAccountDeletionQueryOptions = <TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletion>>, TError, TData>>, }
+export const getGetAccountDeletionQueryOptions = <TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletion>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -88,10 +130,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetAccountDeletionQueryResult = NonNullable<Awaited<ReturnType<typeof getAccountDeletion>>>
-export type GetAccountDeletionQueryError = void
+export type GetAccountDeletionQueryError = ErrorEnvelope
 
 
-export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = void>(
+export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletion>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAccountDeletion>>,
@@ -101,7 +143,7 @@ export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccou
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = void>(
+export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletion>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAccountDeletion>>,
@@ -111,12 +153,12 @@ export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccou
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = void>(
+export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletion>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = void>(
+export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccountDeletion>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletion>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -135,13 +177,15 @@ export function useGetAccountDeletion<TData = Awaited<ReturnType<typeof getAccou
 
 
 export const requestAccountDeletion = (
-
+    deletionRequest: DeletionRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/account/deletion`, method: 'POST', signal
+      return customAxios<AccountDeletionContract>(
+      {url: `/api/v1/account/deletion`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: deletionRequest, signal
     },
       );
     }
@@ -149,9 +193,9 @@ export const requestAccountDeletion = (
 
 
 
-export const getRequestAccountDeletionMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAccountDeletion>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof requestAccountDeletion>>, TError,void, TContext> => {
+export const getRequestAccountDeletionMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAccountDeletion>>, TError,RequestAccountDeletionMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof requestAccountDeletion>>, TError,RequestAccountDeletionMutationVariables, TContext> => {
 
 const mutationKey = ['requestAccountDeletion'];
 const {mutation: mutationOptions} = options ?
@@ -163,10 +207,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestAccountDeletion>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestAccountDeletion>>, RequestAccountDeletionMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  requestAccountDeletion()
+          return  requestAccountDeletion(data,)
         }
 
 
@@ -177,16 +221,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RequestAccountDeletionMutationResult = NonNullable<Awaited<ReturnType<typeof requestAccountDeletion>>>
+    export type RequestAccountDeletionMutationBody = DeletionRequest
+    export type RequestAccountDeletionMutationError = ErrorEnvelope
+    export type RequestAccountDeletionMutationVariables = {data: DeletionRequest}
 
-    export type RequestAccountDeletionMutationError = void
-
-
-    export const useRequestAccountDeletion = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAccountDeletion>>, TError,void, TContext>, }
+    export const useRequestAccountDeletion = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAccountDeletion>>, TError,RequestAccountDeletionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof requestAccountDeletion>>,
         TError,
-        void,
+        RequestAccountDeletionMutationVariables,
         TContext
       > => {
       return useMutation(getRequestAccountDeletionMutationOptions(options), queryClient);
@@ -198,7 +242,7 @@ export const cancelAccountDeletion = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<AccountDeletionContract>(
       {url: `/api/v1/account/deletion/cancel`, method: 'POST', signal
     },
       );
@@ -207,7 +251,7 @@ export const cancelAccountDeletion = (
 
 
 
-export const getCancelAccountDeletionMutationOptions = <TError = void,
+export const getCancelAccountDeletionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,void, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,void, TContext> => {
 
@@ -236,10 +280,10 @@ const {mutation: mutationOptions} = options ?
 
     export type CancelAccountDeletionMutationResult = NonNullable<Awaited<ReturnType<typeof cancelAccountDeletion>>>
 
-    export type CancelAccountDeletionMutationError = void
+    export type CancelAccountDeletionMutationError = ErrorEnvelope
 
 
-    export const useCancelAccountDeletion = <TError = void,
+    export const useCancelAccountDeletion = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,void, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof cancelAccountDeletion>>,
@@ -251,13 +295,15 @@ const {mutation: mutationOptions} = options ?
     }
 
 export const login = (
-
+    credentialsRequest: CredentialsRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/auth/login`, method: 'POST', signal
+      return customAxios<SessionContract>(
+      {url: `/api/v1/auth/login`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: credentialsRequest, signal
     },
       );
     }
@@ -265,9 +311,9 @@ export const login = (
 
 
 
-export const getLoginMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,void, TContext> => {
+export const getLoginMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,LoginMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,LoginMutationVariables, TContext> => {
 
 const mutationKey = ['login'];
 const {mutation: mutationOptions} = options ?
@@ -279,10 +325,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, LoginMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  login()
+          return  login(data,)
         }
 
 
@@ -293,16 +339,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
+    export type LoginMutationBody = CredentialsRequest
+    export type LoginMutationError = ErrorEnvelope
+    export type LoginMutationVariables = {data: CredentialsRequest}
 
-    export type LoginMutationError = void
-
-
-    export const useLogin = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,void, TContext>, }
+    export const useLogin = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,LoginMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof login>>,
         TError,
-        void,
+        LoginMutationVariables,
         TContext
       > => {
       return useMutation(getLoginMutationOptions(options), queryClient);
@@ -314,7 +360,7 @@ export const logout = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<AcceptedContract>(
       {url: `/api/v1/auth/logout`, method: 'POST', signal
     },
       );
@@ -323,7 +369,7 @@ export const logout = (
 
 
 
-export const getLogoutMutationOptions = <TError = void,
+export const getLogoutMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
 
@@ -352,10 +398,10 @@ const {mutation: mutationOptions} = options ?
 
     export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
 
-    export type LogoutMutationError = void
+    export type LogoutMutationError = ErrorEnvelope
 
 
-    export const useLogout = <TError = void,
+    export const useLogout = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof logout>>,
@@ -367,13 +413,15 @@ const {mutation: mutationOptions} = options ?
     }
 
 export const consumePasswordReset = (
-
+    passwordResetRequest: PasswordResetRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/auth/password-reset/consume`, method: 'POST', signal
+      return customAxios<AcceptedContract>(
+      {url: `/api/v1/auth/password-reset/consume`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: passwordResetRequest, signal
     },
       );
     }
@@ -381,9 +429,9 @@ export const consumePasswordReset = (
 
 
 
-export const getConsumePasswordResetMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof consumePasswordReset>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof consumePasswordReset>>, TError,void, TContext> => {
+export const getConsumePasswordResetMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof consumePasswordReset>>, TError,ConsumePasswordResetMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof consumePasswordReset>>, TError,ConsumePasswordResetMutationVariables, TContext> => {
 
 const mutationKey = ['consumePasswordReset'];
 const {mutation: mutationOptions} = options ?
@@ -395,10 +443,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof consumePasswordReset>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof consumePasswordReset>>, ConsumePasswordResetMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  consumePasswordReset()
+          return  consumePasswordReset(data,)
         }
 
 
@@ -409,29 +457,31 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ConsumePasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof consumePasswordReset>>>
+    export type ConsumePasswordResetMutationBody = PasswordResetRequest
+    export type ConsumePasswordResetMutationError = ErrorEnvelope
+    export type ConsumePasswordResetMutationVariables = {data: PasswordResetRequest}
 
-    export type ConsumePasswordResetMutationError = void
-
-
-    export const useConsumePasswordReset = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof consumePasswordReset>>, TError,void, TContext>, }
+    export const useConsumePasswordReset = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof consumePasswordReset>>, TError,ConsumePasswordResetMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof consumePasswordReset>>,
         TError,
-        void,
+        ConsumePasswordResetMutationVariables,
         TContext
       > => {
       return useMutation(getConsumePasswordResetMutationOptions(options), queryClient);
     }
 
 export const requestPasswordReset = (
-
+    emailRequest: EmailRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/auth/password-reset/request`, method: 'POST', signal
+      return customAxios<AcceptedContract>(
+      {url: `/api/v1/auth/password-reset/request`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: emailRequest, signal
     },
       );
     }
@@ -439,9 +489,9 @@ export const requestPasswordReset = (
 
 
 
-export const getRequestPasswordResetMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,void, TContext> => {
+export const getRequestPasswordResetMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,RequestPasswordResetMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,RequestPasswordResetMutationVariables, TContext> => {
 
 const mutationKey = ['requestPasswordReset'];
 const {mutation: mutationOptions} = options ?
@@ -453,10 +503,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPasswordReset>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPasswordReset>>, RequestPasswordResetMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  requestPasswordReset()
+          return  requestPasswordReset(data,)
         }
 
 
@@ -467,29 +517,31 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RequestPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>
+    export type RequestPasswordResetMutationBody = EmailRequest
+    export type RequestPasswordResetMutationError = ErrorEnvelope
+    export type RequestPasswordResetMutationVariables = {data: EmailRequest}
 
-    export type RequestPasswordResetMutationError = void
-
-
-    export const useRequestPasswordReset = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,void, TContext>, }
+    export const useRequestPasswordReset = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,RequestPasswordResetMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof requestPasswordReset>>,
         TError,
-        void,
+        RequestPasswordResetMutationVariables,
         TContext
       > => {
       return useMutation(getRequestPasswordResetMutationOptions(options), queryClient);
     }
 
 export const register = (
-
+    credentialsRequest: CredentialsRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/auth/register`, method: 'POST', signal
+      return customAxios<AcceptedContract>(
+      {url: `/api/v1/auth/register`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: credentialsRequest, signal
     },
       );
     }
@@ -497,9 +549,9 @@ export const register = (
 
 
 
-export const getRegisterMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,void, TContext> => {
+export const getRegisterMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,RegisterMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,RegisterMutationVariables, TContext> => {
 
 const mutationKey = ['register'];
 const {mutation: mutationOptions} = options ?
@@ -511,10 +563,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof register>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof register>>, RegisterMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  register()
+          return  register(data,)
         }
 
 
@@ -525,16 +577,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RegisterMutationResult = NonNullable<Awaited<ReturnType<typeof register>>>
+    export type RegisterMutationBody = CredentialsRequest
+    export type RegisterMutationError = ErrorEnvelope
+    export type RegisterMutationVariables = {data: CredentialsRequest}
 
-    export type RegisterMutationError = void
-
-
-    export const useRegister = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,void, TContext>, }
+    export const useRegister = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,RegisterMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof register>>,
         TError,
-        void,
+        RegisterMutationVariables,
         TContext
       > => {
       return useMutation(getRegisterMutationOptions(options), queryClient);
@@ -546,7 +598,7 @@ export const currentSession = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<SessionContract>(
       {url: `/api/v1/auth/sessions/current`, method: 'GET', signal
     },
       );
@@ -562,7 +614,7 @@ export const getCurrentSessionQueryKey = () => {
     }
 
 
-export const getCurrentSessionQueryOptions = <TData = Awaited<ReturnType<typeof currentSession>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof currentSession>>, TError, TData>>, }
+export const getCurrentSessionQueryOptions = <TData = Awaited<ReturnType<typeof currentSession>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof currentSession>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -581,10 +633,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type CurrentSessionQueryResult = NonNullable<Awaited<ReturnType<typeof currentSession>>>
-export type CurrentSessionQueryError = void
+export type CurrentSessionQueryError = ErrorEnvelope
 
 
-export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = void>(
+export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof currentSession>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof currentSession>>,
@@ -594,7 +646,7 @@ export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSessi
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = void>(
+export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof currentSession>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof currentSession>>,
@@ -604,12 +656,12 @@ export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSessi
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = void>(
+export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof currentSession>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = void>(
+export function useCurrentSession<TData = Awaited<ReturnType<typeof currentSession>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof currentSession>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -633,7 +685,7 @@ export const revokeAllSessions = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<AcceptedContract>(
       {url: `/api/v1/auth/sessions/revoke-all`, method: 'POST', signal
     },
       );
@@ -642,7 +694,7 @@ export const revokeAllSessions = (
 
 
 
-export const getRevokeAllSessionsMutationOptions = <TError = void,
+export const getRevokeAllSessionsMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeAllSessions>>, TError,void, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof revokeAllSessions>>, TError,void, TContext> => {
 
@@ -671,10 +723,10 @@ const {mutation: mutationOptions} = options ?
 
     export type RevokeAllSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof revokeAllSessions>>>
 
-    export type RevokeAllSessionsMutationError = void
+    export type RevokeAllSessionsMutationError = ErrorEnvelope
 
 
-    export const useRevokeAllSessions = <TError = void,
+    export const useRevokeAllSessions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeAllSessions>>, TError,void, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof revokeAllSessions>>,
@@ -686,13 +738,15 @@ const {mutation: mutationOptions} = options ?
     }
 
 export const resendVerification = (
-
+    emailRequest: EmailRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/auth/verification/resend`, method: 'POST', signal
+      return customAxios<AcceptedContract>(
+      {url: `/api/v1/auth/verification/resend`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: emailRequest, signal
     },
       );
     }
@@ -700,9 +754,9 @@ export const resendVerification = (
 
 
 
-export const getResendVerificationMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendVerification>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof resendVerification>>, TError,void, TContext> => {
+export const getResendVerificationMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendVerification>>, TError,ResendVerificationMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof resendVerification>>, TError,ResendVerificationMutationVariables, TContext> => {
 
 const mutationKey = ['resendVerification'];
 const {mutation: mutationOptions} = options ?
@@ -714,10 +768,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendVerification>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendVerification>>, ResendVerificationMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  resendVerification()
+          return  resendVerification(data,)
         }
 
 
@@ -728,29 +782,31 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ResendVerificationMutationResult = NonNullable<Awaited<ReturnType<typeof resendVerification>>>
+    export type ResendVerificationMutationBody = EmailRequest
+    export type ResendVerificationMutationError = ErrorEnvelope
+    export type ResendVerificationMutationVariables = {data: EmailRequest}
 
-    export type ResendVerificationMutationError = void
-
-
-    export const useResendVerification = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendVerification>>, TError,void, TContext>, }
+    export const useResendVerification = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendVerification>>, TError,ResendVerificationMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof resendVerification>>,
         TError,
-        void,
+        ResendVerificationMutationVariables,
         TContext
       > => {
       return useMutation(getResendVerificationMutationOptions(options), queryClient);
     }
 
 export const verifyEmail = (
-
+    tokenRequest: TokenRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/auth/verify-email`, method: 'POST', signal
+      return customAxios<AcceptedContract>(
+      {url: `/api/v1/auth/verify-email`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: tokenRequest, signal
     },
       );
     }
@@ -758,9 +814,9 @@ export const verifyEmail = (
 
 
 
-export const getVerifyEmailMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,void, TContext> => {
+export const getVerifyEmailMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,VerifyEmailMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,VerifyEmailMutationVariables, TContext> => {
 
 const mutationKey = ['verifyEmail'];
 const {mutation: mutationOptions} = options ?
@@ -772,10 +828,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyEmail>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyEmail>>, VerifyEmailMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  verifyEmail()
+          return  verifyEmail(data,)
         }
 
 
@@ -786,29 +842,30 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type VerifyEmailMutationResult = NonNullable<Awaited<ReturnType<typeof verifyEmail>>>
+    export type VerifyEmailMutationBody = TokenRequest
+    export type VerifyEmailMutationError = ErrorEnvelope
+    export type VerifyEmailMutationVariables = {data: TokenRequest}
 
-    export type VerifyEmailMutationError = void
-
-
-    export const useVerifyEmail = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,void, TContext>, }
+    export const useVerifyEmail = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmail>>, TError,VerifyEmailMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof verifyEmail>>,
         TError,
-        void,
+        VerifyEmailMutationVariables,
         TContext
       > => {
       return useMutation(getVerifyEmailMutationOptions(options), queryClient);
     }
 
 export const listBudgets = (
-
+    params?: ListBudgetsParams,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/budgets`, method: 'GET', signal
+      return customAxios<BudgetContract[]>(
+      {url: `/api/v1/budgets`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -816,23 +873,23 @@ export const listBudgets = (
 
 
 
-export const getListBudgetsQueryKey = () => {
+export const getListBudgetsQueryKey = (params?: ListBudgetsParams,) => {
     return [
-    `/api/v1/budgets`
+    `/api/v1/budgets`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListBudgetsQueryOptions = <TData = Awaited<ReturnType<typeof listBudgets>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>>, }
+export const getListBudgetsQueryOptions = <TData = Awaited<ReturnType<typeof listBudgets>>, TError = ErrorEnvelope>(params?: ListBudgetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListBudgetsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListBudgetsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBudgets>>> = ({ signal }) => listBudgets(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBudgets>>> = ({ signal }) => listBudgets(params, signal);
 
 
 
@@ -842,11 +899,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListBudgetsQueryResult = NonNullable<Awaited<ReturnType<typeof listBudgets>>>
-export type ListBudgetsQueryError = void
+export type ListBudgetsQueryError = ErrorEnvelope
 
 
-export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = void>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>> & Pick<
+export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = ErrorEnvelope>(
+ params: undefined |  ListBudgetsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listBudgets>>,
           TError,
@@ -855,8 +912,8 @@ export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, 
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>> & Pick<
+export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = ErrorEnvelope>(
+ params?: ListBudgetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listBudgets>>,
           TError,
@@ -865,17 +922,17 @@ export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, 
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>>, }
+export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = ErrorEnvelope>(
+ params?: ListBudgetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>>, }
+export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, TError = ErrorEnvelope>(
+ params?: ListBudgetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBudgets>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListBudgetsQueryOptions(options)
+  const queryOptions = getListBudgetsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -889,13 +946,15 @@ export function useListBudgets<TData = Awaited<ReturnType<typeof listBudgets>>, 
 
 
 export const createBudget = (
-
+    createBudgetRequest: CreateBudgetRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/budgets`, method: 'POST', signal
+      return customAxios<BudgetContract>(
+      {url: `/api/v1/budgets`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createBudgetRequest, signal
     },
       );
     }
@@ -903,9 +962,9 @@ export const createBudget = (
 
 
 
-export const getCreateBudgetMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBudget>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof createBudget>>, TError,void, TContext> => {
+export const getCreateBudgetMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBudget>>, TError,CreateBudgetMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof createBudget>>, TError,CreateBudgetMutationVariables, TContext> => {
 
 const mutationKey = ['createBudget'];
 const {mutation: mutationOptions} = options ?
@@ -917,10 +976,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBudget>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBudget>>, CreateBudgetMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  createBudget()
+          return  createBudget(data,)
         }
 
 
@@ -931,16 +990,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateBudgetMutationResult = NonNullable<Awaited<ReturnType<typeof createBudget>>>
+    export type CreateBudgetMutationBody = CreateBudgetRequest
+    export type CreateBudgetMutationError = ErrorEnvelope
+    export type CreateBudgetMutationVariables = {data: CreateBudgetRequest}
 
-    export type CreateBudgetMutationError = void
-
-
-    export const useCreateBudget = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBudget>>, TError,void, TContext>, }
+    export const useCreateBudget = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBudget>>, TError,CreateBudgetMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createBudget>>,
         TError,
-        void,
+        CreateBudgetMutationVariables,
         TContext
       > => {
       return useMutation(getCreateBudgetMutationOptions(options), queryClient);
@@ -961,7 +1020,7 @@ export const deleteBudget = (
 
 
 
-export const getDeleteBudgetMutationOptions = <TError = void,
+export const getDeleteBudgetMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBudget>>, TError,DeleteBudgetMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteBudget>>, TError,DeleteBudgetMutationVariables, TContext> => {
 
@@ -990,10 +1049,10 @@ const {mutation: mutationOptions} = options ?
 
     export type DeleteBudgetMutationResult = NonNullable<Awaited<ReturnType<typeof deleteBudget>>>
 
-    export type DeleteBudgetMutationError = void
+    export type DeleteBudgetMutationError = ErrorEnvelope
     export type DeleteBudgetMutationVariables = {budgetId: string}
 
-    export const useDeleteBudget = <TError = void,
+    export const useDeleteBudget = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBudget>>, TError,DeleteBudgetMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteBudget>>,
@@ -1006,12 +1065,15 @@ const {mutation: mutationOptions} = options ?
 
 export const updateBudget = (
     budgetId: string,
+    updateBudgetRequest: UpdateBudgetRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/budgets/${budgetId}`, method: 'PATCH', signal
+      return customAxios<BudgetContract>(
+      {url: `/api/v1/budgets/${budgetId}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateBudgetRequest, signal
     },
       );
     }
@@ -1019,7 +1081,7 @@ export const updateBudget = (
 
 
 
-export const getUpdateBudgetMutationOptions = <TError = void,
+export const getUpdateBudgetMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBudget>>, TError,UpdateBudgetMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateBudget>>, TError,UpdateBudgetMutationVariables, TContext> => {
 
@@ -1034,9 +1096,9 @@ const {mutation: mutationOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBudget>>, UpdateBudgetMutationVariables> = (props) => {
-          const {budgetId} = props ?? {};
+          const {budgetId,data} = props ?? {};
 
-          return  updateBudget(budgetId,)
+          return  updateBudget(budgetId,data,)
         }
 
 
@@ -1047,11 +1109,11 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdateBudgetMutationResult = NonNullable<Awaited<ReturnType<typeof updateBudget>>>
+    export type UpdateBudgetMutationBody = UpdateBudgetRequest
+    export type UpdateBudgetMutationError = ErrorEnvelope
+    export type UpdateBudgetMutationVariables = {budgetId: string;data: UpdateBudgetRequest}
 
-    export type UpdateBudgetMutationError = void
-    export type UpdateBudgetMutationVariables = {budgetId: string}
-
-    export const useUpdateBudget = <TError = void,
+    export const useUpdateBudget = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBudget>>, TError,UpdateBudgetMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateBudget>>,
@@ -1068,7 +1130,7 @@ export const listCategories = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<CategoryContract[]>(
       {url: `/api/v1/categories`, method: 'GET', signal
     },
       );
@@ -1084,7 +1146,7 @@ export const getListCategoriesQueryKey = () => {
     }
 
 
-export const getListCategoriesQueryOptions = <TData = Awaited<ReturnType<typeof listCategories>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>, }
+export const getListCategoriesQueryOptions = <TData = Awaited<ReturnType<typeof listCategories>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1103,10 +1165,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListCategoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listCategories>>>
-export type ListCategoriesQueryError = void
+export type ListCategoriesQueryError = ErrorEnvelope
 
 
-export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = void>(
+export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listCategories>>,
@@ -1116,7 +1178,7 @@ export function useListCategories<TData = Awaited<ReturnType<typeof listCategori
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = void>(
+export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listCategories>>,
@@ -1126,12 +1188,12 @@ export function useListCategories<TData = Awaited<ReturnType<typeof listCategori
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = void>(
+export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = void>(
+export function useListCategories<TData = Awaited<ReturnType<typeof listCategories>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1150,13 +1212,15 @@ export function useListCategories<TData = Awaited<ReturnType<typeof listCategori
 
 
 export const createCategory = (
-
+    createCategoryRequest: CreateCategoryRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/categories`, method: 'POST', signal
+      return customAxios<CategoryContract>(
+      {url: `/api/v1/categories`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createCategoryRequest, signal
     },
       );
     }
@@ -1164,9 +1228,9 @@ export const createCategory = (
 
 
 
-export const getCreateCategoryMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,void, TContext> => {
+export const getCreateCategoryMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,CreateCategoryMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,CreateCategoryMutationVariables, TContext> => {
 
 const mutationKey = ['createCategory'];
 const {mutation: mutationOptions} = options ?
@@ -1178,10 +1242,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCategory>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCategory>>, CreateCategoryMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  createCategory()
+          return  createCategory(data,)
         }
 
 
@@ -1192,16 +1256,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof createCategory>>>
+    export type CreateCategoryMutationBody = CreateCategoryRequest
+    export type CreateCategoryMutationError = ErrorEnvelope
+    export type CreateCategoryMutationVariables = {data: CreateCategoryRequest}
 
-    export type CreateCategoryMutationError = void
-
-
-    export const useCreateCategory = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,void, TContext>, }
+    export const useCreateCategory = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCategory>>, TError,CreateCategoryMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createCategory>>,
         TError,
-        void,
+        CreateCategoryMutationVariables,
         TContext
       > => {
       return useMutation(getCreateCategoryMutationOptions(options), queryClient);
@@ -1213,7 +1277,7 @@ export const getCategory = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<CategoryContract>(
       {url: `/api/v1/categories/${categoryId}`, method: 'GET', signal
     },
       );
@@ -1229,7 +1293,7 @@ export const getGetCategoryQueryKey = (categoryId: string,) => {
     }
 
 
-export const getGetCategoryQueryOptions = <TData = Awaited<ReturnType<typeof getCategory>>, TError = void>(categoryId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategory>>, TError, TData>>, }
+export const getGetCategoryQueryOptions = <TData = Awaited<ReturnType<typeof getCategory>>, TError = ErrorEnvelope>(categoryId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategory>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1248,10 +1312,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetCategoryQueryResult = NonNullable<Awaited<ReturnType<typeof getCategory>>>
-export type GetCategoryQueryError = void
+export type GetCategoryQueryError = ErrorEnvelope
 
 
-export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = void>(
+export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = ErrorEnvelope>(
  categoryId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategory>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getCategory>>,
@@ -1261,7 +1325,7 @@ export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, 
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = void>(
+export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = ErrorEnvelope>(
  categoryId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategory>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getCategory>>,
@@ -1271,12 +1335,12 @@ export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, 
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = void>(
+export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = ErrorEnvelope>(
  categoryId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategory>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = void>(
+export function useGetCategory<TData = Awaited<ReturnType<typeof getCategory>>, TError = ErrorEnvelope>(
  categoryId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategory>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1309,7 +1373,7 @@ export const deleteCategory = (
 
 
 
-export const getDeleteCategoryMutationOptions = <TError = void,
+export const getDeleteCategoryMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCategory>>, TError,DeleteCategoryMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteCategory>>, TError,DeleteCategoryMutationVariables, TContext> => {
 
@@ -1338,10 +1402,10 @@ const {mutation: mutationOptions} = options ?
 
     export type DeleteCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCategory>>>
 
-    export type DeleteCategoryMutationError = void
+    export type DeleteCategoryMutationError = ErrorEnvelope
     export type DeleteCategoryMutationVariables = {categoryId: string}
 
-    export const useDeleteCategory = <TError = void,
+    export const useDeleteCategory = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCategory>>, TError,DeleteCategoryMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteCategory>>,
@@ -1354,12 +1418,15 @@ const {mutation: mutationOptions} = options ?
 
 export const updateCategory = (
     categoryId: string,
+    updateCategoryRequest: UpdateCategoryRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/categories/${categoryId}`, method: 'PATCH', signal
+      return customAxios<CategoryContract>(
+      {url: `/api/v1/categories/${categoryId}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateCategoryRequest, signal
     },
       );
     }
@@ -1367,7 +1434,7 @@ export const updateCategory = (
 
 
 
-export const getUpdateCategoryMutationOptions = <TError = void,
+export const getUpdateCategoryMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCategory>>, TError,UpdateCategoryMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateCategory>>, TError,UpdateCategoryMutationVariables, TContext> => {
 
@@ -1382,9 +1449,9 @@ const {mutation: mutationOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCategory>>, UpdateCategoryMutationVariables> = (props) => {
-          const {categoryId} = props ?? {};
+          const {categoryId,data} = props ?? {};
 
-          return  updateCategory(categoryId,)
+          return  updateCategory(categoryId,data,)
         }
 
 
@@ -1395,11 +1462,11 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdateCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof updateCategory>>>
+    export type UpdateCategoryMutationBody = UpdateCategoryRequest
+    export type UpdateCategoryMutationError = ErrorEnvelope
+    export type UpdateCategoryMutationVariables = {categoryId: string;data: UpdateCategoryRequest}
 
-    export type UpdateCategoryMutationError = void
-    export type UpdateCategoryMutationVariables = {categoryId: string}
-
-    export const useUpdateCategory = <TError = void,
+    export const useUpdateCategory = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCategory>>, TError,UpdateCategoryMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateCategory>>,
@@ -1416,7 +1483,7 @@ export const archiveCategory = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<CategoryArchiveContract>(
       {url: `/api/v1/categories/${categoryId}/archive`, method: 'POST', signal
     },
       );
@@ -1425,7 +1492,7 @@ export const archiveCategory = (
 
 
 
-export const getArchiveCategoryMutationOptions = <TError = void,
+export const getArchiveCategoryMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveCategory>>, TError,ArchiveCategoryMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof archiveCategory>>, TError,ArchiveCategoryMutationVariables, TContext> => {
 
@@ -1454,10 +1521,10 @@ const {mutation: mutationOptions} = options ?
 
     export type ArchiveCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof archiveCategory>>>
 
-    export type ArchiveCategoryMutationError = void
+    export type ArchiveCategoryMutationError = ErrorEnvelope
     export type ArchiveCategoryMutationVariables = {categoryId: string}
 
-    export const useArchiveCategory = <TError = void,
+    export const useArchiveCategory = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveCategory>>, TError,ArchiveCategoryMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof archiveCategory>>,
@@ -1474,7 +1541,7 @@ export const restoreCategory = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<CategoryContract>(
       {url: `/api/v1/categories/${categoryId}/restore`, method: 'POST', signal
     },
       );
@@ -1483,7 +1550,7 @@ export const restoreCategory = (
 
 
 
-export const getRestoreCategoryMutationOptions = <TError = void,
+export const getRestoreCategoryMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreCategory>>, TError,RestoreCategoryMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof restoreCategory>>, TError,RestoreCategoryMutationVariables, TContext> => {
 
@@ -1512,10 +1579,10 @@ const {mutation: mutationOptions} = options ?
 
     export type RestoreCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof restoreCategory>>>
 
-    export type RestoreCategoryMutationError = void
+    export type RestoreCategoryMutationError = ErrorEnvelope
     export type RestoreCategoryMutationVariables = {categoryId: string}
 
-    export const useRestoreCategory = <TError = void,
+    export const useRestoreCategory = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreCategory>>, TError,RestoreCategoryMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof restoreCategory>>,
@@ -1532,7 +1599,7 @@ export const listCurrencies = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<CurrencyContract[]>(
       {url: `/api/v1/currencies`, method: 'GET', signal
     },
       );
@@ -1548,7 +1615,7 @@ export const getListCurrenciesQueryKey = () => {
     }
 
 
-export const getListCurrenciesQueryOptions = <TData = Awaited<ReturnType<typeof listCurrencies>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCurrencies>>, TError, TData>>, }
+export const getListCurrenciesQueryOptions = <TData = Awaited<ReturnType<typeof listCurrencies>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCurrencies>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1567,10 +1634,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListCurrenciesQueryResult = NonNullable<Awaited<ReturnType<typeof listCurrencies>>>
-export type ListCurrenciesQueryError = void
+export type ListCurrenciesQueryError = ErrorEnvelope
 
 
-export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = void>(
+export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCurrencies>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listCurrencies>>,
@@ -1580,7 +1647,7 @@ export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrenci
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = void>(
+export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCurrencies>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listCurrencies>>,
@@ -1590,12 +1657,12 @@ export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrenci
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = void>(
+export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCurrencies>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = void>(
+export function useListCurrencies<TData = Awaited<ReturnType<typeof listCurrencies>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCurrencies>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1635,7 +1702,7 @@ export const getHealthLiveQueryKey = () => {
     }
 
 
-export const getHealthLiveQueryOptions = <TData = Awaited<ReturnType<typeof healthLive>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthLive>>, TError, TData>>, }
+export const getHealthLiveQueryOptions = <TData = Awaited<ReturnType<typeof healthLive>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthLive>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1654,10 +1721,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type HealthLiveQueryResult = NonNullable<Awaited<ReturnType<typeof healthLive>>>
-export type HealthLiveQueryError = void
+export type HealthLiveQueryError = unknown
 
 
-export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = void>(
+export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthLive>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof healthLive>>,
@@ -1667,7 +1734,7 @@ export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TE
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = void>(
+export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthLive>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof healthLive>>,
@@ -1677,12 +1744,12 @@ export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TE
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = void>(
+export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthLive>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = void>(
+export function useHealthLive<TData = Awaited<ReturnType<typeof healthLive>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthLive>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1722,7 +1789,7 @@ export const getHealthReadyQueryKey = () => {
     }
 
 
-export const getHealthReadyQueryOptions = <TData = Awaited<ReturnType<typeof healthReady>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthReady>>, TError, TData>>, }
+export const getHealthReadyQueryOptions = <TData = Awaited<ReturnType<typeof healthReady>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthReady>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1741,10 +1808,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type HealthReadyQueryResult = NonNullable<Awaited<ReturnType<typeof healthReady>>>
-export type HealthReadyQueryError = void
+export type HealthReadyQueryError = ErrorEnvelope
 
 
-export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = void>(
+export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthReady>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof healthReady>>,
@@ -1754,7 +1821,7 @@ export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, 
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = void>(
+export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthReady>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof healthReady>>,
@@ -1764,12 +1831,12 @@ export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, 
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = void>(
+export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthReady>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = void>(
+export function useHealthReady<TData = Awaited<ReturnType<typeof healthReady>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof healthReady>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1793,7 +1860,7 @@ export const getOnboarding = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<OnboardingContract>(
       {url: `/api/v1/onboarding`, method: 'GET', signal
     },
       );
@@ -1809,7 +1876,7 @@ export const getGetOnboardingQueryKey = () => {
     }
 
 
-export const getGetOnboardingQueryOptions = <TData = Awaited<ReturnType<typeof getOnboarding>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOnboarding>>, TError, TData>>, }
+export const getGetOnboardingQueryOptions = <TData = Awaited<ReturnType<typeof getOnboarding>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOnboarding>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1828,10 +1895,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetOnboardingQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboarding>>>
-export type GetOnboardingQueryError = void
+export type GetOnboardingQueryError = ErrorEnvelope
 
 
-export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = void>(
+export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOnboarding>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getOnboarding>>,
@@ -1841,7 +1908,7 @@ export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = void>(
+export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOnboarding>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getOnboarding>>,
@@ -1851,12 +1918,12 @@ export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = void>(
+export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOnboarding>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = void>(
+export function useGetOnboarding<TData = Awaited<ReturnType<typeof getOnboarding>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOnboarding>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -1880,7 +1947,7 @@ export const seedOnboardingCategories = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<OnboardingContract>(
       {url: `/api/v1/onboarding/seed-categories`, method: 'POST', signal
     },
       );
@@ -1889,7 +1956,7 @@ export const seedOnboardingCategories = (
 
 
 
-export const getSeedOnboardingCategoriesMutationOptions = <TError = void,
+export const getSeedOnboardingCategoriesMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedOnboardingCategories>>, TError,void, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof seedOnboardingCategories>>, TError,void, TContext> => {
 
@@ -1918,10 +1985,10 @@ const {mutation: mutationOptions} = options ?
 
     export type SeedOnboardingCategoriesMutationResult = NonNullable<Awaited<ReturnType<typeof seedOnboardingCategories>>>
 
-    export type SeedOnboardingCategoriesMutationError = void
+    export type SeedOnboardingCategoriesMutationError = ErrorEnvelope
 
 
-    export const useSeedOnboardingCategories = <TError = void,
+    export const useSeedOnboardingCategories = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedOnboardingCategories>>, TError,void, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof seedOnboardingCategories>>,
@@ -1938,7 +2005,7 @@ export const listRecurringTransactions = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<RecurringTransactionContract[]>(
       {url: `/api/v1/recurring-transactions`, method: 'GET', signal
     },
       );
@@ -1954,7 +2021,7 @@ export const getListRecurringTransactionsQueryKey = () => {
     }
 
 
-export const getListRecurringTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRecurringTransactions>>, TError, TData>>, }
+export const getListRecurringTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRecurringTransactions>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -1973,10 +2040,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListRecurringTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof listRecurringTransactions>>>
-export type ListRecurringTransactionsQueryError = void
+export type ListRecurringTransactionsQueryError = ErrorEnvelope
 
 
-export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = void>(
+export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRecurringTransactions>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listRecurringTransactions>>,
@@ -1986,7 +2053,7 @@ export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof l
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = void>(
+export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRecurringTransactions>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listRecurringTransactions>>,
@@ -1996,12 +2063,12 @@ export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof l
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = void>(
+export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRecurringTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = void>(
+export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof listRecurringTransactions>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRecurringTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -2020,13 +2087,15 @@ export function useListRecurringTransactions<TData = Awaited<ReturnType<typeof l
 
 
 export const createRecurringTransaction = (
-
+    createRecurringTransactionRequest: CreateRecurringTransactionRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/recurring-transactions`, method: 'POST', signal
+      return customAxios<RecurringTransactionContract>(
+      {url: `/api/v1/recurring-transactions`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createRecurringTransactionRequest, signal
     },
       );
     }
@@ -2034,9 +2103,9 @@ export const createRecurringTransaction = (
 
 
 
-export const getCreateRecurringTransactionMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecurringTransaction>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof createRecurringTransaction>>, TError,void, TContext> => {
+export const getCreateRecurringTransactionMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecurringTransaction>>, TError,CreateRecurringTransactionMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof createRecurringTransaction>>, TError,CreateRecurringTransactionMutationVariables, TContext> => {
 
 const mutationKey = ['createRecurringTransaction'];
 const {mutation: mutationOptions} = options ?
@@ -2048,10 +2117,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRecurringTransaction>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRecurringTransaction>>, CreateRecurringTransactionMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  createRecurringTransaction()
+          return  createRecurringTransaction(data,)
         }
 
 
@@ -2062,16 +2131,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateRecurringTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof createRecurringTransaction>>>
+    export type CreateRecurringTransactionMutationBody = CreateRecurringTransactionRequest
+    export type CreateRecurringTransactionMutationError = ErrorEnvelope
+    export type CreateRecurringTransactionMutationVariables = {data: CreateRecurringTransactionRequest}
 
-    export type CreateRecurringTransactionMutationError = void
-
-
-    export const useCreateRecurringTransaction = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecurringTransaction>>, TError,void, TContext>, }
+    export const useCreateRecurringTransaction = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecurringTransaction>>, TError,CreateRecurringTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createRecurringTransaction>>,
         TError,
-        void,
+        CreateRecurringTransactionMutationVariables,
         TContext
       > => {
       return useMutation(getCreateRecurringTransactionMutationOptions(options), queryClient);
@@ -2083,7 +2152,7 @@ export const getRecurringTransaction = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<RecurringTransactionContract>(
       {url: `/api/v1/recurring-transactions/${id}`, method: 'GET', signal
     },
       );
@@ -2099,7 +2168,7 @@ export const getGetRecurringTransactionQueryKey = (id: string,) => {
     }
 
 
-export const getGetRecurringTransactionQueryOptions = <TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = void>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecurringTransaction>>, TError, TData>>, }
+export const getGetRecurringTransactionQueryOptions = <TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = ErrorEnvelope>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecurringTransaction>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -2118,10 +2187,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetRecurringTransactionQueryResult = NonNullable<Awaited<ReturnType<typeof getRecurringTransaction>>>
-export type GetRecurringTransactionQueryError = void
+export type GetRecurringTransactionQueryError = ErrorEnvelope
 
 
-export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = void>(
+export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = ErrorEnvelope>(
  id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecurringTransaction>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getRecurringTransaction>>,
@@ -2131,7 +2200,7 @@ export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof get
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = void>(
+export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = ErrorEnvelope>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecurringTransaction>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getRecurringTransaction>>,
@@ -2141,12 +2210,12 @@ export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof get
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = void>(
+export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = ErrorEnvelope>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecurringTransaction>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = void>(
+export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof getRecurringTransaction>>, TError = ErrorEnvelope>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecurringTransaction>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -2179,7 +2248,7 @@ export const deleteRecurringTransaction = (
 
 
 
-export const getDeleteRecurringTransactionMutationOptions = <TError = void,
+export const getDeleteRecurringTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRecurringTransaction>>, TError,DeleteRecurringTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteRecurringTransaction>>, TError,DeleteRecurringTransactionMutationVariables, TContext> => {
 
@@ -2208,10 +2277,10 @@ const {mutation: mutationOptions} = options ?
 
     export type DeleteRecurringTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteRecurringTransaction>>>
 
-    export type DeleteRecurringTransactionMutationError = void
+    export type DeleteRecurringTransactionMutationError = ErrorEnvelope
     export type DeleteRecurringTransactionMutationVariables = {id: string}
 
-    export const useDeleteRecurringTransaction = <TError = void,
+    export const useDeleteRecurringTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRecurringTransaction>>, TError,DeleteRecurringTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteRecurringTransaction>>,
@@ -2224,12 +2293,15 @@ const {mutation: mutationOptions} = options ?
 
 export const updateRecurringTransaction = (
     id: string,
+    updateRecurringTransactionRequest: UpdateRecurringTransactionRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/recurring-transactions/${id}`, method: 'PATCH', signal
+      return customAxios<RecurringTransactionContract>(
+      {url: `/api/v1/recurring-transactions/${id}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateRecurringTransactionRequest, signal
     },
       );
     }
@@ -2237,7 +2309,7 @@ export const updateRecurringTransaction = (
 
 
 
-export const getUpdateRecurringTransactionMutationOptions = <TError = void,
+export const getUpdateRecurringTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecurringTransaction>>, TError,UpdateRecurringTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateRecurringTransaction>>, TError,UpdateRecurringTransactionMutationVariables, TContext> => {
 
@@ -2252,9 +2324,9 @@ const {mutation: mutationOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRecurringTransaction>>, UpdateRecurringTransactionMutationVariables> = (props) => {
-          const {id} = props ?? {};
+          const {id,data} = props ?? {};
 
-          return  updateRecurringTransaction(id,)
+          return  updateRecurringTransaction(id,data,)
         }
 
 
@@ -2265,11 +2337,11 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdateRecurringTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof updateRecurringTransaction>>>
+    export type UpdateRecurringTransactionMutationBody = UpdateRecurringTransactionRequest
+    export type UpdateRecurringTransactionMutationError = ErrorEnvelope
+    export type UpdateRecurringTransactionMutationVariables = {id: string;data: UpdateRecurringTransactionRequest}
 
-    export type UpdateRecurringTransactionMutationError = void
-    export type UpdateRecurringTransactionMutationVariables = {id: string}
-
-    export const useUpdateRecurringTransaction = <TError = void,
+    export const useUpdateRecurringTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecurringTransaction>>, TError,UpdateRecurringTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateRecurringTransaction>>,
@@ -2286,7 +2358,7 @@ export const pauseRecurringTransaction = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<RecurringTransactionContract>(
       {url: `/api/v1/recurring-transactions/${id}/pause`, method: 'POST', signal
     },
       );
@@ -2295,7 +2367,7 @@ export const pauseRecurringTransaction = (
 
 
 
-export const getPauseRecurringTransactionMutationOptions = <TError = void,
+export const getPauseRecurringTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseRecurringTransaction>>, TError,PauseRecurringTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof pauseRecurringTransaction>>, TError,PauseRecurringTransactionMutationVariables, TContext> => {
 
@@ -2324,10 +2396,10 @@ const {mutation: mutationOptions} = options ?
 
     export type PauseRecurringTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof pauseRecurringTransaction>>>
 
-    export type PauseRecurringTransactionMutationError = void
+    export type PauseRecurringTransactionMutationError = ErrorEnvelope
     export type PauseRecurringTransactionMutationVariables = {id: string}
 
-    export const usePauseRecurringTransaction = <TError = void,
+    export const usePauseRecurringTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseRecurringTransaction>>, TError,PauseRecurringTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof pauseRecurringTransaction>>,
@@ -2344,7 +2416,7 @@ export const resumeRecurringTransaction = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<RecurringTransactionContract>(
       {url: `/api/v1/recurring-transactions/${id}/resume`, method: 'POST', signal
     },
       );
@@ -2353,7 +2425,7 @@ export const resumeRecurringTransaction = (
 
 
 
-export const getResumeRecurringTransactionMutationOptions = <TError = void,
+export const getResumeRecurringTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeRecurringTransaction>>, TError,ResumeRecurringTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof resumeRecurringTransaction>>, TError,ResumeRecurringTransactionMutationVariables, TContext> => {
 
@@ -2382,10 +2454,10 @@ const {mutation: mutationOptions} = options ?
 
     export type ResumeRecurringTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof resumeRecurringTransaction>>>
 
-    export type ResumeRecurringTransactionMutationError = void
+    export type ResumeRecurringTransactionMutationError = ErrorEnvelope
     export type ResumeRecurringTransactionMutationVariables = {id: string}
 
-    export const useResumeRecurringTransaction = <TError = void,
+    export const useResumeRecurringTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeRecurringTransaction>>, TError,ResumeRecurringTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof resumeRecurringTransaction>>,
@@ -2397,13 +2469,14 @@ const {mutation: mutationOptions} = options ?
     }
 
 export const getBudgetSummary = (
-
+    params?: GetBudgetSummaryParams,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/reports/budget-summary`, method: 'GET', signal
+      return customAxios<BudgetSummaryContract>(
+      {url: `/api/v1/reports/budget-summary`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -2411,23 +2484,23 @@ export const getBudgetSummary = (
 
 
 
-export const getGetBudgetSummaryQueryKey = () => {
+export const getGetBudgetSummaryQueryKey = (params?: GetBudgetSummaryParams,) => {
     return [
-    `/api/v1/reports/budget-summary`
+    `/api/v1/reports/budget-summary`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetBudgetSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>>, }
+export const getGetBudgetSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = ErrorEnvelope>(params?: GetBudgetSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetBudgetSummaryQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetBudgetSummaryQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBudgetSummary>>> = ({ signal }) => getBudgetSummary(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBudgetSummary>>> = ({ signal }) => getBudgetSummary(params, signal);
 
 
 
@@ -2437,11 +2510,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetBudgetSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getBudgetSummary>>>
-export type GetBudgetSummaryQueryError = void
+export type GetBudgetSummaryQueryError = ErrorEnvelope
 
 
-export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = void>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>> & Pick<
+export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = ErrorEnvelope>(
+ params: undefined |  GetBudgetSummaryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getBudgetSummary>>,
           TError,
@@ -2450,8 +2523,8 @@ export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetS
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>> & Pick<
+export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = ErrorEnvelope>(
+ params?: GetBudgetSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getBudgetSummary>>,
           TError,
@@ -2460,17 +2533,17 @@ export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetS
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>>, }
+export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = ErrorEnvelope>(
+ params?: GetBudgetSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>>, }
+export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetSummary>>, TError = ErrorEnvelope>(
+ params?: GetBudgetSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getBudgetSummary>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetBudgetSummaryQueryOptions(options)
+  const queryOptions = getGetBudgetSummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -2484,13 +2557,14 @@ export function useGetBudgetSummary<TData = Awaited<ReturnType<typeof getBudgetS
 
 
 export const getMonthlySummary = (
-
+    params?: GetMonthlySummaryParams,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/reports/monthly-summary`, method: 'GET', signal
+      return customAxios<MonthlySummaryContract>(
+      {url: `/api/v1/reports/monthly-summary`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -2498,23 +2572,23 @@ export const getMonthlySummary = (
 
 
 
-export const getGetMonthlySummaryQueryKey = () => {
+export const getGetMonthlySummaryQueryKey = (params?: GetMonthlySummaryParams,) => {
     return [
-    `/api/v1/reports/monthly-summary`
+    `/api/v1/reports/monthly-summary`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetMonthlySummaryQueryOptions = <TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>>, }
+export const getGetMonthlySummaryQueryOptions = <TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = ErrorEnvelope>(params?: GetMonthlySummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetMonthlySummaryQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetMonthlySummaryQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMonthlySummary>>> = ({ signal }) => getMonthlySummary(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMonthlySummary>>> = ({ signal }) => getMonthlySummary(params, signal);
 
 
 
@@ -2524,11 +2598,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetMonthlySummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getMonthlySummary>>>
-export type GetMonthlySummaryQueryError = void
+export type GetMonthlySummaryQueryError = ErrorEnvelope
 
 
-export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = void>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>> & Pick<
+export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = ErrorEnvelope>(
+ params: undefined |  GetMonthlySummaryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMonthlySummary>>,
           TError,
@@ -2537,8 +2611,8 @@ export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthl
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>> & Pick<
+export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = ErrorEnvelope>(
+ params?: GetMonthlySummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMonthlySummary>>,
           TError,
@@ -2547,17 +2621,17 @@ export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthl
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>>, }
+export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = ErrorEnvelope>(
+ params?: GetMonthlySummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>>, }
+export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthlySummary>>, TError = ErrorEnvelope>(
+ params?: GetMonthlySummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlySummary>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetMonthlySummaryQueryOptions(options)
+  const queryOptions = getGetMonthlySummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -2571,13 +2645,15 @@ export function useGetMonthlySummary<TData = Awaited<ReturnType<typeof getMonthl
 
 
 export const updatePreferences = (
-
+    preferencesRequest: PreferencesRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/settings/preferences`, method: 'PUT', signal
+      return customAxios<OnboardingContract>(
+      {url: `/api/v1/settings/preferences`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: preferencesRequest, signal
     },
       );
     }
@@ -2585,9 +2661,9 @@ export const updatePreferences = (
 
 
 
-export const getUpdatePreferencesMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePreferences>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof updatePreferences>>, TError,void, TContext> => {
+export const getUpdatePreferencesMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePreferences>>, TError,UpdatePreferencesMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof updatePreferences>>, TError,UpdatePreferencesMutationVariables, TContext> => {
 
 const mutationKey = ['updatePreferences'];
 const {mutation: mutationOptions} = options ?
@@ -2599,10 +2675,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePreferences>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePreferences>>, UpdatePreferencesMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  updatePreferences()
+          return  updatePreferences(data,)
         }
 
 
@@ -2613,29 +2689,30 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdatePreferencesMutationResult = NonNullable<Awaited<ReturnType<typeof updatePreferences>>>
+    export type UpdatePreferencesMutationBody = PreferencesRequest
+    export type UpdatePreferencesMutationError = ErrorEnvelope
+    export type UpdatePreferencesMutationVariables = {data: PreferencesRequest}
 
-    export type UpdatePreferencesMutationError = void
-
-
-    export const useUpdatePreferences = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePreferences>>, TError,void, TContext>, }
+    export const useUpdatePreferences = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePreferences>>, TError,UpdatePreferencesMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updatePreferences>>,
         TError,
-        void,
+        UpdatePreferencesMutationVariables,
         TContext
       > => {
       return useMutation(getUpdatePreferencesMutationOptions(options), queryClient);
     }
 
 export const listTransactions = (
-
+    params?: ListTransactionsParams,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/transactions`, method: 'GET', signal
+      return customAxios<HistoryPageContract>(
+      {url: `/api/v1/transactions`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -2643,23 +2720,23 @@ export const listTransactions = (
 
 
 
-export const getListTransactionsQueryKey = () => {
+export const getListTransactionsQueryKey = (params?: ListTransactionsParams,) => {
     return [
-    `/api/v1/transactions`
+    `/api/v1/transactions`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listTransactions>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>, }
+export const getListTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorEnvelope>(params?: ListTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListTransactionsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListTransactionsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTransactions>>> = ({ signal }) => listTransactions(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTransactions>>> = ({ signal }) => listTransactions(params, signal);
 
 
 
@@ -2669,11 +2746,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof listTransactions>>>
-export type ListTransactionsQueryError = void
+export type ListTransactionsQueryError = ErrorEnvelope
 
 
-export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = void>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>> & Pick<
+export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorEnvelope>(
+ params: undefined |  ListTransactionsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listTransactions>>,
           TError,
@@ -2682,8 +2759,8 @@ export function useListTransactions<TData = Awaited<ReturnType<typeof listTransa
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>> & Pick<
+export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorEnvelope>(
+ params?: ListTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listTransactions>>,
           TError,
@@ -2692,17 +2769,17 @@ export function useListTransactions<TData = Awaited<ReturnType<typeof listTransa
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>, }
+export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorEnvelope>(
+ params?: ListTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>, }
+export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorEnvelope>(
+ params?: ListTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListTransactionsQueryOptions(options)
+  const queryOptions = getListTransactionsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -2716,13 +2793,15 @@ export function useListTransactions<TData = Awaited<ReturnType<typeof listTransa
 
 
 export const createTransaction = (
-
+    createTransactionRequest: CreateTransactionRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/transactions`, method: 'POST', signal
+      return customAxios<TransactionContract>(
+      {url: `/api/v1/transactions`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createTransactionRequest, signal
     },
       );
     }
@@ -2730,9 +2809,9 @@ export const createTransaction = (
 
 
 
-export const getCreateTransactionMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTransaction>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof createTransaction>>, TError,void, TContext> => {
+export const getCreateTransactionMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTransaction>>, TError,CreateTransactionMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof createTransaction>>, TError,CreateTransactionMutationVariables, TContext> => {
 
 const mutationKey = ['createTransaction'];
 const {mutation: mutationOptions} = options ?
@@ -2744,10 +2823,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTransaction>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTransaction>>, CreateTransactionMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  createTransaction()
+          return  createTransaction(data,)
         }
 
 
@@ -2758,16 +2837,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof createTransaction>>>
+    export type CreateTransactionMutationBody = CreateTransactionRequest
+    export type CreateTransactionMutationError = ErrorEnvelope
+    export type CreateTransactionMutationVariables = {data: CreateTransactionRequest}
 
-    export type CreateTransactionMutationError = void
-
-
-    export const useCreateTransaction = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTransaction>>, TError,void, TContext>, }
+    export const useCreateTransaction = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTransaction>>, TError,CreateTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createTransaction>>,
         TError,
-        void,
+        CreateTransactionMutationVariables,
         TContext
       > => {
       return useMutation(getCreateTransactionMutationOptions(options), queryClient);
@@ -2779,7 +2858,7 @@ export const getTransactionEntryDefaults = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<EntryDefaults>(
       {url: `/api/v1/transactions/entry-defaults`, method: 'GET', signal
     },
       );
@@ -2795,7 +2874,7 @@ export const getGetTransactionEntryDefaultsQueryKey = () => {
     }
 
 
-export const getGetTransactionEntryDefaultsQueryOptions = <TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError, TData>>, }
+export const getGetTransactionEntryDefaultsQueryOptions = <TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -2814,10 +2893,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetTransactionEntryDefaultsQueryResult = NonNullable<Awaited<ReturnType<typeof getTransactionEntryDefaults>>>
-export type GetTransactionEntryDefaultsQueryError = void
+export type GetTransactionEntryDefaultsQueryError = ErrorEnvelope
 
 
-export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = void>(
+export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getTransactionEntryDefaults>>,
@@ -2827,7 +2906,7 @@ export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = void>(
+export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getTransactionEntryDefaults>>,
@@ -2837,12 +2916,12 @@ export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = void>(
+export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = void>(
+export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransactionEntryDefaults>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -2866,7 +2945,7 @@ export const getRecentTransactions = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<RecentTransactionsContract>(
       {url: `/api/v1/transactions/recent`, method: 'GET', signal
     },
       );
@@ -2882,7 +2961,7 @@ export const getGetRecentTransactionsQueryKey = () => {
     }
 
 
-export const getGetRecentTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
+export const getGetRecentTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -2901,10 +2980,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetRecentTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof getRecentTransactions>>>
-export type GetRecentTransactionsQueryError = void
+export type GetRecentTransactionsQueryError = ErrorEnvelope
 
 
-export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = void>(
+export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getRecentTransactions>>,
@@ -2914,7 +2993,7 @@ export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRe
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = void>(
+export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getRecentTransactions>>,
@@ -2924,12 +3003,12 @@ export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRe
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = void>(
+export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = void>(
+export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -2948,13 +3027,14 @@ export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRe
 
 
 export const listTrashedTransactions = (
-
+    params?: ListTrashedTransactionsParams,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/transactions/trash`, method: 'GET', signal
+      return customAxios<HistoryPageContract>(
+      {url: `/api/v1/transactions/trash`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -2962,23 +3042,23 @@ export const listTrashedTransactions = (
 
 
 
-export const getListTrashedTransactionsQueryKey = () => {
+export const getListTrashedTransactionsQueryKey = (params?: ListTrashedTransactionsParams,) => {
     return [
-    `/api/v1/transactions/trash`
+    `/api/v1/transactions/trash`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListTrashedTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>>, }
+export const getListTrashedTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = ErrorEnvelope>(params?: ListTrashedTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListTrashedTransactionsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListTrashedTransactionsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTrashedTransactions>>> = ({ signal }) => listTrashedTransactions(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTrashedTransactions>>> = ({ signal }) => listTrashedTransactions(params, signal);
 
 
 
@@ -2988,11 +3068,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListTrashedTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof listTrashedTransactions>>>
-export type ListTrashedTransactionsQueryError = void
+export type ListTrashedTransactionsQueryError = ErrorEnvelope
 
 
-export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = void>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>> & Pick<
+export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = ErrorEnvelope>(
+ params: undefined |  ListTrashedTransactionsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listTrashedTransactions>>,
           TError,
@@ -3001,8 +3081,8 @@ export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof lis
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>> & Pick<
+export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = ErrorEnvelope>(
+ params?: ListTrashedTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listTrashedTransactions>>,
           TError,
@@ -3011,17 +3091,17 @@ export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof lis
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>>, }
+export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = ErrorEnvelope>(
+ params?: ListTrashedTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = void>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>>, }
+export function useListTrashedTransactions<TData = Awaited<ReturnType<typeof listTrashedTransactions>>, TError = ErrorEnvelope>(
+ params?: ListTrashedTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrashedTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListTrashedTransactionsQueryOptions(options)
+  const queryOptions = getListTrashedTransactionsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -3040,7 +3120,7 @@ export const getTransaction = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<TransactionContract>(
       {url: `/api/v1/transactions/${transactionId}`, method: 'GET', signal
     },
       );
@@ -3056,7 +3136,7 @@ export const getGetTransactionQueryKey = (transactionId: string,) => {
     }
 
 
-export const getGetTransactionQueryOptions = <TData = Awaited<ReturnType<typeof getTransaction>>, TError = void>(transactionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>, }
+export const getGetTransactionQueryOptions = <TData = Awaited<ReturnType<typeof getTransaction>>, TError = ErrorEnvelope>(transactionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -3075,10 +3155,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetTransactionQueryResult = NonNullable<Awaited<ReturnType<typeof getTransaction>>>
-export type GetTransactionQueryError = void
+export type GetTransactionQueryError = ErrorEnvelope
 
 
-export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = void>(
+export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = ErrorEnvelope>(
  transactionId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getTransaction>>,
@@ -3088,7 +3168,7 @@ export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransacti
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = void>(
+export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = ErrorEnvelope>(
  transactionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getTransaction>>,
@@ -3098,12 +3178,12 @@ export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransacti
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = void>(
+export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = ErrorEnvelope>(
  transactionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = void>(
+export function useGetTransaction<TData = Awaited<ReturnType<typeof getTransaction>>, TError = ErrorEnvelope>(
  transactionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -3127,7 +3207,7 @@ export const trashTransaction = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<TransactionContract>(
       {url: `/api/v1/transactions/${transactionId}`, method: 'DELETE', signal
     },
       );
@@ -3136,7 +3216,7 @@ export const trashTransaction = (
 
 
 
-export const getTrashTransactionMutationOptions = <TError = void,
+export const getTrashTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof trashTransaction>>, TError,TrashTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof trashTransaction>>, TError,TrashTransactionMutationVariables, TContext> => {
 
@@ -3165,10 +3245,10 @@ const {mutation: mutationOptions} = options ?
 
     export type TrashTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof trashTransaction>>>
 
-    export type TrashTransactionMutationError = void
+    export type TrashTransactionMutationError = ErrorEnvelope
     export type TrashTransactionMutationVariables = {transactionId: string}
 
-    export const useTrashTransaction = <TError = void,
+    export const useTrashTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof trashTransaction>>, TError,TrashTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof trashTransaction>>,
@@ -3181,12 +3261,15 @@ const {mutation: mutationOptions} = options ?
 
 export const updateTransaction = (
     transactionId: string,
+    updateTransactionRequest: UpdateTransactionRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/transactions/${transactionId}`, method: 'PATCH', signal
+      return customAxios<TransactionContract>(
+      {url: `/api/v1/transactions/${transactionId}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateTransactionRequest, signal
     },
       );
     }
@@ -3194,7 +3277,7 @@ export const updateTransaction = (
 
 
 
-export const getUpdateTransactionMutationOptions = <TError = void,
+export const getUpdateTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTransaction>>, TError,UpdateTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateTransaction>>, TError,UpdateTransactionMutationVariables, TContext> => {
 
@@ -3209,9 +3292,9 @@ const {mutation: mutationOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTransaction>>, UpdateTransactionMutationVariables> = (props) => {
-          const {transactionId} = props ?? {};
+          const {transactionId,data} = props ?? {};
 
-          return  updateTransaction(transactionId,)
+          return  updateTransaction(transactionId,data,)
         }
 
 
@@ -3222,11 +3305,11 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdateTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof updateTransaction>>>
+    export type UpdateTransactionMutationBody = UpdateTransactionRequest
+    export type UpdateTransactionMutationError = ErrorEnvelope
+    export type UpdateTransactionMutationVariables = {transactionId: string;data: UpdateTransactionRequest}
 
-    export type UpdateTransactionMutationError = void
-    export type UpdateTransactionMutationVariables = {transactionId: string}
-
-    export const useUpdateTransaction = <TError = void,
+    export const useUpdateTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTransaction>>, TError,UpdateTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateTransaction>>,
@@ -3252,7 +3335,7 @@ export const permanentlyDeleteTransaction = (
 
 
 
-export const getPermanentlyDeleteTransactionMutationOptions = <TError = void,
+export const getPermanentlyDeleteTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentlyDeleteTransaction>>, TError,PermanentlyDeleteTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof permanentlyDeleteTransaction>>, TError,PermanentlyDeleteTransactionMutationVariables, TContext> => {
 
@@ -3281,10 +3364,10 @@ const {mutation: mutationOptions} = options ?
 
     export type PermanentlyDeleteTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof permanentlyDeleteTransaction>>>
 
-    export type PermanentlyDeleteTransactionMutationError = void
+    export type PermanentlyDeleteTransactionMutationError = ErrorEnvelope
     export type PermanentlyDeleteTransactionMutationVariables = {transactionId: string}
 
-    export const usePermanentlyDeleteTransaction = <TError = void,
+    export const usePermanentlyDeleteTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof permanentlyDeleteTransaction>>, TError,PermanentlyDeleteTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof permanentlyDeleteTransaction>>,
@@ -3301,7 +3384,7 @@ export const restoreTransaction = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<TransactionContract>(
       {url: `/api/v1/transactions/${transactionId}/restore`, method: 'POST', signal
     },
       );
@@ -3310,7 +3393,7 @@ export const restoreTransaction = (
 
 
 
-export const getRestoreTransactionMutationOptions = <TError = void,
+export const getRestoreTransactionMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTransaction>>, TError,RestoreTransactionMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof restoreTransaction>>, TError,RestoreTransactionMutationVariables, TContext> => {
 
@@ -3339,10 +3422,10 @@ const {mutation: mutationOptions} = options ?
 
     export type RestoreTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof restoreTransaction>>>
 
-    export type RestoreTransactionMutationError = void
+    export type RestoreTransactionMutationError = ErrorEnvelope
     export type RestoreTransactionMutationVariables = {transactionId: string}
 
-    export const useRestoreTransaction = <TError = void,
+    export const useRestoreTransaction = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreTransaction>>, TError,RestoreTransactionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof restoreTransaction>>,
@@ -3359,7 +3442,7 @@ export const listWallets = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<WalletContract[]>(
       {url: `/api/v1/wallets`, method: 'GET', signal
     },
       );
@@ -3375,7 +3458,7 @@ export const getListWalletsQueryKey = () => {
     }
 
 
-export const getListWalletsQueryOptions = <TData = Awaited<ReturnType<typeof listWallets>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWallets>>, TError, TData>>, }
+export const getListWalletsQueryOptions = <TData = Awaited<ReturnType<typeof listWallets>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWallets>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -3394,10 +3477,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListWalletsQueryResult = NonNullable<Awaited<ReturnType<typeof listWallets>>>
-export type ListWalletsQueryError = void
+export type ListWalletsQueryError = ErrorEnvelope
 
 
-export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = void>(
+export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = ErrorEnvelope>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWallets>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listWallets>>,
@@ -3407,7 +3490,7 @@ export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, 
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = void>(
+export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWallets>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listWallets>>,
@@ -3417,12 +3500,12 @@ export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, 
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = void>(
+export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWallets>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = void>(
+export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, TError = ErrorEnvelope>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWallets>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -3441,13 +3524,15 @@ export function useListWallets<TData = Awaited<ReturnType<typeof listWallets>>, 
 
 
 export const createWallet = (
-
+    createWalletRequest: CreateWalletRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/wallets`, method: 'POST', signal
+      return customAxios<WalletContract>(
+      {url: `/api/v1/wallets`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createWalletRequest, signal
     },
       );
     }
@@ -3455,9 +3540,9 @@ export const createWallet = (
 
 
 
-export const getCreateWalletMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWallet>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof createWallet>>, TError,void, TContext> => {
+export const getCreateWalletMutationOptions = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWallet>>, TError,CreateWalletMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof createWallet>>, TError,CreateWalletMutationVariables, TContext> => {
 
 const mutationKey = ['createWallet'];
 const {mutation: mutationOptions} = options ?
@@ -3469,10 +3554,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWallet>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWallet>>, CreateWalletMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  createWallet()
+          return  createWallet(data,)
         }
 
 
@@ -3483,16 +3568,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateWalletMutationResult = NonNullable<Awaited<ReturnType<typeof createWallet>>>
+    export type CreateWalletMutationBody = CreateWalletRequest
+    export type CreateWalletMutationError = ErrorEnvelope
+    export type CreateWalletMutationVariables = {data: CreateWalletRequest}
 
-    export type CreateWalletMutationError = void
-
-
-    export const useCreateWallet = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWallet>>, TError,void, TContext>, }
+    export const useCreateWallet = <TError = ErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWallet>>, TError,CreateWalletMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createWallet>>,
         TError,
-        void,
+        CreateWalletMutationVariables,
         TContext
       > => {
       return useMutation(getCreateWalletMutationOptions(options), queryClient);
@@ -3504,7 +3589,7 @@ export const getWallet = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<WalletContract>(
       {url: `/api/v1/wallets/${walletId}`, method: 'GET', signal
     },
       );
@@ -3520,7 +3605,7 @@ export const getGetWalletQueryKey = (walletId: string,) => {
     }
 
 
-export const getGetWalletQueryOptions = <TData = Awaited<ReturnType<typeof getWallet>>, TError = void>(walletId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>>, }
+export const getGetWalletQueryOptions = <TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorEnvelope>(walletId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
@@ -3539,10 +3624,10 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type GetWalletQueryResult = NonNullable<Awaited<ReturnType<typeof getWallet>>>
-export type GetWalletQueryError = void
+export type GetWalletQueryError = ErrorEnvelope
 
 
-export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = void>(
+export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorEnvelope>(
  walletId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getWallet>>,
@@ -3552,7 +3637,7 @@ export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TErr
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = void>(
+export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorEnvelope>(
  walletId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getWallet>>,
@@ -3562,12 +3647,12 @@ export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TErr
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = void>(
+export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorEnvelope>(
  walletId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = void>(
+export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorEnvelope>(
  walletId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -3600,7 +3685,7 @@ export const deleteWallet = (
 
 
 
-export const getDeleteWalletMutationOptions = <TError = void,
+export const getDeleteWalletMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWallet>>, TError,DeleteWalletMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteWallet>>, TError,DeleteWalletMutationVariables, TContext> => {
 
@@ -3629,10 +3714,10 @@ const {mutation: mutationOptions} = options ?
 
     export type DeleteWalletMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWallet>>>
 
-    export type DeleteWalletMutationError = void
+    export type DeleteWalletMutationError = ErrorEnvelope
     export type DeleteWalletMutationVariables = {walletId: string}
 
-    export const useDeleteWallet = <TError = void,
+    export const useDeleteWallet = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWallet>>, TError,DeleteWalletMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteWallet>>,
@@ -3645,12 +3730,15 @@ const {mutation: mutationOptions} = options ?
 
 export const updateWallet = (
     walletId: string,
+    updateWalletRequest: UpdateWalletRequest,
  signal?: AbortSignal
 ) => {
 
 
-      return customAxios<void>(
-      {url: `/api/v1/wallets/${walletId}`, method: 'PATCH', signal
+      return customAxios<WalletContract>(
+      {url: `/api/v1/wallets/${walletId}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateWalletRequest, signal
     },
       );
     }
@@ -3658,7 +3746,7 @@ export const updateWallet = (
 
 
 
-export const getUpdateWalletMutationOptions = <TError = void,
+export const getUpdateWalletMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWallet>>, TError,UpdateWalletMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof updateWallet>>, TError,UpdateWalletMutationVariables, TContext> => {
 
@@ -3673,9 +3761,9 @@ const {mutation: mutationOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWallet>>, UpdateWalletMutationVariables> = (props) => {
-          const {walletId} = props ?? {};
+          const {walletId,data} = props ?? {};
 
-          return  updateWallet(walletId,)
+          return  updateWallet(walletId,data,)
         }
 
 
@@ -3686,11 +3774,11 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type UpdateWalletMutationResult = NonNullable<Awaited<ReturnType<typeof updateWallet>>>
+    export type UpdateWalletMutationBody = UpdateWalletRequest
+    export type UpdateWalletMutationError = ErrorEnvelope
+    export type UpdateWalletMutationVariables = {walletId: string;data: UpdateWalletRequest}
 
-    export type UpdateWalletMutationError = void
-    export type UpdateWalletMutationVariables = {walletId: string}
-
-    export const useUpdateWallet = <TError = void,
+    export const useUpdateWallet = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWallet>>, TError,UpdateWalletMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof updateWallet>>,
@@ -3707,7 +3795,7 @@ export const archiveWallet = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<WalletArchiveContract>(
       {url: `/api/v1/wallets/${walletId}/archive`, method: 'POST', signal
     },
       );
@@ -3716,7 +3804,7 @@ export const archiveWallet = (
 
 
 
-export const getArchiveWalletMutationOptions = <TError = void,
+export const getArchiveWalletMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveWallet>>, TError,ArchiveWalletMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof archiveWallet>>, TError,ArchiveWalletMutationVariables, TContext> => {
 
@@ -3745,10 +3833,10 @@ const {mutation: mutationOptions} = options ?
 
     export type ArchiveWalletMutationResult = NonNullable<Awaited<ReturnType<typeof archiveWallet>>>
 
-    export type ArchiveWalletMutationError = void
+    export type ArchiveWalletMutationError = ErrorEnvelope
     export type ArchiveWalletMutationVariables = {walletId: string}
 
-    export const useArchiveWallet = <TError = void,
+    export const useArchiveWallet = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveWallet>>, TError,ArchiveWalletMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof archiveWallet>>,
@@ -3765,7 +3853,7 @@ export const restoreWallet = (
 ) => {
 
 
-      return customAxios<void>(
+      return customAxios<WalletContract>(
       {url: `/api/v1/wallets/${walletId}/restore`, method: 'POST', signal
     },
       );
@@ -3774,7 +3862,7 @@ export const restoreWallet = (
 
 
 
-export const getRestoreWalletMutationOptions = <TError = void,
+export const getRestoreWalletMutationOptions = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreWallet>>, TError,RestoreWalletMutationVariables, TContext>, }
 ): UseMutationOptions<Awaited<ReturnType<typeof restoreWallet>>, TError,RestoreWalletMutationVariables, TContext> => {
 
@@ -3803,10 +3891,10 @@ const {mutation: mutationOptions} = options ?
 
     export type RestoreWalletMutationResult = NonNullable<Awaited<ReturnType<typeof restoreWallet>>>
 
-    export type RestoreWalletMutationError = void
+    export type RestoreWalletMutationError = ErrorEnvelope
     export type RestoreWalletMutationVariables = {walletId: string}
 
-    export const useRestoreWallet = <TError = void,
+    export const useRestoreWallet = <TError = ErrorEnvelope,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreWallet>>, TError,RestoreWalletMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof restoreWallet>>,

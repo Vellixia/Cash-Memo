@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface TokenContract {
+export interface PasswordResetRequest {
+  password: string;
   token: string;
 }
