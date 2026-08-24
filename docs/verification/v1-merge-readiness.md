@@ -19,11 +19,12 @@ safe repository merge, but all repository criteria below must be satisfied.
 | Ownership, session, money, recurrence, purge-race, migration-target tests              | [security audit](v1-security-audit.md)                                                                                                                                                                     | PASS        |
 | Default real-stack Playwright gate                                                     | Three fresh default six-flow/four-worker runs, latest `2026-08-25T02:42:27+0700 WIB`, pass on implementation `cf4e6f5`; Rust rate-limit authority remains tested separately.                               | PASS        |
 | Clean-schema and preservation decision                                                 | V1 clean target guard passed; local external record is `BLOCKED_EXTERNAL`, `approved: false`. No actual environment/data audit performed.                                                                  | **PENDING** |
-| Canonical structure, one current app/client workflow, no permanent dual stack          | Tasks 24–25 inventory, approved removal, V1 promotion not done.                                                                                                                                            | **PENDING** |
-| Legacy removal/migration-history decision                                              | Task 24 manifest not created. Task 25 must retain every `PRESERVE` migration/history entry. Real data discovery stops with `STOP_REQUIRES_DEDICATED_MIGRATION_PLAN` and requires separately approved plan. | **PENDING** |
+| Canonical structure, one current app/client workflow, no permanent dual stack          | Task 24 candidate inventory/preflight classifies 464 exact paths; review and Task 25 V1 promotion remain incomplete.                                                                                        | **PENDING** |
+| Legacy removal/migration-history decision                                              | Candidate manifest: 380 `REMOVE`, 44 `PRESERVE`, 40 `ALREADY_REUSED`. External audit remains unresolved; preserved legacy migration/history evidence cannot be removed. Task 25 and final review remain.    | **PENDING** |
 | Documentation and final branch review                                                  | This evidence exists, but Task 26 final review has not occurred.                                                                                                                                           | **PENDING** |
 
-Do not merge on this record. Default browser gate passed; complete Tasks 24–25 and final review.
+Do not merge on this record. Default browser gate passed; review Task 24 preparation, then complete
+Task 25 and final review.
 This record does not authorize deployment, production migration, route cutover, or legacy
 infrastructure retirement.
 

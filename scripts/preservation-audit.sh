@@ -1,6 +1,65 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+check_recorded_decision() {
+  local script_dir repository_record record_hash
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  repository_record="$script_dir/../ops/evidence/external/dokploy-environment.json"
+  repository_record=${CASHMEMO_V1_RECORDED_PRESERVATION_DECISION_FILE:-$repository_record}
+
+  command -v jq >/dev/null 2>&1 || {
+    printf '%s\n' 'PRESERVATION_AUDIT_JQ_REQUIRED' >&2
+    return 1
+  }
+  [[ -f $repository_record && ! -L $repository_record ]] || {
+    printf '%s\n' 'PRESERVATION_DECISION_INVALID' >&2
+    return 1
+  }
+
+  if jq -e '
+    type == "object"
+    and .schema_version == 1
+    and .real_user_data == true
+    and .disposition == "real_user_data_requires_migration"
+  ' -- "$repository_record" >/dev/null 2>&1; then
+    printf '%s\n' 'STOP_REQUIRES_DEDICATED_MIGRATION_PLAN'
+    return 1
+  fi
+
+  if [[ $repository_record != "$script_dir/../ops/evidence/external/dokploy-environment.json" ]]; then
+    printf '%s\n' 'PRESERVATION_DECISION_INVALID' >&2
+    return 1
+  fi
+
+  record_hash=$(shasum -a 256 "$repository_record" | cut -d' ' -f1)
+  [[ $record_hash == c5ed4785a07d4f97352bda713dcccd5405acb2759bf5dc606ffe9d721c3afe2b ]] || {
+    printf '%s\n' 'PRESERVATION_DECISION_INVALID' >&2
+    return 1
+  }
+  jq -e '
+    type == "object"
+    and keys == ["approved","architecture","containsCredentials","developmentSecondaryIndependentFailureDomain","missingSafeNames","schemaVersion","status"]
+    and .schemaVersion == "cashmemo.external-blocker.v1"
+    and .status == "BLOCKED_EXTERNAL"
+    and .approved == false
+    and .containsCredentials == false
+  ' -- "$repository_record" >/dev/null 2>&1 || {
+    printf '%s\n' 'PRESERVATION_DECISION_INVALID' >&2
+    return 1
+  }
+
+  printf '%s\n' 'PRESERVATION_DECISION_UNRESOLVED_PRESERVE_LEGACY_HISTORY'
+}
+
+if [[ ${1:-} == --check-recorded-decision ]]; then
+  [[ $# -eq 1 ]] || {
+    printf '%s\n' 'usage: preservation-audit.sh --check-recorded-decision' >&2
+    exit 2
+  }
+  check_recorded_decision
+  exit $?
+fi
+
 usage() { printf '%s\n' 'usage: preservation-audit.sh --evidence FILE --target-class CLASS --target-id ID --dokploy-service SERVICE --dokploy-config-digest DIGEST --database-name NAME --database-fingerprint FINGERPRINT' >&2; exit 2; }
 evidence= target_class= target_id= service= config_digest= database_name= database_fingerprint=
 while (($#)); do
