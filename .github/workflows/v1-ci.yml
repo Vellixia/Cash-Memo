@@ -1,0 +1,277 @@
+name: Cashmemo V1 CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "001-cashmemo-mvp"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cashmemo-v1-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.97.1
+
+jobs:
+  rust:
+    name: Rust format, Clippy, PostgreSQL tests, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_DB: cashmemo_v1_ci
+          POSTGRES_USER: cashmemo_v1_ci
+          POSTGRES_PASSWORD: cashmemo_v1_ci
+        options: >-
+          --health-cmd "pg_isready -U cashmemo_v1_ci -d cashmemo_v1_ci" --health-interval 1s
+          --health-timeout 5s --health-retries 30
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgres://cashmemo_v1_ci:cashmemo_v1_ci@localhost:5432/cashmemo_v1_ci
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt
+          --component clippy
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cashmemo-v1-cargo-${{ hashFiles('Cargo.lock') }}
+      - run: cargo fmt --check
+      - run: cargo clippy --locked -p cashmemo-api --all-targets -- -D warnings
+      - run: cargo test --locked -p cashmemo-api
+      - run: cargo build --locked --release -p cashmemo-api --features s3-receipts
+
+  frontend:
+    name: Frontend lint, types, Vitest, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+      - name: Activate pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.1 --activate
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/pnpm
+          key: ${{ runner.os }}-cashmemo-v1-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir v1/web lint
+      - run: pnpm --dir v1/web typecheck
+      - run: pnpm --dir v1/web test --run
+      - run: pnpm --dir v1/web build
+
+  openapi:
+    name: Rust OpenAPI and Orval drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+      - name: Activate pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.1 --activate
+      - name: Install pinned Rust toolchain
+        run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt
+          --component clippy
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cache/pnpm
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cashmemo-v1-openapi-${{ hashFiles('Cargo.lock', 'pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm v1:api:check
+
+  migration-safety:
+    name: Migration target safety
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_DB: cashmemo_v1_migration_ci
+          POSTGRES_USER: cashmemo_v1_migration_ci
+          POSTGRES_PASSWORD: cashmemo_v1_migration_ci
+        options: >-
+          --health-cmd "pg_isready -U cashmemo_v1_migration_ci -d cashmemo_v1_migration_ci"
+          --health-interval 1s --health-timeout 5s --health-retries 30
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgres://cashmemo_v1_migration_ci:cashmemo_v1_migration_ci@localhost:5432/cashmemo_v1_migration_ci
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt
+          --component clippy
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cashmemo-v1-migration-${{ hashFiles('Cargo.lock') }}
+      - name: Reject unknown non-empty targets; allow only empty or identified V1 targets
+        run: cargo test --locked -p cashmemo-api --test migrations
+
+  playwright:
+    name: Playwright real V1 stack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CASHMEMO_V1_E2E_POSTGRES_PORT: 54329
+      CASHMEMO_V1_E2E_SMTP_PORT: 1025
+      CASHMEMO_V1_E2E_MAILPIT_PORT: 8025
+      CASHMEMO_V1_E2E_PUBLIC_ORIGIN: http://localhost:3000
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+      - name: Activate pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.1 --activate
+      - name: Install pinned Rust toolchain
+        run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt
+          --component clippy
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cache/pnpm
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key:
+            ${{ runner.os }}-cashmemo-v1-playwright-${{ hashFiles('Cargo.lock', 'pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium and system dependencies
+        run: pnpm --dir v1/web exec playwright install --with-deps chromium
+      - name: Start disposable PostgreSQL and Mailpit from V1 test Compose
+        run: docker compose -f infra/v1/test-compose.yml up -d --wait postgres mailpit
+      - name: Run six real-stack flows through Mailpit verification
+        run: pnpm --dir v1/web exec playwright test
+      - name: Collect real-stack diagnostics on failure
+        if: failure()
+        run: docker compose -f infra/v1/test-compose.yml logs --no-color
+
+  recovery-safety:
+    name: Receipt replay and preservation recovery gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: >-
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt
+          --component clippy
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cashmemo-v1-recovery-${{ hashFiles('Cargo.lock') }}
+      - name: Install Bats
+        run: sudo apt-get update && sudo apt-get install --yes bats
+      - name: Start isolated restored PostgreSQL and disposable receipt store
+        id: receipt-store
+        run: |
+          docker compose -f infra/v1/test-compose.yml up -d --wait restored-postgres deletion-receipts
+          host_port="$(docker compose -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
+          endpoint="http://127.0.0.1:$host_port"
+          curl --fail --retry 30 --retry-connrefused "$endpoint/minio/health/live"
+          echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
+      - name: Run real feature-enabled receipt replay
+        env:
+          DATABASE_URL: postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:54330/cashmemo_restore_e2e
+          TEST_DELETION_RECEIPT_S3_ENDPOINT: ${{ steps.receipt-store.outputs.endpoint }}
+          TEST_DELETION_RECEIPT_S3_BUCKET: cashmemo-v1-recovery-ci
+          TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID: deletion-receipt-test
+          TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY: deletion-receipt-test-secret
+        run: >-
+          cargo test --locked -p cashmemo-api --features s3-receipts --test deletion_receipt_replay
+      - name: Preserve fail-closed replacement and restore contracts
+        run: >-
+          bats tests/operations/preservation-gate.bats
+          tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats
+          tests/operations/deletion-receipt-replay.bats
+
+  docker-images:
+    name: V1 Docker build and scan (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: infra/v1/api.Dockerfile
+          - image: web
+            dockerfile: infra/v1/web.Dockerfile
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Build isolated V1 image
+        env:
+          IMAGE_REF: cashmemo-v1-${{ matrix.image }}:${{ github.sha }}
+        run: docker build --file "${{ matrix.dockerfile }}" --tag "$IMAGE_REF" .
+      - name: Scan V1 image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cashmemo-v1-${{ matrix.image }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+
+  dependency-safety:
+    name: Focused V1 dependency audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.14.0
+      - name: Activate pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.13.1 --activate
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/pnpm
+          key: ${{ runner.os }}-cashmemo-v1-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir v1/web audit --prod --audit-level high
