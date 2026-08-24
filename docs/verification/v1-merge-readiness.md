@@ -13,20 +13,19 @@ Merge readiness concerns repository correctness only. It is separate from
 [production-cutover readiness](v1-production-readiness.md); production action is not requirement for
 safe repository merge, but all repository criteria below must be satisfied.
 
-| Criterion                                                                              | Current evidence                                                                                                                                                                                           | State       |
-| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| Approved temporary V1 scope, OpenAPI/client drift, lint/type/Vitest/build, Rust checks | [acceptance evidence](v1-acceptance.md)                                                                                                                                                                    | PASS        |
-| Ownership, session, money, recurrence, purge-race, migration-target tests              | [security audit](v1-security-audit.md)                                                                                                                                                                     | PASS        |
-| Default real-stack Playwright gate                                                     | Three fresh default six-flow/four-worker runs, latest `2026-08-25T02:42:27+0700 WIB`, pass on implementation `cf4e6f5`; Rust rate-limit authority remains tested separately.                               | PASS        |
-| Clean-schema and preservation decision                                                 | V1 clean target guard passed; local external record is `BLOCKED_EXTERNAL`, `approved: false`. No actual environment/data audit performed.                                                                  | **PENDING** |
-| Canonical structure, one current app/client workflow, no permanent dual stack          | Task 24 candidate inventory/preflight classifies 464 exact paths; review and Task 25 V1 promotion remain incomplete.                                                                                        | **PENDING** |
-| Legacy removal/migration-history decision                                              | Candidate manifest: 380 `REMOVE`, 44 `PRESERVE`, 40 `ALREADY_REUSED`. External audit remains unresolved; preserved legacy migration/history evidence cannot be removed. Task 25 and final review remain.    | **PENDING** |
-| Documentation and final branch review                                                  | This evidence exists, but Task 26 final review has not occurred.                                                                                                                                           | **PENDING** |
+| Criterion                                                                              | Current evidence                                                                                                                                                                                         | State       |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Approved temporary V1 scope, OpenAPI/client drift, lint/type/Vitest/build, Rust checks | [acceptance evidence](v1-acceptance.md)                                                                                                                                                                  | PASS        |
+| Ownership, session, money, recurrence, purge-race, migration-target tests              | [security audit](v1-security-audit.md)                                                                                                                                                                   | PASS        |
+| Default real-stack Playwright gate                                                     | Three fresh default six-flow/four-worker runs, latest `2026-08-25T02:42:27+0700 WIB`, pass on implementation `cf4e6f5`; Rust rate-limit authority remains tested separately.                             | PASS        |
+| Clean-schema and preservation decision                                                 | V1 clean target guard passed; local external record is `BLOCKED_EXTERNAL`, `approved: false`. No actual environment/data audit performed.                                                                | **PENDING** |
+| Canonical structure, one current app/client workflow, no permanent dual stack          | Task 24 candidate inventory/preflight classifies 499 exact paths; review and Task 25 V1 promotion remain incomplete.                                                                                     | **PENDING** |
+| Legacy removal/migration-history decision                                              | Candidate manifest: 388 `REMOVE`, 44 `PRESERVE`, 67 `ALREADY_REUSED`. External audit remains unresolved; preserved legacy migration/history evidence cannot be removed. Task 25 and final review remain. | **PENDING** |
+| Documentation and final branch review                                                  | This evidence exists, but Task 26 final review has not occurred.                                                                                                                                         | **PENDING** |
 
 Do not merge on this record. Default browser gate passed; review Task 24 preparation, then complete
-Task 25 and final review.
-This record does not authorize deployment, production migration, route cutover, or legacy
-infrastructure retirement.
+Task 25 and final review. This record does not authorize deployment, production migration, route
+cutover, or legacy infrastructure retirement.
 
 Deterministic source checksums: workflow
 `e0b75a79fe7c6e77bf4c0063312cb05d4ced1f59c9e6961ab7d2debe1cd1a0b9`; migration tree

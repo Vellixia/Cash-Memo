@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf '%s\n' 'usage: apply-approved-legacy-removal.sh [--check MANIFEST_SHA256 | --apply MANIFEST_SHA256]' >&2
+  printf '%s\n' 'usage: apply-approved-legacy-removal.sh [--check MANIFEST_SHA256 | --plan MANIFEST_SHA256 | --apply MANIFEST_SHA256]' >&2
   exit 2
 }
 
@@ -23,10 +23,10 @@ scoped_paths() {
   git -C "$repo" ls-files -- \
     apps/server apps/web \
     packages/contracts packages/currency-registry packages/domain packages/privacy-rules packages/test-support \
-    specs/001-cashmemo-mvp config .github infra ops \
+    specs/001-cashmemo-mvp config .github infra ops .specify \
     docs/architecture/self-hosted-reconciliation.md docs/privacy docs/providers \
-    tests/acceptance tests/architecture tests/failure tests/operations tests/privacy tests/providers tests/security \
-    scripts \
+    tests/acceptance tests/architecture tests/failure tests/operations tests/privacy tests/providers tests/security tests/tsconfig.json \
+    scripts test-results \
     .dockerignore .env.example .gitignore .gitleaks.toml .prettierignore .terraformignore .tool-versions .trivyignore \
     Cargo.lock Cargo.toml README.md dependency-cruiser.config.d.mts dependency-cruiser.config.mjs \
     eslint.config.mjs package.json packages/tsconfig.json playwright.config.ts pnpm-lock.yaml pnpm-workspace.yaml \
@@ -84,10 +84,34 @@ validate_manifest() {
 }
 
 check_task_23_evidence() {
-  local readiness="$repo/docs/verification/v1-merge-readiness.md"
-  [[ -f $readiness ]] || fail TASK_23_READINESS_EVIDENCE_MISSING
-  grep -F 'Three fresh default six-flow/four-worker runs' "$readiness" >/dev/null || fail TASK_23_READINESS_EVIDENCE_MISSING
-  grep -F 'Ownership, session, money, recurrence, purge-race, migration-target tests' "$readiness" >/dev/null || fail TASK_23_READINESS_EVIDENCE_MISSING
+  local acceptance security readiness acceptance_hash security_hash state
+  acceptance="$repo/docs/verification/v1-acceptance.md"
+  security="$repo/docs/verification/v1-security-audit.md"
+  readiness="$repo/docs/verification/v1-merge-readiness.md"
+  [[ -f $acceptance && ! -L $acceptance && -f $security && ! -L $security && -f $readiness && ! -L $readiness ]] || fail TASK_23_READINESS_EVIDENCE_MISSING
+
+  acceptance_hash=$(shasum -a 256 "$acceptance" | cut -d' ' -f1)
+  security_hash=$(shasum -a 256 "$security" | cut -d' ' -f1)
+  [[ $acceptance_hash == 5edfc61a04b3b0b73d3a83c21c2f4f2fb4665594fe08bc2afee5cd5db585318a ]] || fail TASK_23_READINESS_EVIDENCE_INVALID
+  [[ $security_hash == 2ecd21c00037df4f4ebe22c634d420b54b8d42e6878b7410ae3ea4435cbb3bab ]] || fail TASK_23_READINESS_EVIDENCE_INVALID
+  [[ $(grep -c '^Status: \*\*NOT READY\*\* as of `[^`]*`\.$' "$readiness") -eq 1 ]] || fail TASK_23_READINESS_EVIDENCE_INVALID
+
+  while IFS=$'\t' read -r criterion expected; do
+    state=$(awk -F '|' -v criterion="$criterion" '
+      function trim(value) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", value); return value }
+      NF >= 4 && trim($2) == criterion { found++; value=trim($4) }
+      END { if (found != 1) exit 1; print value }
+    ' "$readiness") || fail TASK_23_READINESS_EVIDENCE_INVALID
+    [[ $state == "$expected" ]] || fail TASK_23_READINESS_EVIDENCE_INVALID
+  done <<'STATES'
+Approved temporary V1 scope, OpenAPI/client drift, lint/type/Vitest/build, Rust checks	PASS
+Ownership, session, money, recurrence, purge-race, migration-target tests	PASS
+Default real-stack Playwright gate	PASS
+Clean-schema and preservation decision	**PENDING**
+Canonical structure, one current app/client workflow, no permanent dual stack	**PENDING**
+Legacy removal/migration-history decision	**PENDING**
+Documentation and final branch review	**PENDING**
+STATES
 }
 
 check_preservation_state() {
@@ -107,6 +131,7 @@ case $# in
   2)
     case $1 in
       --check) mode=check ;;
+      --plan) mode=plan ;;
       --apply) mode=apply ;;
       *) usage ;;
     esac
@@ -132,10 +157,19 @@ check_task_23_evidence
 remove_paths=()
 while IFS=$'\t' read -r status path _rest; do
   if [[ $status == REMOVE ]]; then
+    [[ $path != /* && $path != -* && $path != *'..'* && $path != *'*'* && $path != *'?'* && $path != *'['* ]] || fail LEGACY_REMOVAL_PATH_INVALID
     remove_paths+=("$path")
   fi
 done < <(inventory_records)
 [[ ${#remove_paths[@]} -gt 0 ]] || fail LEGACY_REMOVAL_SET_EMPTY
 
-git -C "$repo" rm -- "${remove_paths[@]}"
+git_command=(git -C "$repo" rm -- "${remove_paths[@]}")
+if [[ $mode == plan ]]; then
+  for index in "${!git_command[@]}"; do
+    printf 'ARGV\t%s\t%s\n' "$index" "${git_command[$index]}"
+  done
+  exit 0
+fi
+
+"${git_command[@]}"
 printf '%s\n' 'LEGACY_REMOVAL_APPLY_PASS'

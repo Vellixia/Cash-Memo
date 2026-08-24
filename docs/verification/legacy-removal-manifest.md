@@ -1,12 +1,13 @@
 # Legacy removal manifest
 
 Status: **PREPARED, NOT APPLIED**. Inventory source is tracked repository state on
-`rewrite/cashmemo-v1` after Task 23. Task 24 validates only; Task 25 may invoke explicit
-hash-bound apply after review.
+`rewrite/cashmemo-v1` after Task 23. Task 24 validates only; Task 25 may invoke explicit hash-bound
+apply after review.
 
 Scope covers legacy `apps/server`, `apps/web`, named TypeScript packages, MVP specs, legacy
-config/docs/ops/tests/scripts, root legacy build files, all tracked `.github` paths, and all tracked
-`infra` paths. Current V1/shared paths inside those roots are recorded as `ALREADY_REUSED`; Task-24
+config/docs/ops/tests/scripts, project-specific `.specify` state, root legacy build/test artifacts,
+all tracked `.github` paths, and all tracked `infra` paths. Generic shared agent configuration is
+outside scope. Current V1/shared paths inside scoped roots are recorded as `ALREADY_REUSED`; Task-24
 artifacts and V1-only roots are outside removal scope. Every scoped tracked path appears exactly
 once below.
 
@@ -20,8 +21,7 @@ Successful check/apply validation authorizes repository path removal only. It ne
 database action, Dokploy access, migration, deployment, routing change, or production cutover.
 
 Machine-readable inventory uses tab-separated `STATUS PATH REASON PRESERVATION_SOURCE` records.
-Non-preserved paths use `-` as source. Counts:
-`REMOVE=380`, `PRESERVE=44`, `ALREADY_REUSED=40`.
+Non-preserved paths use `-` as source. Counts: `REMOVE=388`, `PRESERVE=44`, `ALREADY_REUSED=67`.
 
 Reason codes:
 
@@ -30,9 +30,10 @@ Reason codes:
 - `LEGACY_NON_GOAL_REMOVED`: legacy functionality explicitly excluded from Cashmemo V1.
 - `LEGACY_HISTORY_EXTERNAL_AUDIT_UNRESOLVED`: retained migration/history/preservation evidence
   because actual environment and data audit is unresolved.
-- `V1_SHARED_FOUNDATION`: current V1 or generic foundation already selected for retention/adaptation;
-  not part of removal set.
+- `V1_SHARED_FOUNDATION`: current V1 or generic foundation already selected for
+  retention/adaptation; not part of removal set.
 
+```text
 <!-- INVENTORY-BEGIN -->
 ALREADY_REUSED	.dockerignore	V1_SHARED_FOUNDATION	-
 REMOVE	.env.example	LEGACY_RUNTIME_REPLACED	-
@@ -46,6 +47,39 @@ REMOVE	.github/workflows/verify.yml	LEGACY_RUNTIME_REPLACED	-
 ALREADY_REUSED	.gitignore	V1_SHARED_FOUNDATION	-
 ALREADY_REUSED	.gitleaks.toml	V1_SHARED_FOUNDATION	-
 ALREADY_REUSED	.prettierignore	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions.yml	V1_SHARED_FOUNDATION	-
+REMOVE	.specify/extensions/.cache/catalog-ebf165086500aab1-metadata.json	LEGACY_RUNTIME_REPLACED	-
+REMOVE	.specify/extensions/.cache/catalog-ebf165086500aab1.json	LEGACY_RUNTIME_REPLACED	-
+REMOVE	.specify/extensions/.cache/catalog-metadata.json	LEGACY_RUNTIME_REPLACED	-
+REMOVE	.specify/extensions/.cache/catalog.json	LEGACY_RUNTIME_REPLACED	-
+ALREADY_REUSED	.specify/extensions/.registry	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/.specify-dev/agent-commands/claude/speckit-quality-gates-artifacts/SKILL.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/.specify-dev/agent-commands/claude/speckit-quality-gates-implementation/SKILL.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/.specify-dev/agent-commands/claude/speckit-quality-gates-spec/SKILL.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/commands/speckit.quality-gates.artifacts.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/commands/speckit.quality-gates.implementation.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/commands/speckit.quality-gates.spec.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/extensions/quality-gates/extension.yml	V1_SHARED_FOUNDATION	-
+REMOVE	.specify/feature.json	LEGACY_RUNTIME_REPLACED	-
+ALREADY_REUSED	.specify/init-options.json	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/integration.json	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/integrations/claude.manifest.json	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/integrations/codex.manifest.json	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/integrations/speckit.manifest.json	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/memory/.constitution-template.json	V1_SHARED_FOUNDATION	-
+REMOVE	.specify/memory/constitution.md	LEGACY_RUNTIME_REPLACED	-
+ALREADY_REUSED	.specify/scripts/bash/check-prerequisites.sh	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/scripts/bash/common.sh	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/scripts/bash/create-new-feature.sh	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/scripts/bash/setup-plan.sh	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/scripts/bash/setup-tasks.sh	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/templates/checklist-template.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/templates/constitution-template.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/templates/plan-template.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/templates/spec-template.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/templates/tasks-template.md	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/workflows/speckit/workflow.yml	V1_SHARED_FOUNDATION	-
+ALREADY_REUSED	.specify/workflows/workflow-registry.json	V1_SHARED_FOUNDATION	-
 ALREADY_REUSED	.terraformignore	V1_SHARED_FOUNDATION	-
 ALREADY_REUSED	.tool-versions	V1_SHARED_FOUNDATION	-
 ALREADY_REUSED	.trivyignore	V1_SHARED_FOUNDATION	-
@@ -441,6 +475,7 @@ REMOVE	specs/001-cashmemo-mvp/spec.md	LEGACY_RUNTIME_REPLACED	-
 REMOVE	specs/001-cashmemo-mvp/tasks.md	LEGACY_RUNTIME_REPLACED	-
 REMOVE	specs/001-cashmemo-mvp/test-strategy.md	LEGACY_RUNTIME_REPLACED	-
 REMOVE	task-13-report.md	LEGACY_RUNTIME_REPLACED	-
+REMOVE	test-results/.last-run.json	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tests/acceptance/us1-private-journal.spec.ts	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tests/acceptance/us2-manual-journal.spec.ts	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tests/acceptance/us3-assisted-capture.spec.ts	LEGACY_NON_GOAL_REMOVED	-
@@ -497,5 +532,7 @@ REMOVE	tests/security/untrusted-inputs.spec.ts	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tests/security/us1-account-isolation.spec.ts	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tests/security/us6-search-label-isolation.spec.ts	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tests/security/us8-data-ownership-isolation.spec.ts	LEGACY_RUNTIME_REPLACED	-
+REMOVE	tests/tsconfig.json	LEGACY_RUNTIME_REPLACED	-
 REMOVE	tsconfig.base.json	LEGACY_RUNTIME_REPLACED	-
 <!-- INVENTORY-END -->
+```
