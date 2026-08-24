@@ -8,8 +8,8 @@ Design and planned repository replacement:
 
 Current verification records:
 
-- [Acceptance evidence](docs/verification/v1-acceptance.md) — **NOT PASSING**: default parallel
-  Playwright gate must be fixed/rerun.
+- [Acceptance evidence](docs/verification/v1-acceptance.md) — current clean/default V1 checks pass
+  on disposable services.
 - [Security/database audit](docs/verification/v1-security-audit.md) — named Rust audit binaries pass
   on disposable V1 PostgreSQL.
 - [Merge readiness](docs/verification/v1-merge-readiness.md) — **NOT READY**: E2E, preservation,

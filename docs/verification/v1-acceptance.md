@@ -1,8 +1,7 @@
 # Cashmemo V1 acceptance evidence
 
-Status: **NOT PASSING** — repository checks passed, but default four-worker Playwright acceptance
-did not. This record covers only disposable local V1 services; it is not deployment or production
-evidence.
+Status: **PASS** for current repository acceptance gates. This record covers only disposable local
+V1 services; it is not deployment or production evidence.
 
 Recorded: `2026-08-25T02:18:49+0700 WIB`.
 
@@ -50,15 +49,21 @@ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
   pnpm --dir v1/web exec playwright test
 ```
 
-Result: **failed** (six flows, four workers). `account-deletion.spec.ts` failed when its
-post-deletion login remained `http://localhost:3000/login` rather than reaching `/deletion`. The
-rendered login button was `Working…`; evidence indicates shared in-memory auth throttling under
-parallel browser workers. A fresh-harness focused one-worker run of that flow passed. This is a real
-default-gate failure, not a waiver; retain it as a merge-readiness blocker until fixed and rerun
-successfully.
+Initial four-worker run failed at post-deletion login. Trace shows this was not rate limiting:
+`POST /api/v1/auth/login` returned `200` after roughly `10.06s`, after prior `10s` Playwright
+expectation elapsed. Parallel Argon2 work delayed legitimate response.
 
-`next start` also prints its standalone-output warning. It did not prevent API migration/serve or
-the focused browser flow, but should remain visible in follow-up verification.
+E2E harness now explicitly supplies bounded `100` auth attempts only to child API process;
+production defaults/configuration unchanged. Regression test proves parent environment is not
+mutated. E2E expectation timeout is `30s`, below per-test `60s` timeout. Existing Rust `http_safety`
+test still proves normal rate limiting returns `429` after six attempts.
+
+Two fresh disposable-harness retries with default six flows/four workers passed under Node
+`v24.14.0`; neither used worker-count workaround. Full V1 web regression passed: `15` Vitest files /
+`84` tests, TypeScript, lint, deterministic OpenAPI/client drift.
+
+`next start` still prints standalone-output warning. It did not prevent API migration/serve or
+either full browser run, but should remain visible in follow-up verification.
 
 ## Immutable repository inputs
 
