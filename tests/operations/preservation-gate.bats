@@ -87,3 +87,28 @@ audit() {
   run audit
   [ "$status" -ne 0 ]
 }
+
+@test "preservation audit rejects signed expired and future-issued evidence" {
+  write_evidence
+  issued=$(date -u -v-899S +%Y-%m-%dT%H:%M:%SZ)
+  expired=$(date -u -v-898S +%Y-%m-%dT%H:%M:%SZ)
+  jq --arg issued "$issued" --arg expired "$expired" '.issued_at=$issued | .expires_at=$expired | .backup.fresh_at=$issued | .operator.approved_at=$issued | .approval.signed_at=$issued' "$evidence" >"$evidence.next" && mv "$evidence.next" "$evidence"
+  sign
+  run audit
+  [ "$status" -ne 0 ]
+  issued=$(date -u -v+60S +%Y-%m-%dT%H:%M:%SZ)
+  expires_future=$(date -u -v+120S +%Y-%m-%dT%H:%M:%SZ)
+  jq --arg issued "$issued" --arg expires "$expires_future" '.issued_at=$issued | .expires_at=$expires | .backup.fresh_at=$issued | .operator.approved_at=$issued | .approval.signed_at=$issued' "$evidence" >"$evidence.next" && mv "$evidence.next" "$evidence"
+  sign
+  run audit
+  [ "$status" -ne 0 ]
+}
+
+@test "preservation template has exact schema and cannot pass unsigned" {
+  template="$repo/docs/operations/templates/preservation-decision.json"
+  [ -f "$template" ]
+  jq -e 'keys == ["approval","backup","database","disposition","dokploy","evidence_id","expires_at","issued_at","operator","real_user_data","schema_version","signature","table_row_inventory","target"] and .schema_version == 1' "$template" >/dev/null
+  grep -F 'templates/README.md' "$repo/docs/operations/preservation-gate.md" >/dev/null
+  run "$repo/scripts/preservation-audit.sh" --evidence "$template" --target-class production --target-id cashmemo-v1-production --dokploy-service legacy --dokploy-config-digest sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --database-name cashmemo --database-fingerprint sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  [ "$status" -ne 0 ]
+}

@@ -13,3 +13,6 @@ Evidence with `real_user_data: true` stops with exact output
 `real_user_data: false` must carry explicit `development_data_disposable` disposition. Unknown,
 forged, incomplete, mismatched, future-incoherent, or stale evidence fails closed. Only explicitly
 named disposable isolated V1 development/staging targets skip legacy audit.
+
+Use [evidence templates](templates/README.md). Copy JSON outside repository; placeholders remain
+intentionally invalid until operator fills and HMAC-signs exact target-bound fields.

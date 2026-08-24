@@ -12,3 +12,6 @@ Use [restore runbook](../../infra/backup/restore-runbook.md) for every restore. 
 only an isolated restored DB, command-only keyring, and narrow receipt-bucket read credentials.
 Replay wrapper writes target-bound, HMAC-signed restore evidence atomically; verify that artifact
 before any restored target receives application traffic.
+
+Reusable [operations templates](templates/README.md) cover preservation, cutover, and rollback;
+restore readiness template documents schema only and is never a valid readiness artifact.

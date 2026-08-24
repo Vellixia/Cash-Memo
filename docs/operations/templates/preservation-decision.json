@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "evidence_id": "REPLACE_WITH_OPERATOR_EVIDENCE_ID",
+  "issued_at": "REPLACE_WITH_UTC_RFC3339_SECONDS",
+  "expires_at": "REPLACE_WITH_UTC_RFC3339_SECONDS",
+  "target": { "class": "REPLACE_WITH_TARGET_CLASS", "id": "REPLACE_WITH_TARGET_ID" },
+  "dokploy": {
+    "service": "REPLACE_WITH_DOKPLOY_SERVICE",
+    "config_digest": "REPLACE_WITH_SHA256_CONFIG_DIGEST"
+  },
+  "database": {
+    "name": "REPLACE_WITH_DATABASE_NAME",
+    "fingerprint": "REPLACE_WITH_SHA256_DATABASE_FINGERPRINT"
+  },
+  "table_row_inventory": {
+    "complete": false,
+    "tables": [{ "table": "REPLACE_WITH_TABLE_NAME", "rows": -1 }]
+  },
+  "backup": { "id": "REPLACE_WITH_BACKUP_ID", "fresh_at": "REPLACE_WITH_UTC_RFC3339_SECONDS" },
+  "real_user_data": false,
+  "disposition": "REPLACE_WITH_REQUIRED_DISPOSITION",
+  "operator": {
+    "id": "REPLACE_WITH_OPERATOR_ID",
+    "approved_at": "REPLACE_WITH_UTC_RFC3339_SECONDS"
+  },
+  "approval": {
+    "id": "REPLACE_WITH_APPROVAL_ID",
+    "identity": "REPLACE_WITH_APPROVER_IDENTITY",
+    "signed_at": "REPLACE_WITH_UTC_RFC3339_SECONDS"
+  },
+  "signature": "UNSIGNED_INVALID_DO_NOT_SUBMIT"
+}

@@ -16,6 +16,10 @@
    target isolated. Application traffic remains disabled until separate operator approval and
    production replacement gate.
 
+Use [operations templates](../../docs/operations/templates/README.md) for preservation, cutover, and
+rollback artifacts. Restore readiness itself must be wrapper-produced signed evidence, never a
+hand-authored template.
+
 Weekly full, daily differential, and continuous WAL archiving are required. Run a monthly isolated
 restore/PITR drill. RPO/RTO are targets until those drills prove them.
 

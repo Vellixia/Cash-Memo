@@ -64,3 +64,30 @@ verify() {
   run verify
   [ "$status" -ne 0 ]
 }
+
+@test "restore verification rejects signed expired and future-issued evidence" {
+  write_restore_evidence
+  issued=$(date -u -v-899S +%Y-%m-%dT%H:%M:%SZ)
+  expired=$(date -u -v-898S +%Y-%m-%dT%H:%M:%SZ)
+  jq --arg issued "$issued" --arg expired "$expired" '.issued_at=$issued | .expires_at=$expired | .backup.fresh_at=$issued | .operator.approved_at=$issued | .approval.signed_at=$issued' "$evidence" >"$evidence.next" && mv "$evidence.next" "$evidence"
+  sign
+  run verify
+  [ "$status" -ne 0 ]
+  issued=$(date -u -v+60S +%Y-%m-%dT%H:%M:%SZ)
+  expires_future=$(date -u -v+120S +%Y-%m-%dT%H:%M:%SZ)
+  jq --arg issued "$issued" --arg expires "$expires_future" '.issued_at=$issued | .expires_at=$expires | .backup.fresh_at=$issued | .operator.approved_at=$issued | .approval.signed_at=$issued' "$evidence" >"$evidence.next" && mv "$evidence.next" "$evidence"
+  sign
+  run verify
+  [ "$status" -ne 0 ]
+}
+
+@test "restore template has exact schema and cannot pass unsigned" {
+  template="$repo/docs/operations/templates/backup-restore-readiness.json"
+  [ -f "$template" ]
+  jq -e 'keys == ["approval","backup","database","evidence_id","expires_at","isolation","issued_at","operator","pitr","replay_summary","schema_version","signature","target"] and .schema_version == 1' "$template" >/dev/null
+  run "$repo/scripts/verify-restore.sh" --evidence "$template" --target-id restore-1 --database-name cashmemo_restore --database-fingerprint sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  [ "$status" -ne 0 ]
+  [ -f "$repo/docs/operations/templates/production-cutover-approval.md" ]
+  [ -f "$repo/docs/operations/templates/rollback-reconciliation-decision.md" ]
+  grep -F 'templates/README.md' "$repo/infra/backup/restore-runbook.md" >/dev/null
+}

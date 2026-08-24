@@ -219,4 +219,94 @@ mod s3_integration {
         );
         assert!(!canonical_receipt_bytes(&receipt).unwrap().is_empty());
     }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn canonical_variants_and_wrong_receipt_keys_are_unreadable_and_never_purge(
+        pool: PgPool,
+    ) {
+        let config = receipt_config();
+        let client = client(&config).await;
+        let _ = client.create_bucket().bucket(&config.bucket).send().await;
+        let store = S3DeletionReceiptStore::connect(config.clone())
+            .await
+            .unwrap();
+        let users = [
+            restored_user(pool.clone(), "space").await,
+            restored_user(pool.clone(), "order").await,
+            restored_user(pool.clone(), "extra").await,
+        ];
+        let receipts = users
+            .iter()
+            .enumerate()
+            .map(|(index, user)| {
+                DeletionReceipt::new(
+                    hmac_user_id(&[4; 32], *user).unwrap(),
+                    Utc.with_ymd_and_hms(2026, 8, 21, 12, 10 + index as u32, 0)
+                        .unwrap(),
+                    4,
+                )
+            })
+            .collect::<Vec<_>>();
+        let canonical = receipts
+            .iter()
+            .map(|receipt| canonical_receipt_bytes(receipt).unwrap())
+            .collect::<Vec<_>>();
+        let ordered = format!(
+            "{{\"key_version\":4,\"purged_at\":\"2026-08-21T12:11:00Z\",\"hmac_user_id\":\"{}\"}}",
+            hex(&receipts[1].hmac_user_id)
+        );
+        let extra = format!(
+            "{{\"hmac_user_id\":\"{}\",\"purged_at\":\"2026-08-21T12:12:00Z\",\"key_version\":4,\"extra\":true}}",
+            hex(&receipts[2].hmac_user_id)
+        );
+        let variants = [
+            format!(" {} ", String::from_utf8(canonical[0].clone()).unwrap()).into_bytes(),
+            ordered.into_bytes(),
+            extra.into_bytes(),
+        ];
+        for (receipt, body) in receipts.iter().zip(variants) {
+            client
+                .put_object()
+                .bucket(&config.bucket)
+                .key(receipt_object_key(&config.prefix, receipt))
+                .body(ByteStream::from(body))
+                .send()
+                .await
+                .unwrap();
+        }
+        let wrong_version_key = format!(
+            "{}/v5/{}.json",
+            config.prefix,
+            hex(&receipts[0].hmac_user_id)
+        );
+        let wrong_hmac_key = format!("{}/v4/{}.json", config.prefix, "aa".repeat(32));
+        for key in [wrong_version_key, wrong_hmac_key] {
+            client
+                .put_object()
+                .bucket(&config.bucket)
+                .key(key)
+                .body(ByteStream::from(canonical[0].clone()))
+                .send()
+                .await
+                .unwrap();
+        }
+
+        let summary = replay_deletion_receipts(&pool, &store, &[(4, vec![4; 32])])
+            .await
+            .unwrap();
+        assert_eq!(summary.receipts_scanned, 5);
+        assert_eq!(summary.unreadable_receipts, 5);
+        assert_eq!(summary.users_purged, 0);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            3
+        );
+    }
+
+    fn hex(value: &[u8]) -> String {
+        value.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
 }

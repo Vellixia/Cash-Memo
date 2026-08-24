@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "evidence_id": "REPLACE_WITH_RESTORE_EVIDENCE_ID",
+  "issued_at": "REPLACE_WITH_UTC_RFC3339_SECONDS",
+  "expires_at": "REPLACE_WITH_UTC_RFC3339_SECONDS",
+  "target": { "class": "REPLACE_WITH_TARGET_CLASS", "id": "REPLACE_WITH_RESTORED_TARGET_ID" },
+  "database": {
+    "name": "REPLACE_WITH_RESTORED_DATABASE_NAME",
+    "fingerprint": "REPLACE_WITH_SHA256_RESTORED_DATABASE_FINGERPRINT"
+  },
+  "isolation": { "network_exposed": true, "application_traffic_enabled": true },
+  "backup": { "id": "REPLACE_WITH_BACKUP_ID", "fresh_at": "REPLACE_WITH_UTC_RFC3339_SECONDS" },
+  "pitr": { "verified": false, "proof_id": "REPLACE_WITH_PITR_PROOF_ID" },
+  "replay_summary": {
+    "receipts_scanned": -1,
+    "users_purged": -1,
+    "unreadable_receipts": -1,
+    "unprocessed_matches": -1
+  },
+  "operator": {
+    "id": "REPLACE_WITH_OPERATOR_ID",
+    "approved_at": "REPLACE_WITH_UTC_RFC3339_SECONDS"
+  },
+  "approval": {
+    "id": "REPLACE_WITH_APPROVAL_ID",
+    "identity": "REPLACE_WITH_APPROVER_IDENTITY",
+    "signed_at": "REPLACE_WITH_UTC_RFC3339_SECONDS"
+  },
+  "signature": "UNSIGNED_INVALID_DO_NOT_SUBMIT"
+}
