@@ -483,14 +483,25 @@ key, and second idempotent replay.
 - [ ] **Step 2: Run RED**
 
 ```bash
-docker compose -f infra/v1/test-compose.yml up -d --wait restored-postgres deletion-receipts
-receipt_port="$(docker compose -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
-export DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:54330/cashmemo_restore_e2e
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=56430
+docker compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml \
+  down --volumes --remove-orphans
+docker compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml \
+  up -d --wait restored-postgres deletion-receipts
+receipt_port="$(docker compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
+export DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:56430/cashmemo_restore_e2e
 export TEST_DELETION_RECEIPT_S3_ENDPOINT="http://127.0.0.1:${receipt_port}"
 export TEST_DELETION_RECEIPT_S3_BUCKET=cashmemo-v1-repair-task6
 export TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID=deletion-receipt-test
 export TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY=deletion-receipt-test-secret
 cargo test -p cashmemo-api --features s3-receipts --test deletion_receipt_replay -- --nocapture
+```
+
+On failure, inspect only named project:
+
+```bash
+docker compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml \
+  logs --no-color restored-postgres deletion-receipts
 ```
 
 - [ ] **Step 3: Replace all-key search with exact lookup**
@@ -502,8 +513,9 @@ afterward.
 - [ ] **Step 4: Run GREEN plus S3 receipt tests**
 
 ```bash
-receipt_port="$(docker compose -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
-export DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:54330/cashmemo_restore_e2e
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=56430
+receipt_port="$(docker compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
+export DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:56430/cashmemo_restore_e2e
 export TEST_DELETION_RECEIPT_S3_ENDPOINT="http://127.0.0.1:${receipt_port}"
 export TEST_DELETION_RECEIPT_S3_BUCKET=cashmemo-v1-repair-task6
 export TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID=deletion-receipt-test
@@ -514,8 +526,9 @@ cargo test -p cashmemo-api --test deletion_receipt_replay --test deletion_receip
 - [ ] **Step 5: Clean exact disposable services**
 
 ```bash
-docker compose -f infra/v1/test-compose.yml stop restored-postgres deletion-receipts
-docker compose -f infra/v1/test-compose.yml rm -f restored-postgres deletion-receipts
+docker compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml \
+  down --volumes --remove-orphans
+unset CASHMEMO_V1_RESTORE_POSTGRES_PORT
 unset DATABASE_URL TEST_DELETION_RECEIPT_S3_ENDPOINT TEST_DELETION_RECEIPT_S3_BUCKET
 unset TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY
 ```
@@ -814,13 +827,25 @@ git commit -S -m "fix: make recovery timestamps portable"
 
 **Interfaces:**
 
-- Produces pinned patched Node 24 Bookworm-slim base; runtime with Node/standalone only; exact Trivy
-  policy unchanged.
+- Produces pinned patched Node 24 Bookworm-slim base; runtime with Node/standalone only; no
+  npm/npx/Corepack commands or package-manager module trees; exact Trivy policy unchanged.
 
 - [ ] **Step 1: Preserve failing scan evidence and add RED runtime contract**
 
-The test script must fail current image because npm/npx/Corepack exist. It also starts container as
-non-root, requests app endpoint, and records image digest.
+The test script must fail current image because npm/npx/Corepack commands and package-manager module
+manifests exist. Its runtime assertions are exact:
+
+```sh
+command -v node
+! command -v npm
+! command -v npx
+! command -v corepack
+! test -e /usr/local/lib/node_modules/npm/package.json
+! test -e /usr/local/lib/node_modules/corepack/package.json
+test "$(id -u)" -ne 0
+```
+
+It then starts `node apps/web/server.js`, waits for HTTP success, and records image digest.
 
 ```bash
 docker build --pull -f infra/v1/web.Dockerfile -t cashmemo-web:repair-red .
@@ -853,11 +878,17 @@ trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 \
 If fixable OS CVE remains, identify exact package/fixed version and add only narrow repair. No
 blanket `apt-get upgrade`, ignore file, severity reduction, or undocumented suppression.
 
-- [ ] **Step 5: Remove runtime package-manager entry points deliberately**
+- [ ] **Step 5: Verify paths, then remove exact package-manager modules and entry points**
 
-Copy standalone server/runtime dependencies into clean non-root runtime stage. Remove only known
-npm/npx/Corepack entry points verified by `command -v`; do not recursively delete arbitrary Node
-directories. Keep `node apps/web/server.js` executable.
+Run pinned base with shell and record `command -v`/`readlink -f` for npm, npx, Corepack and package
+manifests under `/usr/local/lib/node_modules/npm` and `/usr/local/lib/node_modules/corepack`. If
+official image layout differs, record exact discovered package directories before changing
+Dockerfile. Then keep official Node runtime and Next standalone output while removing only verified
+package-manager module trees (`/usr/local/lib/node_modules/npm`,
+`/usr/local/lib/node_modules/corepack`) plus their verified npm/npx/Corepack shims. Remove
+package-manager shims such as yarn/pnpm only when they resolve into verified Corepack tree. Do not
+recursively delete `/usr/local/lib/node_modules`, `/usr/local/lib`, or other Node runtime
+directories. Keep `node` and `node apps/web/server.js` executable.
 
 - [ ] **Step 6: Run GREEN runtime and scan tests**
 
@@ -871,7 +902,9 @@ trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 \
 - [ ] **Step 7: Record built image digest and review Docker diff**
 
 Record `docker image inspect --format '{{index .RepoDigests 0}} {{.Id}}'` (fall back to image ID for
-local-only image), non-root/runtime results, Trivy result, exact narrow package repair if any.
+local-only image), node-present/package-manager-command-absent/package-manifest-absent results,
+non-root/Next runtime results, Trivy result, and exact narrow package repair if any. Trivy
+HIGH/CRITICAL remains authoritative.
 
 - [ ] **Step 8: Commit slice**
 
@@ -2040,6 +2073,10 @@ tracked changes.
 - [ ] **Step 2: Reset only named disposable verification project**
 
 ```bash
+export CASHMEMO_V1_E2E_POSTGRES_PORT=55429
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=55430
+export CASHMEMO_V1_E2E_SMTP_PORT=55125
+export CASHMEMO_V1_E2E_MAILPIT_PORT=58025
 docker compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml down --volumes --remove-orphans
 docker compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml up -d --wait \
   postgres restored-postgres mailpit deletion-receipts
@@ -2050,9 +2087,13 @@ This project name scopes cleanup. Do not stop/remove unrelated containers or vol
 - [ ] **Step 3: Export exact disposable test environment**
 
 ```bash
+export CASHMEMO_V1_E2E_POSTGRES_PORT=55429
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=55430
+export CASHMEMO_V1_E2E_SMTP_PORT=55125
+export CASHMEMO_V1_E2E_MAILPIT_PORT=58025
 receipt_port="$(docker compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
-export DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e
-export TEST_RESTORED_DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:54330/cashmemo_restore_e2e
+export DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:55429/cashmemo_e2e
+export TEST_RESTORED_DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:55430/cashmemo_restore_e2e
 export TEST_DELETION_RECEIPT_S3_ENDPOINT="http://127.0.0.1:${receipt_port}"
 export TEST_DELETION_RECEIPT_S3_BUCKET=cashmemo-v1-repair-task25
 export TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID=deletion-receipt-test
@@ -2062,7 +2103,11 @@ export TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY=deletion-receipt-test-secret
 - [ ] **Step 4: Run existing root gates only**
 
 ```bash
-export DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e
+export CASHMEMO_V1_E2E_POSTGRES_PORT=55429
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=55430
+export CASHMEMO_V1_E2E_SMTP_PORT=55125
+export CASHMEMO_V1_E2E_MAILPIT_PORT=58025
+export DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:55429/cashmemo_e2e
 pnpm toolchain:check
 pnpm install --frozen-lockfile
 pnpm verify
@@ -2075,9 +2120,13 @@ git diff --check
 - [ ] **Step 5: Run migration and feature-enabled receipt gates**
 
 ```bash
+export CASHMEMO_V1_E2E_POSTGRES_PORT=55429
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=55430
+export CASHMEMO_V1_E2E_SMTP_PORT=55125
+export CASHMEMO_V1_E2E_MAILPIT_PORT=58025
 receipt_port="$(docker compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml port deletion-receipts 9000 | sed 's/.*://')"
-export DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e
-export TEST_RESTORED_DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:54330/cashmemo_restore_e2e
+export DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:55429/cashmemo_e2e
+export TEST_RESTORED_DATABASE_URL=postgres://cashmemo_restore_e2e:cashmemo_restore_e2e@127.0.0.1:55430/cashmemo_restore_e2e
 export TEST_DELETION_RECEIPT_S3_ENDPOINT="http://127.0.0.1:${receipt_port}"
 export TEST_DELETION_RECEIPT_S3_BUCKET=cashmemo-v1-repair-task25
 export TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID=deletion-receipt-test
@@ -2128,7 +2177,13 @@ backup, receipt store, restore, deployment, and cutover remain NOT READY.
 - [ ] **Step 11: Clean exact disposable environment**
 
 ```bash
+export CASHMEMO_V1_E2E_POSTGRES_PORT=55429
+export CASHMEMO_V1_RESTORE_POSTGRES_PORT=55430
+export CASHMEMO_V1_E2E_SMTP_PORT=55125
+export CASHMEMO_V1_E2E_MAILPIT_PORT=58025
 docker compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml down --volumes --remove-orphans
+unset CASHMEMO_V1_E2E_POSTGRES_PORT CASHMEMO_V1_RESTORE_POSTGRES_PORT
+unset CASHMEMO_V1_E2E_SMTP_PORT CASHMEMO_V1_E2E_MAILPIT_PORT
 unset DATABASE_URL TEST_RESTORED_DATABASE_URL TEST_DELETION_RECEIPT_S3_ENDPOINT
 unset TEST_DELETION_RECEIPT_S3_BUCKET TEST_DELETION_RECEIPT_S3_ACCESS_KEY_ID
 unset TEST_DELETION_RECEIPT_S3_SECRET_ACCESS_KEY
