@@ -116,9 +116,13 @@ correct credentials + pending_deletion
 → /deletion without mounting /app
 ```
 
-`POST /api/v1/account/deletion/cancel` requires a `DeletionOnly` session and current password. One
-transaction locks the user, verifies password, confirms `pending_deletion`, activates the user,
-revokes every active session, and commits. Success expires `__Host-cashmemo_session`; the frontend
+`POST /api/v1/account/deletion/cancel` requires a valid `DeletionOnly` session and current password.
+The service first loads the current password hash and account state, then performs expensive
+Argon2id verification outside any database transaction. After successful verification it begins a
+transaction, locks the user row, confirms the account is still `pending_deletion`, and confirms the
+locked password hash/state matches the values that were verified. A changed hash or state fails the
+cancellation and requires re-authentication. Only then does the transaction activate the user,
+revoke every active session, and commit. Success expires `__Host-cashmemo_session`; the frontend
 clears private cache and returns to login. Fresh normal login is required for `Full` access.
 
 Wrong password leaves account pending and restricted session usable for another cancellation
@@ -191,8 +195,25 @@ Dashboard month is `?month=YYYY-MM`. Monthly summary, budget summary, and recent
 use it. Each currency owns independent income, expense, net, category composition, and budgets.
 There is no combined total or chart scale.
 
-Monthly category reporting adds server-derived `share_percent`; exact category expense remains a
-decimal string. React may convert only that derived percentage for visual bar width.
+Monthly category reporting adds server-derived `share_percent` as a decimal string with canonical
+scale 2 and range `0.00..100.00`. Rust derives it from exact category expense divided by exact total
+expense for that currency and rounds presentation only with
+`rust_decimal::RoundingStrategy::MidpointAwayFromZero`. Each category is rounded independently, so
+display percentages need not sum to exactly `100.00`. Example:
+
+```json
+{
+  "expense": "100000",
+  "share_percent": "33.33"
+}
+```
+
+React may convert only `share_percent` to a JS number for proportional bar width. Budget progress
+uses the same decimal-string scale and rounding convention where applicable, but remains
+nonnegative and may exceed `100.00`.
+
+Rust/OpenAPI exposes `share_percent` as `type: string` with scale/range description and examples;
+neither generated TypeScript nor JSON uses a floating-point percentage field.
 
 ## 8. Recurrence Anchors
 
@@ -229,6 +250,13 @@ requirements satisfied                  → completed; /app
 
 Archiving or hard-deleting the only wallet after completion never reopens onboarding.
 
+For new users, the backend sets `onboarding_completed_at` once initial onboarding succeeds. The
+additive migration deterministically backfills existing V1 users whose current state already has a
+configured timezone, configured default currency, and at least one active or archived wallet.
+Category seeding is reconciled idempotently. The exact backfill timestamp is not product-significant;
+the invariant is that applying the repair migration to a qualifying already-onboarded V1 database
+does not reopen onboarding. A real migration/integration test covers that upgrade path.
+
 Wallet archive invalidates wallet list, recurring list, and entry defaults. Restore invalidates
 wallet/default queries but never resumes recurrence. Opening-balance edit invalidates wallet queries
 only.
@@ -256,13 +284,21 @@ CASHMEMO_V1_TRUSTED_PROXY_CIDRS
 ```
 
 Empty trusts nobody. Forwarded addresses are inspected only when direct TCP peer is trusted.
-Effective chain is `X-Forwarded-For + direct peer`; parser accepts IP literals only, maximum 2048
-header bytes and 16 forwarded hops. Walk right-to-left, strip configured trusted proxies, choose
-first untrusted address. A trusted address somewhere inside the header grants no trust.
+Effective chain is `X-Forwarded-For + direct peer`. Traefik must sanitize/overwrite forwarding
+headers from untrusted clients or safely append the actual remote address. Its HTTP configuration
+rejects forwarding headers above 8192 bytes before they reach Rust.
 
-Direct untrusted requests ignore forwarding headers. Malformed/excessive trusted-peer input falls
-back to direct peer without unbounded work. Identifier limiting remains separate. Deployment
-verification documents actual Traefik forwarding behavior and Axum peer propagation.
+Rust walks the chain right-to-left, strips configured trusted proxies, and chooses the first valid
+untrusted IP literal. It inspects at most the rightmost 2048 bytes and 16 hops. Once that client hop
+is established, it does not parse attacker-controlled entries farther left. Therefore a malformed
+or spoofed left prefix cannot turn an identifiable real client into the shared Traefik address. A
+trusted address somewhere inside the header grants no trust.
+
+Direct untrusted requests ignore forwarding headers. If a request arriving from a trusted proxy has
+no trustworthy client hop within the bounded suffix, Rust rejects that individual auth request as
+invalid forwarding metadata instead of assigning the shared proxy IP bucket or calling the auth
+handler. Identifier limiting remains separate. Deployment verification documents and tests actual
+Traefik sanitization/append behavior, header limits, and Axum peer propagation.
 
 ## 12. Readiness
 
@@ -358,9 +394,11 @@ Recurring, Settings. Mobile: Overview, Transactions, Add, Budgets, More. Add alw
 safe-area padding, visual separation, and matching content inset.
 
 Deletion-only mode never mounts normal shell, financial prefetch, sidebar, bottom navigation, or
-settings navigation. Authenticated content stays `no-store`; no financial/session data enters
-persistent browser storage. Logout, expiry, deletion request, and cancellation clear private query
-state before navigation.
+settings navigation. Authenticated HTTP/RSC/API content stays `no-store`. No financial data or
+auth/session token is persisted in localStorage, sessionStorage, IndexedDB, or CacheStorage/service
+worker data caches. The only browser-managed authentication credential is the server-issued
+`Secure`, `HttpOnly`, `SameSite` `__Host-cashmemo_session` cookie. Logout, expiry, deletion request,
+and cancellation clear private query state before navigation.
 
 React Hook Form owns form state, Zod mirrors immediate UX validation, and Rust stays authoritative.
 Labels remain visible; errors link to fields; pending state prevents duplicate submission. Desktop
@@ -451,8 +489,8 @@ already-excluded trashed item normally invalidates Trash/history only.
 
 Settings groups Preferences, Sessions/security, and Delete account. Default-currency copy states it
 changes creation defaults only, never conversion/recomputation. Sign out revokes current session;
-logout all revokes every session with confirmation. Both clear cookie/cache. No fingerprint/IP/
-geography/device-label expansion.
+logout all revokes every session with confirmation. Both clear cookie/cache. No fingerprint, IP,
+geography, or device-label expansion.
 
 Account deletion is serious, direct, and non-manipulative. It shows Rust deadline and distinguishes
 live-data purge from backup retention. Separate `/deletion` may reuse harmless UI primitives but not
@@ -466,17 +504,20 @@ AppShell/financial providers. It offers only password-confirmed cancellation and
 - Opening-balance edit: wallet queries only.
 - Wallet archive: wallet, recurring, entry defaults; restore: wallet/default only.
 - Category archive: category and recurring; restore: category only.
-- Timezone change: reporting/history/future recurrence presentation, never persistence rewrites.
+- Timezone change: profile/preferences, transaction entry defaults, transaction/history display,
+  monthly dashboard summary, budget/current-month views, month-scoped recent transactions, and any
+  mounted form whose displayed local datetime depends on timezone. Recurrence persistence is never
+  rewritten.
 - Default currency: preferences and new-resource defaults only.
 
 Authoritative financial totals are never invented optimistically.
 
 ## 22. Accessibility and Slice Completion
 
-Every UI slice must verify real hierarchy, realistic content, loading/empty/API-error/validation/
-success states, mobile/desktop, keyboard, visible focus, overlay trap/restoration, accessible names,
-linked errors, non-color-only meaning, proportional destructive behavior, reduced motion, contrast,
-and no duplicated business rule.
+Every UI slice must verify real hierarchy, realistic content, loading, empty, API-error, validation,
+and success states; mobile and desktop layouts; keyboard use; visible focus; overlay trap/restoration;
+accessible names; linked errors; non-color-only meaning; proportional destructive behavior; reduced
+motion; contrast; and no duplicated business rule.
 
 Skeletons stabilize meaningful regions without pixel-perfect ghosts. Motion never carries meaning.
 The final audit adds 200% zoom, text enlargement where practical, no horizontal overflow, sticky-nav
@@ -492,6 +533,15 @@ Required regressions include cancellation password/session behavior; browser/pro
 mismatch; history/report boundary agreement; Jan-31, Jan-30, Feb-29, weekly and long-pause anchors;
 opening-balance balance-only effect; exact receipt key version; proxy parser and HTTP topology;
 readiness target states; request-ID consistency; and corrupt-scale errors.
+
+Trusted-proxy HTTP tests include direct spoof ignored, trusted chain resolved, malformed/excessive
+metadata rejected safely, two real clients behind one proxy receiving distinct buckets, and the
+production-like case where an attacker supplies a malformed/spoofed left-side XFF prefix while
+trusted Traefik sanitizes or appends the actual remote address. Rust must still resolve the actual
+remote without parsing the hostile prefix or collapsing unrelated users into the proxy bucket.
+
+Migration tests apply the additive onboarding migration to a qualifying existing V1 account and
+prove `onboarding_completed_at` is backfilled and onboarding does not reopen.
 
 Vitest/RTL covers forms, rendering, invalidation, restricted shell, exact-safe display, and UI
 states. Playwright stays high-value: fragment auth, onboarding, transaction cross-timezone, history,
@@ -602,8 +652,8 @@ Begin with tracked tree clean, no stale generated diff/services/test DB/volumes,
 `.serena/` untouched/reported. Start fresh disposable PostgreSQL, Mailpit, and S3-compatible receipt
 storage.
 
-Run pinned toolchain checks and all Rust fmt/Clippy/tests/PostgreSQL/release-S3, frontend lint/
-typecheck/Vitest/build, OpenAPI/Orval drift, Playwright, migration safety, preservation/recovery,
+Run pinned toolchain checks and all Rust fmt/Clippy/tests/PostgreSQL/release-S3, frontend lint,
+typecheck, Vitest, build, OpenAPI/Orval drift, Playwright, migration safety, preservation/recovery,
 dependency audit, API/web Docker+Trivy, canonical-layout, and `git diff --check` gates. Clean
 disposable services/volumes afterward.
 
@@ -626,7 +676,7 @@ After local green:
 A PR merge-result proves integration against its recorded base, not isolated head. If `main` moves,
 mergeability, diff, merge-result CI, and relevant review evidence become stale and must repeat.
 
-Required hosted jobs include Rust fmt/Clippy/PostgreSQL/release-S3, frontend lint/typecheck/Vitest/
+Required hosted jobs include Rust fmt/Clippy/PostgreSQL/release-S3, frontend lint, typecheck, Vitest,
 build, OpenAPI/Orval, real-stack Playwright, migration safety, preservation/recovery, dependency
 audit, and both Docker/Trivy jobs.
 
@@ -644,7 +694,10 @@ B. exact-current-main...repaired-head plus tested merge result
 
 Review emphasizes auth/session lifecycle, ownership, money, timezone, recurrence, data lifecycle,
 migration protection, caching/privacy, generated API, CI/infrastructure, UI shell, accessibility,
-and Task 26 executable-configuration/whitespace changes. Controller verifies findings independently.
+and original PR Task 26 changes—especially executable-configuration commit `b2c89dc` and
+whitespace/configuration commit `d9171ec`. “Task 26” here refers to original PR implementation work,
+not Section 26 (Visual Review) of this repair specification. Controller verifies findings
+independently.
 
 Any unresolved required finding returns to repair and CI. Only resolved findings plus current-target
 green evidence permits `READY FOR HUMAN MERGE REVIEW`.
