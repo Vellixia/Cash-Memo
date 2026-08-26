@@ -98,6 +98,10 @@ async fn history_rejects_invalid_bounds_and_untrusted_cursors(pool: PgPool) {
         "/api/v1/transactions?limit=0",
         "/api/v1/transactions?limit=101",
         "/api/v1/transactions?cursor=not-base64url",
+        "/api/v1/transactions?from=2026-04-01T00:00:00Z",
+        "/api/v1/transactions?from=%202026-04-01%20",
+        "/api/v1/transactions?from=2026-4-01",
+        "/api/v1/transactions?to=2026-04-1",
         &format!("/api/v1/transactions?q={}", "x".repeat(101)),
     ] {
         let response = app.clone().oneshot(request(uri, &cookie)).await.unwrap();
@@ -160,7 +164,7 @@ async fn history_filters_literal_search_future_rows_and_trash_without_cross_user
     .await;
     let app = build_app(AppState { pool });
 
-    let active_page = response_json(app.clone().oneshot(request(&format!("/api/v1/transactions?wallet_id={owner_wallet}&category_id={owner_category}&type=expense&from=2030-01-01T00:00:00Z&to=2030-01-03T00:00:00Z&q=%20Future%20100%25_%5C%20%20"), &owner_cookie)).await.unwrap()).await;
+    let active_page = response_json(app.clone().oneshot(request(&format!("/api/v1/transactions?wallet_id={owner_wallet}&category_id={owner_category}&type=expense&from=2030-01-01&to=2030-01-03&q=%20Future%20100%25_%5C%20%20"), &owner_cookie)).await.unwrap()).await;
     assert_eq!(ids(&active_page), vec![active]);
     let trash_page = response_json(
         app.clone()
@@ -252,6 +256,106 @@ async fn history_searches_owned_wallet_and_category_names_literally_in_active_an
         .await;
         assert_eq!(ids(&trash_page), vec![trashed], "trash query: {query}");
     }
+}
+
+#[sqlx::test(migrations = false)]
+async fn history_uses_inclusive_user_local_dates_and_current_reference_names(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "history-local-date@example.test").await;
+    sqlx::query("UPDATE users SET timezone = 'Asia/Jakarta' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let wallet = insert_wallet(&pool, user_id).await;
+    let category = insert_category(&pool, user_id).await;
+    set_wallet_name(&pool, user_id, wallet, "Travel Cash").await;
+    set_category_name(&pool, user_id, category, "Dining").await;
+    let before = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "2026-04-01T16:59:59Z".parse().unwrap(),
+        "before Jakarta day",
+        false,
+    )
+    .await;
+    let included = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "2026-04-01T17:00:00Z".parse().unwrap(),
+        "Jakarta day start",
+        false,
+    )
+    .await;
+    let after = insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "2026-04-02T17:00:00Z".parse().unwrap(),
+        "next Jakarta day start",
+        false,
+    )
+    .await;
+    let app = build_app(AppState { pool });
+
+    let response = app
+        .oneshot(request(
+            "/api/v1/transactions?from=2026-04-02&to=2026-04-02",
+            &cookie,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let page = response_json(response).await;
+    assert_eq!(ids(&page), vec![included]);
+    assert!(!ids(&page).contains(&before));
+    assert!(!ids(&page).contains(&after));
+    assert_eq!(page["items"][0]["wallet_name"], "Travel Cash");
+    assert_eq!(page["items"][0]["category_name"], "Dining");
+}
+
+#[sqlx::test(migrations = false)]
+async fn history_returns_empty_for_fully_skipped_local_date(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "history-skipped-date@example.test").await;
+    sqlx::query("UPDATE users SET timezone = 'Pacific/Apia' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let wallet = insert_wallet(&pool, user_id).await;
+    let category = insert_category(&pool, user_id).await;
+    insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "2011-12-30T10:00:00Z".parse().unwrap(),
+        "first instant after skipped date",
+        false,
+    )
+    .await;
+    let app = build_app(AppState { pool });
+
+    let response = app
+        .oneshot(request(
+            "/api/v1/transactions?from=2011-12-30&to=2011-12-30",
+            &cookie,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        response_json(response).await["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 async fn authenticated_user(pool: &PgPool, email: &str) -> (Uuid, String) {

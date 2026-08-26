@@ -9,7 +9,10 @@ use uuid::Uuid;
 use crate::{
     currency::CurrencyCode,
     money::Money,
-    time::{UserTimezone, parse_local_minute, resolve_manual_local},
+    time::{
+        UserTimezone, first_valid_instant_at_or_after_midnight, local_date_range,
+        parse_local_minute, resolve_manual_local,
+    },
 };
 
 use super::query::{HistoryCursor, HistoryQuery};
@@ -69,7 +72,9 @@ pub struct UpdateTransaction {
 pub struct Transaction {
     pub id: Uuid,
     pub wallet_id: Uuid,
+    pub wallet_name: String,
     pub category_id: Uuid,
+    pub category_name: String,
     pub direction: TransactionDirection,
     pub amount: String,
     pub currency: CurrencyCode,
@@ -121,7 +126,9 @@ impl TransactionDirection {
 struct TransactionRow {
     id: Uuid,
     wallet_id: Uuid,
+    wallet_name: String,
     category_id: Uuid,
+    category_name: String,
     transaction_type: String,
     amount: Decimal,
     currency_code: String,
@@ -198,6 +205,7 @@ impl TransactionService {
         query: HistoryQuery,
         include_trash: bool,
     ) -> Result<HistoryPage, TransactionError> {
+        let (from, to) = self.history_bounds(user_id, query.from, query.to).await?;
         let transaction_type = query
             .transaction_type
             .map(TransactionDirection::database_value);
@@ -205,8 +213,8 @@ impl TransactionService {
         let cursor_id = query.cursor.as_ref().map(|cursor| cursor.id);
         let mut rows: Vec<TransactionRow> = sqlx::query_as(history_query(include_trash))
             .bind(user_id)
-            .bind(query.from)
-            .bind(query.to)
+            .bind(from)
+            .bind(to)
             .bind(transaction_type)
             .bind(query.wallet_id)
             .bind(query.category_id)
@@ -232,6 +240,44 @@ impl TransactionService {
             .map(Transaction::try_from)
             .collect::<Result<_, _>>()?;
         Ok(HistoryPage { items, next_cursor })
+    }
+
+    async fn history_bounds(
+        &self,
+        user_id: Uuid,
+        from: Option<chrono::NaiveDate>,
+        to: Option<chrono::NaiveDate>,
+    ) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>), TransactionError> {
+        if from.is_none() && to.is_none() {
+            return Ok((None, None));
+        }
+        let timezone: String = sqlx::query_scalar("SELECT timezone FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| TransactionError::Persistence)?
+            .ok_or(TransactionError::NotFound)?;
+        let timezone = UserTimezone::parse(&timezone).map_err(|_| TransactionError::Persistence)?;
+        match (from, to) {
+            (Some(from), Some(to)) => local_date_range(timezone.timezone(), from, to)
+                .map(|(start, end)| (Some(start), Some(end)))
+                .map_err(|_| TransactionError::Persistence),
+            (Some(from), None) => {
+                first_valid_instant_at_or_after_midnight(timezone.timezone(), from)
+                    .map(|start| (Some(start), None))
+                    .map_err(|_| TransactionError::Persistence)
+            }
+            (None, Some(to)) => {
+                to.succ_opt()
+                    .ok_or(TransactionError::Persistence)
+                    .and_then(|end| {
+                        first_valid_instant_at_or_after_midnight(timezone.timezone(), end)
+                            .map(|end| (None, Some(end)))
+                            .map_err(|_| TransactionError::Persistence)
+                    })
+            }
+            (None, None) => Ok((None, None)),
+        }
     }
 
     pub async fn update(
@@ -550,10 +596,11 @@ async fn load_for_update(
 
 fn transaction_query(filter: &str) -> String {
     format!(
-        "SELECT t.id, t.wallet_id, t.category_id, t.transaction_type::TEXT AS transaction_type,
+        "SELECT t.id, t.wallet_id, w.name AS wallet_name, t.category_id, category.name AS category_name, t.transaction_type::TEXT AS transaction_type,
                 t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
          FROM transactions t
          JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
+         JOIN categories category ON (category.user_id, category.id) = (t.user_id, t.category_id)
          JOIN currencies c ON c.code = w.currency_code
          {filter}"
     )
@@ -561,7 +608,7 @@ fn transaction_query(filter: &str) -> String {
 
 fn history_query(include_trash: bool) -> &'static str {
     if include_trash {
-        "SELECT t.id, t.wallet_id, t.category_id, t.transaction_type::TEXT AS transaction_type,
+        "SELECT t.id, t.wallet_id, w.name AS wallet_name, t.category_id, category.name AS category_name, t.transaction_type::TEXT AS transaction_type,
                 t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
          FROM transactions t
          JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
@@ -569,7 +616,7 @@ fn history_query(include_trash: bool) -> &'static str {
          JOIN currencies c ON c.code = w.currency_code
          WHERE t.user_id = $1 AND t.deleted_at IS NOT NULL
            AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
-           AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at <= $3)
+           AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at < $3)
            AND ($4::TEXT IS NULL OR t.transaction_type::TEXT = $4)
            AND ($5::UUID IS NULL OR t.wallet_id = $5)
            AND ($6::UUID IS NULL OR t.category_id = $6)
@@ -580,7 +627,7 @@ fn history_query(include_trash: bool) -> &'static str {
          ORDER BY t.occurred_at DESC, t.id DESC
          LIMIT $10"
     } else {
-        "SELECT t.id, t.wallet_id, t.category_id, t.transaction_type::TEXT AS transaction_type,
+        "SELECT t.id, t.wallet_id, w.name AS wallet_name, t.category_id, category.name AS category_name, t.transaction_type::TEXT AS transaction_type,
                 t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
          FROM transactions t
          JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
@@ -588,7 +635,7 @@ fn history_query(include_trash: bool) -> &'static str {
          JOIN currencies c ON c.code = w.currency_code
          WHERE t.user_id = $1 AND t.deleted_at IS NULL
            AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
-           AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at <= $3)
+           AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at < $3)
            AND ($4::TEXT IS NULL OR t.transaction_type::TEXT = $4)
            AND ($5::UUID IS NULL OR t.wallet_id = $5)
            AND ($6::UUID IS NULL OR t.category_id = $6)
@@ -609,7 +656,9 @@ impl TryFrom<TransactionRow> for Transaction {
         Ok(Self {
             id: row.id,
             wallet_id: row.wallet_id,
+            wallet_name: row.wallet_name,
             category_id: row.category_id,
+            category_name: row.category_name,
             direction: TransactionDirection::from_database(&row.transaction_type)?,
             amount: format_amount(row.amount, exponent),
             currency: CurrencyCode::parse(&row.currency_code)

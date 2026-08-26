@@ -128,15 +128,8 @@ async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and
     create_budget(&app, &cookie, food, "USD", "2026-03", "10.00").await;
     create_budget(&app, &cookie, travel, "EUR", "2026-04", "10.00").await;
 
-    let transaction = create_transaction(
-        &app,
-        &cookie,
-        usd_wallet,
-        food,
-        "1.50",
-        "2026-03-31T23:00:00Z",
-    )
-    .await;
+    let transaction =
+        create_transaction(&app, &cookie, usd_wallet, food, "1.50", "2026-03-31T23:00").await;
     assert_eq!(summary_spent(&app, &cookie, "2026-03").await, "1.50");
 
     let moved = app
@@ -151,7 +144,7 @@ async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and
             Some(json!({
                 "wallet_id": eur_wallet,
                 "category_id": travel,
-                "occurred_at": "2026-04-01T00:00:00Z"
+                "occurred_local": "2026-04-01T00:00"
             })),
         ))
         .await
@@ -431,7 +424,7 @@ async fn create_transaction(
     wallet_id: Uuid,
     category_id: Uuid,
     amount: &str,
-    occurred_at: &str,
+    occurred_local: &str,
 ) -> Value {
     response_json(
         app.clone()
@@ -439,7 +432,7 @@ async fn create_transaction(
                 "POST",
                 "/api/v1/transactions",
                 cookie,
-                Some(json!({ "wallet_id": wallet_id, "category_id": category_id, "direction": "expense", "amount": amount, "occurred_at": occurred_at })),
+                Some(json!({ "wallet_id": wallet_id, "category_id": category_id, "direction": "expense", "amount": amount, "occurred_local": occurred_local })),
             ))
             .await
             .unwrap(),

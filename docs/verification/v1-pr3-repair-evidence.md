@@ -46,3 +46,29 @@ Result: 29 tests passed.
 `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test transactions --test ownership`
 
 Result: 13 tests passed.
+
+## Local-calendar history and reporting contract
+
+- History accepts exact `YYYY-MM-DD` `from` and `to` values as inclusive user-local dates, then
+  applies half-open UTC bounds. Jakarta boundary fixtures prove inclusion at local midnight and
+  exclusion at next-day midnight; Pacific/Apia's skipped 2011-12-30 resolves to an empty range.
+- History and recent transaction reads return current wallet and category names while retaining
+  user-scoped joins and stable cursor ordering.
+- Monthly summary, selected-month recent transactions, and budget summary share local-calendar
+  month boundaries. Reports exclude future transactions.
+- Expense-category shares use decimal division, midpoint-away-from-zero rounding, clamping to
+  `0.00..100.00`, and an exact two-decimal string representation.
+
+## Local-calendar verification
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test history -- --nocapture`
+
+Result: 6 tests passed.
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test reporting -- --nocapture`
+
+Result: 5 tests passed.
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test history --test reporting --test budgets`
+
+Result: 16 tests passed.

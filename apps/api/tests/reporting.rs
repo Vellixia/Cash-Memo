@@ -128,13 +128,13 @@ async fn monthly_summary_partitions_currency_and_aggregates_exact_decimal_string
             "currencies": [
                 {
                     "currency": "EUR", "income": "0.00", "expense": "8.00", "net": "-8.00",
-                    "expense_categories": [{ "category_id": food, "name": "Food", "expense": "8.00" }]
+                    "expense_categories": [{ "category_id": food, "name": "Food", "expense": "8.00", "share_percent": "100.00" }]
                 },
                 {
                     "currency": "USD", "income": "100.00", "expense": "40.75", "net": "59.25",
                     "expense_categories": [
-                        { "category_id": food, "name": "Food", "expense": "20.75" },
-                        { "category_id": travel, "name": "Travel", "expense": "20.00" }
+                        { "category_id": food, "name": "Food", "expense": "20.75", "share_percent": "50.92" },
+                        { "category_id": travel, "name": "Travel", "expense": "20.00", "share_percent": "49.08" }
                     ]
                 }
             ]
@@ -273,6 +273,144 @@ async fn recent_transactions_are_active_current_and_owned_but_history_keeps_futu
         StatusCode::FORBIDDEN,
         "reporting reads require a full-access session"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn monthly_summary_agrees_with_history_local_month_and_rounds_category_shares(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let app = build_app(AppState { pool: pool.clone() });
+    let (user_id, cookie) =
+        authenticated_user(&pool, "reporting-local-month@example.test", "Asia/Jakarta").await;
+    let dining = insert_category(&pool, user_id, "EXPENSE", "Dining").await;
+    let travel = insert_category(&pool, user_id, "EXPENSE", "Travel").await;
+    let wallet = insert_wallet(&pool, user_id, "USD").await;
+    for (category, amount, occurred_at) in [
+        (dining, "1.00", "2026-04-01T17:00:00Z"),
+        (travel, "2.00", "2026-04-30T16:59:59Z"),
+        (dining, "9.00", "2026-04-30T17:00:00Z"),
+    ] {
+        insert_transaction(
+            &pool,
+            user_id,
+            wallet,
+            category,
+            "EXPENSE",
+            amount,
+            occurred_at,
+            None,
+        )
+        .await;
+    }
+
+    let history = get(
+        &app,
+        &cookie,
+        "/api/v1/transactions?from=2026-04-02&to=2026-04-30",
+    )
+    .await;
+    assert_eq!(history.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(history).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let summary = response_json(
+        get(
+            &app,
+            &cookie,
+            "/api/v1/reports/monthly-summary?month=2026-04",
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(summary["currencies"][0]["expense"], "3.00");
+    assert_eq!(
+        summary["currencies"][0]["expense_categories"][0]["share_percent"],
+        "66.67"
+    );
+    assert_eq!(
+        summary["currencies"][0]["expense_categories"][1]["share_percent"],
+        "33.33"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn recent_transactions_filters_selected_local_month_excludes_future_and_reads_current_names(
+    pool: PgPool,
+) {
+    support::migrate_v1(&pool).await;
+    let app = build_app(AppState { pool: pool.clone() });
+    let (user_id, cookie) =
+        authenticated_user(&pool, "recent-local-month@example.test", "Asia/Jakarta").await;
+    let category = insert_category(&pool, user_id, "EXPENSE", "Original").await;
+    let wallet = insert_wallet(&pool, user_id, "USD").await;
+    sqlx::query("UPDATE wallets SET name = 'Travel Cash' WHERE user_id = $1 AND id = $2")
+        .bind(user_id)
+        .bind(wallet)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE categories SET name = 'Dining', normalized_name = 'dining' WHERE user_id = $1 AND id = $2",
+    )
+    .bind(user_id)
+    .bind(category)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let now = Utc::now();
+    let month = now
+        .with_timezone(&chrono_tz::Asia::Jakarta)
+        .format("%Y-%m")
+        .to_string();
+    insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "EXPENSE",
+        "1.00",
+        &(now - Duration::minutes(2)).to_rfc3339(),
+        None,
+    )
+    .await;
+    insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "EXPENSE",
+        "2.00",
+        &(now + Duration::days(1)).to_rfc3339(),
+        None,
+    )
+    .await;
+    insert_transaction(
+        &pool,
+        user_id,
+        wallet,
+        category,
+        "EXPENSE",
+        "3.00",
+        &(now - Duration::days(40)).to_rfc3339(),
+        None,
+    )
+    .await;
+
+    let recent = get(
+        &app,
+        &cookie,
+        &format!("/api/v1/transactions/recent?month={month}"),
+    )
+    .await;
+    assert_eq!(recent.status(), StatusCode::OK);
+    let recent = response_json(recent).await;
+    assert_eq!(recent["items"].as_array().unwrap().len(), 1);
+    assert_eq!(recent["items"][0]["wallet_name"], "Travel Cash");
+    assert_eq!(recent["items"][0]["category_name"], "Dining");
 }
 
 async fn authenticated_user(pool: &PgPool, email: &str, timezone: &str) -> (Uuid, String) {

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use chrono_tz::Tz;
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     currency::{CurrencyCode, CurrencyRepository},
     money::Money,
+    time::local_month_range,
 };
 
 #[derive(Clone)]
@@ -224,7 +225,9 @@ impl BudgetService {
             .await
             .map_err(|_| BudgetError::Persistence)?
             .ok_or(BudgetError::NotFound)?;
-        let (start, end) = month_bounds(month, &timezone)?;
+        let timezone: Tz = timezone.parse().map_err(|_| BudgetError::Persistence)?;
+        let (start, end) =
+            local_month_range(timezone, month).map_err(|_| BudgetError::Persistence)?;
         let rows: Vec<SummaryRow> = sqlx::query_as(
             "SELECT b.id, b.category_id, b.currency_code, b.amount, c.exponent,
                     COALESCE((
@@ -333,81 +336,6 @@ fn parse_month(input: &str) -> Result<NaiveDate, BudgetError> {
         .parse::<u32>()
         .map_err(|_| BudgetError::InvalidMonth)?;
     NaiveDate::from_ymd_opt(year, month, 1).ok_or(BudgetError::InvalidMonth)
-}
-
-fn month_bounds(
-    month: NaiveDate,
-    timezone: &str,
-) -> Result<(DateTime<Utc>, DateTime<Utc>), BudgetError> {
-    let timezone: Tz = timezone.parse().map_err(|_| BudgetError::Persistence)?;
-    let next = if month.month() == 12 {
-        NaiveDate::from_ymd_opt(month.year() + 1, 1, 1)
-    } else {
-        NaiveDate::from_ymd_opt(month.year(), month.month() + 1, 1)
-    }
-    .ok_or(BudgetError::InvalidMonth)?;
-    let start = resolve_local_boundary(
-        timezone,
-        month
-            .and_hms_opt(0, 0, 0)
-            .ok_or(BudgetError::InvalidMonth)?,
-    )?;
-    let end = resolve_local_boundary(
-        timezone,
-        next.and_hms_opt(0, 0, 0).ok_or(BudgetError::InvalidMonth)?,
-    )?;
-    Ok((start, end))
-}
-
-fn resolve_local_boundary(
-    timezone: Tz,
-    requested: NaiveDateTime,
-) -> Result<DateTime<Utc>, BudgetError> {
-    match timezone.from_local_datetime(&requested) {
-        LocalResult::Single(value) => Ok(value.with_timezone(&Utc)),
-        LocalResult::Ambiguous(first, second) => Ok(first.min(second).with_timezone(&Utc)),
-        LocalResult::None => resolve_nonexistent_local_boundary(timezone, requested),
-    }
-}
-
-fn resolve_nonexistent_local_boundary(
-    timezone: Tz,
-    requested: NaiveDateTime,
-) -> Result<DateTime<Utc>, BudgetError> {
-    let mut missing_seconds = 0_i64;
-    let mut valid_seconds = 1_i64;
-    while matches!(
-        timezone.from_local_datetime(&add_seconds(requested, valid_seconds)?),
-        LocalResult::None
-    ) {
-        missing_seconds = valid_seconds;
-        valid_seconds = valid_seconds
-            .checked_mul(2)
-            .filter(|seconds| *seconds <= 172_800)
-            .ok_or(BudgetError::Persistence)?;
-    }
-    while valid_seconds - missing_seconds > 1 {
-        let middle = missing_seconds + (valid_seconds - missing_seconds) / 2;
-        if matches!(
-            timezone.from_local_datetime(&add_seconds(requested, middle)?),
-            LocalResult::None
-        ) {
-            missing_seconds = middle;
-        } else {
-            valid_seconds = middle;
-        }
-    }
-    match timezone.from_local_datetime(&add_seconds(requested, valid_seconds)?) {
-        LocalResult::Single(value) => Ok(value.with_timezone(&Utc)),
-        LocalResult::Ambiguous(first, second) => Ok(first.min(second).with_timezone(&Utc)),
-        LocalResult::None => Err(BudgetError::Persistence),
-    }
-}
-
-fn add_seconds(value: NaiveDateTime, seconds: i64) -> Result<NaiveDateTime, BudgetError> {
-    value
-        .checked_add_signed(Duration::seconds(seconds))
-        .ok_or(BudgetError::Persistence)
 }
 
 fn positive_amount(input: &str, exponent: u32) -> Result<Decimal, BudgetError> {

@@ -1,5 +1,5 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -26,8 +26,8 @@ pub struct RawHistoryQuery {
 
 #[derive(Debug)]
 pub struct HistoryQuery {
-    pub from: Option<DateTime<Utc>>,
-    pub to: Option<DateTime<Utc>>,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
     pub transaction_type: Option<TransactionDirection>,
     pub wallet_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
@@ -49,8 +49,8 @@ pub struct QueryError {
 
 impl RawHistoryQuery {
     pub fn parse(self) -> Result<HistoryQuery, QueryError> {
-        let from = parse_instant(self.from, "from")?;
-        let to = parse_instant(self.to, "to")?;
+        let from = parse_date(self.from, "from")?;
+        let to = parse_date(self.to, "to")?;
         if matches!((&from, &to), (Some(from), Some(to)) if from > to) {
             return Err(QueryError { field: "to" });
         }
@@ -141,15 +141,21 @@ struct CursorPayload {
     id: Uuid,
 }
 
-fn parse_instant(
-    value: Option<String>,
-    field: &'static str,
-) -> Result<Option<DateTime<Utc>>, QueryError> {
+fn parse_date(value: Option<String>, field: &'static str) -> Result<Option<NaiveDate>, QueryError> {
     value
         .map(|value| {
-            DateTime::parse_from_rfc3339(value.trim())
-                .map(|value| value.with_timezone(&Utc))
-                .map_err(|_| QueryError { field })
+            let bytes = value.as_bytes();
+            if bytes.len() != 10
+                || bytes[4] != b'-'
+                || bytes[7] != b'-'
+                || !bytes
+                    .iter()
+                    .enumerate()
+                    .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit())
+            {
+                return Err(QueryError { field });
+            }
+            NaiveDate::parse_from_str(&value, "%Y-%m-%d").map_err(|_| QueryError { field })
         })
         .transpose()
 }

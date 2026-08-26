@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use chrono_tz::Tz;
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{currency::CurrencyCode, transactions::Transaction};
+use crate::{currency::CurrencyCode, time::local_month_range, transactions::Transaction};
 
 #[derive(Clone)]
 pub struct ReportingQueries {
@@ -43,6 +43,7 @@ pub struct ExpenseCategorySummary {
     pub category_id: Uuid,
     pub name: String,
     pub expense: String,
+    pub share_percent: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -71,7 +72,9 @@ struct CategoryRow {
 struct RecentRow {
     id: Uuid,
     wallet_id: Uuid,
+    wallet_name: String,
     category_id: Uuid,
+    category_name: String,
     transaction_type: String,
     amount: Decimal,
     currency_code: String,
@@ -97,7 +100,8 @@ impl ReportingQueries {
             .map(parse_month)
             .transpose()?
             .unwrap_or_else(|| current_month(timezone));
-        let (start, end) = month_bounds(month, timezone)?;
+        let (start, end) =
+            local_month_range(timezone, month).map_err(|_| ReportingError::Persistence)?;
         let totals: Vec<TotalsRow> = sqlx::query_as(
             "SELECT w.currency_code, c.exponent,
                     COALESCE(SUM(t.amount) FILTER (WHERE t.transaction_type = 'INCOME'), 0) AS income,
@@ -133,30 +137,38 @@ impl ReportingQueries {
         .fetch_all(&self.pool)
         .await
         .map_err(|_| ReportingError::Persistence)?;
-        let mut by_currency: BTreeMap<String, Vec<ExpenseCategorySummary>> = BTreeMap::new();
+        let mut by_currency: BTreeMap<String, Vec<CategoryRow>> = BTreeMap::new();
         for row in categories {
-            let exponent = exponent(row.exponent)?;
             by_currency
-                .entry(row.currency_code)
+                .entry(row.currency_code.clone())
                 .or_default()
-                .push(ExpenseCategorySummary {
-                    category_id: row.category_id,
-                    name: row.name,
-                    expense: format_amount(row.expense, exponent),
-                });
+                .push(row);
         }
         let currencies = totals
             .into_iter()
             .map(|row| {
-                let exponent = exponent(row.exponent)?;
+                let currency_exponent = exponent(row.exponent)?;
                 let currency = CurrencyCode::parse(&row.currency_code)
                     .map_err(|_| ReportingError::Persistence)?;
                 Ok(CurrencyMonthlySummary {
                     currency,
-                    income: format_amount(row.income, exponent),
-                    expense: format_amount(row.expense, exponent),
-                    net: format_amount(row.income - row.expense, exponent),
-                    expense_categories: by_currency.remove(&row.currency_code).unwrap_or_default(),
+                    income: format_amount(row.income, currency_exponent),
+                    expense: format_amount(row.expense, currency_exponent),
+                    net: format_amount(row.income - row.expense, currency_exponent),
+                    expense_categories: by_currency
+                        .remove(&row.currency_code)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|category| {
+                            let exponent = exponent(category.exponent)?;
+                            Ok(ExpenseCategorySummary {
+                                category_id: category.category_id,
+                                name: category.name,
+                                expense: format_amount(category.expense, exponent),
+                                share_percent: format_share_percent(category.expense, row.expense),
+                            })
+                        })
+                        .collect::<Result<_, ReportingError>>()?,
                 })
             })
             .collect::<Result<_, ReportingError>>()?;
@@ -169,18 +181,34 @@ impl ReportingQueries {
     pub async fn recent_transactions(
         &self,
         user_id: Uuid,
+        requested_month: Option<&str>,
     ) -> Result<RecentTransactions, ReportingError> {
+        let (start, end) = match requested_month {
+            Some(requested_month) => {
+                let month = parse_month(requested_month)?;
+                let timezone = user_timezone(&self.pool, user_id).await?;
+                let (start, end) =
+                    local_month_range(timezone, month).map_err(|_| ReportingError::Persistence)?;
+                (Some(start), Some(end))
+            }
+            None => (None, None),
+        };
         let rows: Vec<RecentRow> = sqlx::query_as(
-            "SELECT t.id, t.wallet_id, t.category_id, t.transaction_type::TEXT AS transaction_type,
+            "SELECT t.id, t.wallet_id, w.name AS wallet_name, t.category_id, category.name AS category_name, t.transaction_type::TEXT AS transaction_type,
                     t.amount, w.currency_code, c.exponent, t.occurred_at, t.note, t.deleted_at, t.purge_after
              FROM transactions t
              JOIN wallets w ON (w.user_id, w.id) = (t.user_id, t.wallet_id)
+             JOIN categories category ON (category.user_id, category.id) = (t.user_id, t.category_id)
              JOIN currencies c ON c.code = w.currency_code
              WHERE t.user_id = $1 AND t.deleted_at IS NULL AND t.occurred_at <= now()
+               AND ($2::TIMESTAMPTZ IS NULL OR t.occurred_at >= $2)
+               AND ($3::TIMESTAMPTZ IS NULL OR t.occurred_at < $3)
              ORDER BY t.occurred_at DESC, t.id DESC
              LIMIT 10",
         )
         .bind(user_id)
+        .bind(start)
+        .bind(end)
         .fetch_all(&self.pool)
         .await
         .map_err(|_| ReportingError::Persistence)?;
@@ -223,82 +251,6 @@ fn parse_month(input: &str) -> Result<NaiveDate, ReportingError> {
     NaiveDate::from_ymd_opt(year, month, 1).ok_or(ReportingError::InvalidMonth)
 }
 
-fn month_bounds(
-    month: NaiveDate,
-    timezone: Tz,
-) -> Result<(DateTime<Utc>, DateTime<Utc>), ReportingError> {
-    let next = if month.month() == 12 {
-        NaiveDate::from_ymd_opt(month.year() + 1, 1, 1)
-    } else {
-        NaiveDate::from_ymd_opt(month.year(), month.month() + 1, 1)
-    }
-    .ok_or(ReportingError::InvalidMonth)?;
-    Ok((
-        resolve_local_boundary(
-            timezone,
-            month
-                .and_hms_opt(0, 0, 0)
-                .ok_or(ReportingError::InvalidMonth)?,
-        )?,
-        resolve_local_boundary(
-            timezone,
-            next.and_hms_opt(0, 0, 0)
-                .ok_or(ReportingError::InvalidMonth)?,
-        )?,
-    ))
-}
-
-fn resolve_local_boundary(
-    timezone: Tz,
-    requested: NaiveDateTime,
-) -> Result<DateTime<Utc>, ReportingError> {
-    match timezone.from_local_datetime(&requested) {
-        LocalResult::Single(value) => Ok(value.with_timezone(&Utc)),
-        LocalResult::Ambiguous(first, second) => Ok(first.min(second).with_timezone(&Utc)),
-        LocalResult::None => resolve_nonexistent_local_boundary(timezone, requested),
-    }
-}
-
-fn resolve_nonexistent_local_boundary(
-    timezone: Tz,
-    requested: NaiveDateTime,
-) -> Result<DateTime<Utc>, ReportingError> {
-    let mut missing_seconds = 0_i64;
-    let mut valid_seconds = 1_i64;
-    while matches!(
-        timezone.from_local_datetime(&add_seconds(requested, valid_seconds)?),
-        LocalResult::None
-    ) {
-        missing_seconds = valid_seconds;
-        valid_seconds = valid_seconds
-            .checked_mul(2)
-            .filter(|seconds| *seconds <= 172_800)
-            .ok_or(ReportingError::Persistence)?;
-    }
-    while valid_seconds - missing_seconds > 1 {
-        let middle = missing_seconds + (valid_seconds - missing_seconds) / 2;
-        if matches!(
-            timezone.from_local_datetime(&add_seconds(requested, middle)?),
-            LocalResult::None
-        ) {
-            missing_seconds = middle;
-        } else {
-            valid_seconds = middle;
-        }
-    }
-    match timezone.from_local_datetime(&add_seconds(requested, valid_seconds)?) {
-        LocalResult::Single(value) => Ok(value.with_timezone(&Utc)),
-        LocalResult::Ambiguous(first, second) => Ok(first.min(second).with_timezone(&Utc)),
-        LocalResult::None => Err(ReportingError::Persistence),
-    }
-}
-
-fn add_seconds(value: NaiveDateTime, seconds: i64) -> Result<NaiveDateTime, ReportingError> {
-    value
-        .checked_add_signed(Duration::seconds(seconds))
-        .ok_or(ReportingError::Persistence)
-}
-
 fn exponent(value: i32) -> Result<u32, ReportingError> {
     u32::try_from(value).map_err(|_| ReportingError::Persistence)
 }
@@ -307,6 +259,18 @@ fn format_amount(amount: Decimal, exponent: u32) -> String {
     let mut amount = amount.round_dp(exponent);
     amount.rescale(exponent);
     amount.to_string()
+}
+
+fn format_share_percent(expense: Decimal, total_expense: Decimal) -> String {
+    let mut share = if total_expense <= Decimal::ZERO {
+        Decimal::ZERO
+    } else {
+        (expense * Decimal::ONE_HUNDRED / total_expense)
+            .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+    };
+    share = share.clamp(Decimal::ZERO, Decimal::ONE_HUNDRED);
+    share.rescale(2);
+    share.to_string()
 }
 
 fn format_month(month: NaiveDate) -> String {
@@ -326,7 +290,9 @@ impl TryFrom<RecentRow> for Transaction {
         Ok(Transaction {
             id: row.id,
             wallet_id: row.wallet_id,
+            wallet_name: row.wallet_name,
             category_id: row.category_id,
+            category_name: row.category_name,
             direction,
             amount: format_amount(row.amount, exponent),
             currency: CurrencyCode::parse(&row.currency_code)

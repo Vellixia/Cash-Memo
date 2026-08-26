@@ -52,9 +52,13 @@ async fn recent_transactions(
     Extension(queries): Extension<ReportingQueries>,
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
+    Query(query): Query<MonthQuery>,
 ) -> Result<Json<RecentTransactions>, HttpError> {
     queries
-        .recent_transactions(full_access_user_id(session, request_id.clone())?)
+        .recent_transactions(
+            full_access_user_id(session, request_id.clone())?,
+            query.month.as_deref(),
+        )
         .await
         .map(Json)
         .map_err(|error| map_error(error, request_id))
