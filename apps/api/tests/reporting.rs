@@ -345,22 +345,14 @@ async fn recent_transactions_filters_selected_local_month_excludes_future_and_re
     let app = build_app(AppState { pool: pool.clone() });
     let (user_id, cookie) =
         authenticated_user(&pool, "recent-local-month@example.test", "Asia/Jakarta").await;
-    let category = insert_category(&pool, user_id, "EXPENSE", "Original").await;
+    let category = insert_category(&pool, user_id, "EXPENSE", "Original Category").await;
     let wallet = insert_wallet(&pool, user_id, "USD").await;
-    sqlx::query("UPDATE wallets SET name = 'Travel Cash' WHERE user_id = $1 AND id = $2")
+    sqlx::query("UPDATE wallets SET name = 'Original Wallet' WHERE user_id = $1 AND id = $2")
         .bind(user_id)
         .bind(wallet)
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query(
-        "UPDATE categories SET name = 'Dining', normalized_name = 'dining' WHERE user_id = $1 AND id = $2",
-    )
-    .bind(user_id)
-    .bind(category)
-    .execute(&pool)
-    .await
-    .unwrap();
     let now = Utc::now();
     let month = now
         .with_timezone(&chrono_tz::Asia::Jakarta)
@@ -399,6 +391,20 @@ async fn recent_transactions_filters_selected_local_month_excludes_future_and_re
         None,
     )
     .await;
+    sqlx::query("UPDATE wallets SET name = 'Travel Cash' WHERE user_id = $1 AND id = $2")
+        .bind(user_id)
+        .bind(wallet)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE categories SET name = 'Dining', normalized_name = 'dining' WHERE user_id = $1 AND id = $2",
+    )
+    .bind(user_id)
+    .bind(category)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let recent = get(
         &app,

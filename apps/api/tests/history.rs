@@ -269,8 +269,8 @@ async fn history_uses_inclusive_user_local_dates_and_current_reference_names(poo
         .unwrap();
     let wallet = insert_wallet(&pool, user_id).await;
     let category = insert_category(&pool, user_id).await;
-    set_wallet_name(&pool, user_id, wallet, "Travel Cash").await;
-    set_category_name(&pool, user_id, category, "Dining").await;
+    set_wallet_name(&pool, user_id, wallet, "Original Wallet").await;
+    set_category_name(&pool, user_id, category, "Original Category").await;
     let before = insert_transaction(
         &pool,
         user_id,
@@ -301,6 +301,8 @@ async fn history_uses_inclusive_user_local_dates_and_current_reference_names(poo
         false,
     )
     .await;
+    set_wallet_name(&pool, user_id, wallet, "Travel Cash").await;
+    set_category_name(&pool, user_id, category, "Dining").await;
     let app = build_app(AppState { pool });
 
     let response = app
