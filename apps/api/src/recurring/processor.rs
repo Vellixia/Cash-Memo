@@ -1,10 +1,10 @@
-use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use sqlx::{FromRow, PgPool};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::{Cadence, next_due};
+use super::{Cadence, first_due_on_or_after};
 
 #[derive(Clone)]
 pub struct RecurringProcessor {
@@ -73,7 +73,11 @@ impl RecurringProcessor {
                 } else {
                     None
                 };
-                due = next_due(due, rule.start_date.day(), cadence);
+                due = first_due_on_or_after(
+                    rule.start_date,
+                    due.succ_opt().expect("valid date has successor"),
+                    cadence,
+                );
                 sqlx::query("UPDATE recurring_transactions SET next_due_date=$3,updated_at=now() WHERE user_id=$1 AND id=$2").bind(rule.user_id).bind(rule.id).bind(due).execute(&mut *db).await.map_err(|_| ProcessorError::Persistence)?;
                 count += 1;
                 total += u64::from(inserted.is_some());

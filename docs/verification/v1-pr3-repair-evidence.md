@@ -72,3 +72,30 @@ Result: 5 tests passed.
 `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test history --test reporting --test budgets`
 
 Result: 16 tests passed.
+
+## Recurrence calendar-anchor resume contract
+
+- Root cause: resume used mutable, clamped `next_due_date` as recurrence origin. A monthly
+  Jan-31 rule parked at Feb-29 resumed on Aug-29 instead of Aug-31.
+- `first_due_on_or_after` now uses direct daily, weekly, monthly, and yearly arithmetic from
+  immutable `start_date`; monthly/yearly candidates clamp only final candidate date.
+- `resume_uses_start_date_anchor_after_clamp_without_backfill_or_duplicates` covers a long-paused
+  Jan-31 rule with Feb-29 scheduler state, confirms no pause backfill, one resumed occurrence,
+  and no duplicate after a second processor run.
+- `first_due_on_or_after_jumps_from_immutable_calendar_anchor` covers Jan-31, Jan-30, Feb-29,
+  and weekly weekday anchors.
+
+## Recurrence verification
+
+RED:
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test recurring -- --nocapture`
+
+Result: expected failure in `resume_uses_start_date_anchor_after_clamp_without_backfill_or_duplicates`:
+returned `2026-08-29`; expected `2026-08-31`.
+
+GREEN, repeated for idempotency:
+
+`for run in 1 2 3; do DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test recurring || exit 1; done`
+
+Result: each run passed, 13 tests total.

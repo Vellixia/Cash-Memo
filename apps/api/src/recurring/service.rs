@@ -333,8 +333,7 @@ impl RecurringTransactionService {
         )
         .await?;
         let cadence = Cadence::from_database(&row.frequency)?;
-        let next_due_date =
-            first_due_on_or_after(row.next_due_date, local_today(&timezone)?, cadence);
+        let next_due_date = first_due_on_or_after(row.start_date, local_today(&timezone)?, cadence);
         sqlx::query(
             "UPDATE recurring_transactions
              SET status = 'active', next_due_date = $3, updated_at = now()
@@ -354,12 +353,47 @@ impl RecurringTransactionService {
     }
 }
 
-pub fn first_due_on_or_after(start: NaiveDate, today: NaiveDate, cadence: Cadence) -> NaiveDate {
-    let mut due = start;
-    while due < today {
-        due = next_due(due, start.day(), cadence);
+pub fn first_due_on_or_after(start: NaiveDate, target: NaiveDate, cadence: Cadence) -> NaiveDate {
+    if target <= start {
+        return start;
     }
-    due
+
+    match cadence {
+        Cadence::Daily => target,
+        Cadence::Weekly => {
+            let days = target.signed_duration_since(start).num_days();
+            let weeks = (days + 6) / 7;
+            start
+                .checked_add_days(chrono::Days::new(
+                    u64::try_from(weeks * 7).expect("positive week span fits u64"),
+                ))
+                .expect("valid date has successor")
+        }
+        Cadence::Monthly => first_monthly_due_on_or_after(start, target),
+        Cadence::Yearly => first_yearly_due_on_or_after(start, target),
+    }
+}
+
+fn first_monthly_due_on_or_after(start: NaiveDate, target: NaiveDate) -> NaiveDate {
+    let start_month = i64::from(start.year()) * 12 + i64::from(start.month0());
+    let target_month = i64::from(target.year()) * 12 + i64::from(target.month0());
+    let months = u32::try_from(target_month - start_month).expect("target follows start");
+    let candidate = shifted_date(start.year(), start.month() + months, start.day());
+    if candidate < target {
+        shifted_date(start.year(), start.month() + months + 1, start.day())
+    } else {
+        candidate
+    }
+}
+
+fn first_yearly_due_on_or_after(start: NaiveDate, target: NaiveDate) -> NaiveDate {
+    let years = target.year() - start.year();
+    let candidate = clamped_date(start.year() + years, start.month(), start.day());
+    if candidate < target {
+        clamped_date(start.year() + years + 1, start.month(), start.day())
+    } else {
+        candidate
+    }
 }
 
 pub fn next_due(after: NaiveDate, anchor_day: u32, cadence: Cadence) -> NaiveDate {

@@ -146,6 +146,139 @@ fn calendar_cadences_preserve_calendar_anchor_and_clamp_month_end_and_leap_day()
     );
 }
 
+#[test]
+fn first_due_on_or_after_jumps_from_immutable_calendar_anchor() {
+    let jan_31 = chrono::NaiveDate::from_ymd_opt(2026, 1, 31).unwrap();
+    assert_eq!(
+        first_due_on_or_after(
+            jan_31,
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            Cadence::Monthly,
+        ),
+        chrono::NaiveDate::from_ymd_opt(2026, 3, 31).unwrap(),
+        "Jan-31 monthly anchor must return after February clamp",
+    );
+
+    let jan_30 = chrono::NaiveDate::from_ymd_opt(2026, 1, 30).unwrap();
+    assert_eq!(
+        first_due_on_or_after(
+            jan_30,
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            Cadence::Monthly,
+        ),
+        chrono::NaiveDate::from_ymd_opt(2026, 3, 30).unwrap(),
+        "Jan-30 monthly anchor must return after February clamp",
+    );
+
+    let leap_day = chrono::NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+    assert_eq!(
+        first_due_on_or_after(
+            leap_day,
+            chrono::NaiveDate::from_ymd_opt(2028, 1, 1).unwrap(),
+            Cadence::Yearly,
+        ),
+        chrono::NaiveDate::from_ymd_opt(2028, 2, 29).unwrap(),
+        "Feb-29 yearly anchor must return on leap day when available",
+    );
+
+    let wednesday = chrono::NaiveDate::from_ymd_opt(2026, 1, 7).unwrap();
+    assert_eq!(
+        first_due_on_or_after(
+            wednesday,
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 22).unwrap(),
+            Cadence::Weekly,
+        ),
+        chrono::NaiveDate::from_ymd_opt(2026, 1, 28).unwrap(),
+        "weekly cadence must retain start weekday",
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn resume_uses_start_date_anchor_after_clamp_without_backfill_or_duplicates(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, _cookie) =
+        authenticated_user(&pool, "recurring-anchor-resume@example.test").await;
+    let (wallet_id, category_id) = owned_references(&pool, user_id).await;
+    let start_date = chrono::NaiveDate::from_ymd_opt(2000, 1, 31).unwrap();
+    let clamped_scheduler_date = chrono::NaiveDate::from_ymd_opt(2000, 2, 29).unwrap();
+    let rule_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO recurring_transactions (user_id,wallet_id,category_id,transaction_type,amount,frequency,start_date,next_due_date,status) VALUES ($1,$2,$3,'EXPENSE',1,'monthly',$4,$5,'paused') RETURNING id",
+    )
+    .bind(user_id)
+    .bind(wallet_id)
+    .bind(category_id)
+    .bind(start_date)
+    .bind(clamped_scheduler_date)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let resumed = RecurringTransactionService::new(pool.clone())
+        .resume(user_id, rule_id)
+        .await
+        .unwrap();
+    let expected = first_due_on_or_after(start_date, Utc::now().date_naive(), Cadence::Monthly);
+    let resumed_due =
+        chrono::NaiveDate::parse_from_str(&resumed.next_due_date, "%Y-%m-%d").unwrap();
+    assert_eq!(
+        resumed_due, expected,
+        "resume must recover Jan-31 anchor after long pause"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM recurring_occurrences WHERE recurring_transaction_id=$1"
+        )
+        .bind(rule_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0,
+        "resume must not backfill paused occurrences",
+    );
+
+    let processor = RecurringProcessor::new(pool.clone());
+    let now = resumed_due.and_hms_opt(12, 0, 0).unwrap().and_utc();
+    assert_eq!(
+        processor
+            .process_at(
+                ProcessOptions {
+                    batch_size: 10,
+                    max_occurrences_per_recurring_transaction: 10,
+                },
+                now,
+            )
+            .await
+            .unwrap()
+            .generated,
+        1,
+    );
+    assert_eq!(
+        processor
+            .process_at(
+                ProcessOptions {
+                    batch_size: 10,
+                    max_occurrences_per_recurring_transaction: 10,
+                },
+                now,
+            )
+            .await
+            .unwrap()
+            .generated,
+        0,
+        "reprocessing resumed due date must not create duplicate occurrence",
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM recurring_occurrences WHERE recurring_transaction_id=$1"
+        )
+        .bind(rule_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1,
+    );
+}
+
 #[sqlx::test(migrations = false)]
 async fn category_archive_pauses_and_restore_does_not_resume_and_resume_blocks_archived_reference(
     pool: PgPool,
