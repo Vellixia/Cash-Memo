@@ -120,6 +120,11 @@ async fn entry_defaults_select_only_most_recent_active_wallet_for_authenticated_
         false,
     )
     .await;
+    sqlx::query("UPDATE users SET timezone = 'Asia/Jakarta' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let active = app
         .clone()
         .oneshot(get_entry_defaults(&cookie))
@@ -127,8 +132,8 @@ async fn entry_defaults_select_only_most_recent_active_wallet_for_authenticated_
         .unwrap();
     assert_eq!(active.status(), StatusCode::OK);
     assert_eq!(
-        response_json(active).await["last_used_wallet_id"],
-        newer.to_string()
+        response_json(active).await,
+        json!({ "last_used_wallet_id": newer.to_string(), "timezone": "Asia/Jakarta" })
     );
 
     sqlx::query("UPDATE wallets SET archived_at = now() WHERE id = $1")
@@ -142,8 +147,8 @@ async fn entry_defaults_select_only_most_recent_active_wallet_for_authenticated_
         .await
         .unwrap();
     assert_eq!(
-        response_json(archived).await["last_used_wallet_id"],
-        older.to_string()
+        response_json(archived).await,
+        json!({ "last_used_wallet_id": older.to_string(), "timezone": "Asia/Jakarta" })
     );
 
     let isolated = app
@@ -189,21 +194,6 @@ async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: 
     let transaction_id = created["id"].as_str().unwrap();
     assert_eq!(created["occurred_at"], "2026-08-31T16:30:00+00:00");
 
-    let unchanged = app
-        .clone()
-        .oneshot(patch_transaction(
-            &cookie,
-            transaction_id,
-            json!({ "note": "edited" }),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(unchanged.status(), StatusCode::OK);
-    assert_eq!(
-        response_json(unchanged).await["occurred_at"],
-        created["occurred_at"]
-    );
-
     let defaulted = app
         .clone()
         .oneshot(post_transaction(
@@ -213,8 +203,25 @@ async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: 
         .await
         .unwrap();
     assert_eq!(defaulted.status(), StatusCode::CREATED);
-    let defaulted = parse_instant(&response_json(defaulted).await["occurred_at"]);
-    assert!(defaulted >= before && defaulted <= Utc::now() + Duration::seconds(1));
+    let defaulted = response_json(defaulted).await;
+    let defaulted_id = defaulted["id"].as_str().unwrap();
+    let defaulted_instant = parse_instant(&defaulted["occurred_at"]);
+    assert!(defaulted_instant >= before && defaulted_instant <= Utc::now() + Duration::seconds(1));
+    assert_ne!(defaulted_instant.timestamp_subsec_nanos(), 0);
+    let unchanged = app
+        .clone()
+        .oneshot(patch_transaction(
+            &cookie,
+            defaulted_id,
+            json!({ "note": "edited" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unchanged.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(unchanged).await["occurred_at"],
+        defaulted["occurred_at"]
+    );
 
     sqlx::query("UPDATE users SET timezone = 'America/New_York' WHERE id = $1")
         .bind(user_id)
@@ -238,6 +245,7 @@ async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: 
 
     for occurred_local in [
         "2026-03-08T02:30",
+        "2026/09/01T23:30",
         "2026-09-01T23:30:00",
         "2026-09-01T23:30+07:00",
         "2026-09-01T23:30Z",
@@ -258,6 +266,10 @@ async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: 
             .await
             .unwrap();
         assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response_json(rejected).await["error"]["fields"]["occurred_local"],
+            json!(["invalid"])
+        );
     }
 }
 
