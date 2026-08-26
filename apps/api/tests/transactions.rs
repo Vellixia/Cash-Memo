@@ -243,13 +243,14 @@ async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: 
         "2026-11-01T05:30:00+00:00"
     );
 
-    for occurred_local in [
-        "2026-03-08T02:30",
-        "2026/09/01T23:30",
-        "2026-09-01T23:30:00",
-        "2026-09-01T23:30+07:00",
-        "2026-09-01T23:30Z",
-        "2026-02-30T23:30",
+    for (case, occurred_local) in [
+        ("nonexistent local time", "2026-03-08T02:30"),
+        ("malformed separator", "2026/09/01T23:30"),
+        ("malformed month width", "2026-9-01T23:30"),
+        ("seconds", "2026-09-01T23:30:00"),
+        ("offset", "2026-09-01T23:30+07:00"),
+        ("UTC marker", "2026-09-01T23:30Z"),
+        ("impossible date", "2026-02-30T23:30"),
     ] {
         let rejected = app
             .clone()
@@ -265,10 +266,15 @@ async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: 
             ))
             .await
             .unwrap();
-        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            rejected.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{case} must reject"
+        );
         assert_eq!(
             response_json(rejected).await["error"]["fields"]["occurred_local"],
-            json!(["invalid"])
+            json!(["invalid"]),
+            "{case} must identify occurred_local"
         );
     }
 }
