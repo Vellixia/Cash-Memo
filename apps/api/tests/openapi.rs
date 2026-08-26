@@ -71,6 +71,16 @@ fn rust_openapi_freezes_v1_contract_names() {
         Some(&serde_json::json!(["string", "null"]))
     );
 
+    let wallet_update = schemas
+        .get("UpdateWalletRequest")
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("properties"))
+        .and_then(Value::as_object)
+        .expect("wallet update properties");
+    assert!(wallet_update.contains_key("name"));
+    assert!(wallet_update.contains_key("opening_balance"));
+    assert!(!wallet_update.contains_key("currency"));
+
     let serialized = serde_json::to_string(&document).expect("document JSON");
     for name in [
         "recurring-transactions",

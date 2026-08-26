@@ -88,37 +88,162 @@ async fn rejects_disabled_currency_and_invalid_opening_balance_before_persistenc
 }
 
 #[sqlx::test(migrations = false)]
-async fn updates_name_but_rejects_immutable_currency_and_opening_balance(pool: PgPool) {
+async fn updates_name_and_opening_balance_without_changing_financial_activity(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (_user_id, cookie) = authenticated_user(&pool, "wallet-update@example.test").await;
     let app = build_app(AppState { pool: pool.clone() });
     let wallet = create_wallet(&app, &cookie, "Cash", "USD", "10.00").await;
     let wallet_id = wallet["id"].as_str().unwrap();
+    let wallet_uuid = Uuid::parse_str(wallet_id).unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM wallets WHERE id = $1")
+        .bind(wallet_uuid)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let category_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO categories (user_id, name, normalized_name, transaction_type)
+         VALUES ($1, 'Food', 'food', 'EXPENSE') RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO transactions
+         (user_id, wallet_id, category_id, transaction_type, amount, occurred_at)
+         VALUES ($1, $2, $3, 'EXPENSE', 3.00, '2026-04-10T12:00:00Z')",
+    )
+    .bind(user_id)
+    .bind(wallet_uuid)
+    .bind(category_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO budgets (user_id, category_id, currency_code, month_start, amount)
+         VALUES ($1, $2, 'USD', DATE '2026-04-01', 100.00)",
+    )
+    .bind(user_id)
+    .bind(category_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let monthly_before = response_json(
+        app.clone()
+            .oneshot(request(
+                "GET",
+                "/api/v1/reports/monthly-summary?month=2026-04",
+                &cookie,
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let budget_before = response_json(
+        app.clone()
+            .oneshot(request(
+                "GET",
+                "/api/v1/reports/budget-summary?month=2026-04",
+                &cookie,
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
 
     let updated = app
         .clone()
         .oneshot(patch_wallet(
             &cookie,
             wallet_id,
-            json!({ "name": "Pocket" }),
+            json!({ "name": "Pocket", "opening_balance": "20.00" }),
         ))
         .await
         .unwrap();
     assert_eq!(updated.status(), StatusCode::OK);
     let body = response_json(updated).await;
     assert_eq!(body["name"], "Pocket");
-    assert_eq!(body["opening_balance"], "10.00");
+    assert_eq!(body["opening_balance"], "20.00");
+    assert_eq!(body["balance"]["amount"], "17.00");
+    assert_eq!(
+        response_json(
+            app.clone()
+                .oneshot(request(
+                    "GET",
+                    "/api/v1/reports/monthly-summary?month=2026-04",
+                    &cookie,
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await,
+        monthly_before
+    );
+    assert_eq!(
+        response_json(
+            app.clone()
+                .oneshot(request(
+                    "GET",
+                    "/api/v1/reports/budget-summary?month=2026-04",
+                    &cookie,
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await,
+        budget_before
+    );
+    let transaction_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM transactions WHERE wallet_id = $1")
+            .bind(wallet_uuid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(transaction_count, 1);
+    let budget_count: i64 = sqlx::query_scalar("SELECT count(*) FROM budgets WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(budget_count, 1);
+}
 
-    for immutable_field in [
-        json!({ "currency": "EUR" }),
-        json!({ "opening_balance": "20.00" }),
-    ] {
+#[sqlx::test(migrations = false)]
+async fn rejects_empty_currency_negative_and_excess_scale_wallet_updates(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (_user_id, cookie) =
+        authenticated_user(&pool, "wallet-update-validation@example.test").await;
+    let app = build_app(AppState { pool: pool.clone() });
+    let wallet = create_wallet(&app, &cookie, "Cash", "USD", "10.00").await;
+    let wallet_id = wallet["id"].as_str().unwrap();
+
+    for invalid_update in [json!({}), json!({ "currency": "EUR" })] {
         let rejected = app
             .clone()
-            .oneshot(patch_wallet(&cookie, wallet_id, immutable_field))
+            .oneshot(patch_wallet(&cookie, wallet_id, invalid_update))
             .await
             .unwrap();
         assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    for invalid_balance in ["-0.01", "1.234"] {
+        let rejected = app
+            .clone()
+            .oneshot(patch_wallet(
+                &cookie,
+                wallet_id,
+                json!({ "opening_balance": invalid_balance }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response_json(rejected).await["error"]["fields"]["opening_balance"],
+            json!(["invalid"])
+        );
     }
     let stored: (String, rust_decimal::Decimal) =
         sqlx::query_as("SELECT currency_code, opening_balance FROM wallets WHERE id = $1")
@@ -311,6 +436,11 @@ async fn hides_wallets_from_other_users_for_all_lifecycle_routes(pool: PgPool) {
     for request in [
         get_wallet(&other_cookie, wallet_id),
         patch_wallet(&other_cookie, wallet_id, json!({ "name": "Stolen" })),
+        patch_wallet(
+            &other_cookie,
+            wallet_id,
+            json!({ "opening_balance": "999.00" }),
+        ),
         post_archive(&other_cookie, wallet_id),
         post_restore(&other_cookie, wallet_id),
         delete_wallet(&other_cookie, wallet_id),

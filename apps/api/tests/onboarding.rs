@@ -70,10 +70,155 @@ async fn onboarding_state_is_derived_from_persisted_preferences_categories_and_w
             "timezone": "Asia/Jakarta",
             "default_currency_configured": true,
             "default_currency_code": "IDR",
-            "categories_seeded": false,
+            "categories_seeded": true,
             "has_active_wallet": true,
         })
     );
+    let starter_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM categories WHERE user_id = $1 AND starter_key IS NOT NULL",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(starter_count, EXPECTED_STARTER_COUNT);
+    let completed_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(completed_at.is_some());
+}
+
+#[sqlx::test(migrations = false)]
+async fn completed_user_reconciles_missing_starter_categories_once(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "onboarding-reconcile@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(),
+             default_currency_code = 'IDR', onboarding_completed_at = '2026-01-02T03:04:05Z'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO categories (user_id, name, normalized_name, transaction_type, starter_key)
+         VALUES
+             ($1, 'Food & Drink', 'food & drink', 'EXPENSE', 'starter_expense_food_drink'),
+             ($1, 'Salary', 'salary', 'INCOME', 'starter_income_salary')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO wallets (user_id, name, currency_code, opening_balance, archived_at)
+         VALUES ($1, 'Archived Cash', 'IDR', 0, now())",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+
+    for _ in 0..2 {
+        let response = app.clone().oneshot(get_onboarding(&cookie)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response_json(response).await,
+            json!({
+                "timezone_configured": true,
+                "timezone": "Asia/Jakarta",
+                "default_currency_configured": true,
+                "default_currency_code": "IDR",
+                "categories_seeded": true,
+                "has_active_wallet": true,
+            })
+        );
+    }
+
+    let starters: Vec<(String, String)> = sqlx::query_as(
+        "SELECT starter_key, normalized_name
+         FROM categories WHERE user_id = $1 AND starter_key IS NOT NULL
+         ORDER BY starter_key",
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(starters.len() as i64, EXPECTED_STARTER_COUNT);
+    assert_eq!(
+        starters
+            .iter()
+            .filter(|(key, normalized)| {
+                key == "starter_expense_food_drink" && normalized == "food & drink"
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        starters
+            .iter()
+            .filter(|(key, normalized)| {
+                key == "starter_income_salary" && normalized == "salary"
+            })
+            .count(),
+        1
+    );
+    let completed_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(completed_at.to_rfc3339(), "2026-01-02T03:04:05+00:00");
+}
+
+#[sqlx::test(migrations = false)]
+async fn first_wallet_sets_onboarding_completion_once(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "onboarding-first-wallet@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(), default_currency_code = 'IDR'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+    let seeded = app.clone().oneshot(seed_categories(&cookie)).await.unwrap();
+    assert_eq!(seeded.status(), StatusCode::OK);
+    let created = app
+        .clone()
+        .oneshot(post_wallet(
+            &cookie,
+            json!({ "name": "Cash", "currency": "IDR", "opening_balance": "0" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let first_completed_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let state = app.oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(state.status(), StatusCode::OK);
+    let second_completed_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(second_completed_at, first_completed_at);
 }
 
 #[sqlx::test(migrations = false)]
@@ -304,6 +449,17 @@ fn seed_categories(cookie: &str) -> Request<Body> {
         .header(header::COOKIE, cookie)
         .header(header::ORIGIN, "http://localhost:3000")
         .body(Body::empty())
+        .unwrap()
+}
+
+fn post_wallet(cookie: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri("/api/v1/wallets")
+        .header(header::COOKIE, cookie)
+        .header(header::ORIGIN, "http://localhost:3000")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
         .unwrap()
 }
 

@@ -50,7 +50,7 @@ async fn rejects_cross_user_wallet_category_transaction(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn rejects_direct_wallet_currency_and_opening_balance_changes(pool: PgPool) {
+async fn rejects_direct_wallet_currency_change_and_allows_opening_balance_change(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let user: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO users (email, password_hash) VALUES ('wallet-immutable@example.test', 'hash') RETURNING id",
@@ -81,10 +81,7 @@ async fn rejects_direct_wallet_currency_and_opening_balance_changes(pool: PgPool
             .bind(wallet)
             .execute(&pool)
             .await;
-    assert!(
-        opening_balance_change.is_err(),
-        "wallet opening balance must be immutable"
-    );
+    assert_eq!(opening_balance_change.unwrap().rows_affected(), 1);
 
     sqlx::query("UPDATE wallets SET name = 'Pocket', archived_at = now() WHERE id = $1")
         .bind(wallet)
@@ -99,7 +96,7 @@ async fn rejects_direct_wallet_currency_and_opening_balance_changes(pool: PgPool
     .await
     .unwrap();
     assert_eq!(stored.0, "USD");
-    assert_eq!(stored.1.to_string(), "10.0000");
+    assert_eq!(stored.1.to_string(), "20.0000");
     assert!(stored.2);
 }
 

@@ -268,6 +268,7 @@ pub struct CreateWalletRequest {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UpdateWalletRequest {
     pub name: Option<String>,
+    pub opening_balance: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

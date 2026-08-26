@@ -99,3 +99,56 @@ GREEN, repeated for idempotency:
 `for run in 1 2 3; do DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test recurring || exit 1; done`
 
 Result: each run passed, 13 tests total.
+
+## Editable wallet opening balance and durable onboarding completion
+
+- Root cause: wallet PATCH exposed only `name`, while migration `0005` installed a trigger that
+  rejected every opening-balance change. Onboarding completion was recomputed from complete
+  starter categories plus an active wallet, so archived-only accounts could reopen onboarding and
+  already-completed accounts did not repair missing starter categories.
+- Baseline correction: `updates_name_but_rejects_immutable_currency_and_opening_balance` and
+  `rejects_direct_wallet_currency_and_opening_balance_changes` encoded opening-balance
+  immutability. Approved repair design section 9 instead requires optional wallet `name` and
+  `opening_balance` updates while currency remains immutable. Corrected tests allow exact opening
+  balance changes, retain currency rejection, and protect cross-user wallet ownership.
+- `0009_wallet_onboarding_repair.sql` additively removes both the obsolete trigger and function,
+  adds `users.onboarding_completed_at`, and backfills the same migration timestamp for qualifying
+  users with active or archived wallets. A user without any wallet remains incomplete.
+- Wallet update locks the owned wallet, reads its currency exponent from the registry, validates
+  exact nonnegative decimal input, and updates only supplied wallet fields. The regression proves
+  current balance changes while transaction count, monthly report, and budget summary stay exact.
+- Onboarding reconciliation seeds every missing normalized starter category once, preserves an
+  existing completion timestamp, sets first-wallet completion once, and treats archived-only
+  completed accounts as onboarded. Repeated reads create no duplicate starters; no seed version or
+  state machine was added.
+
+### Wallet/onboarding verification
+
+RED evidence:
+
+- Required combined RED stopped in migrations because version 9 and
+  `onboarding_completed_at` were absent.
+- `updates_name_and_opening_balance_without_changing_financial_activity` returned `422`; expected
+  `200`.
+- `rejects_empty_currency_negative_and_excess_scale_wallet_updates` failed because
+  `opening_balance` was an unknown PATCH field instead of a field-level validation path.
+- Onboarding reconciliation tests failed because `onboarding_completed_at` did not exist and the
+  qualifying derived state returned `categories_seeded: false`.
+- Obsolete ownership baseline failed at `wallet opening balance must be immutable` after migration
+  0009, proving the exact approved-design contradiction before correction.
+
+GREEN:
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test migrations -- --nocapture`
+
+Result: 9 tests passed, including version-9 checksum identity, trigger/function removal, and
+active/archived-wallet backfill.
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test ownership -- --nocapture`
+
+Result: 7 tests passed, including currency immutability, editable opening balance, and cross-user
+ownership constraints.
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test wallets --test onboarding --test migrations --test reporting --test transactions`
+
+Result: 38 tests passed: migrations 9, onboarding 7, reporting 5, transactions 6, wallets 11.

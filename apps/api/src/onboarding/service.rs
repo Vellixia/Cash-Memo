@@ -1,6 +1,6 @@
 use chrono_tz::Tz;
 use serde::Serialize;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -24,6 +24,28 @@ const STARTER_KEYS: &[&str] = &[
     "starter_income_refund",
     "starter_income_other",
 ];
+
+const SEED_CATEGORIES_SQL: &str =
+    "INSERT INTO categories (user_id, name, normalized_name, transaction_type, starter_key) VALUES
+        ($1, 'Food & Drink', 'food & drink', 'EXPENSE', 'starter_expense_food_drink'),
+        ($1, 'Transport', 'transport', 'EXPENSE', 'starter_expense_transport'),
+        ($1, 'Housing', 'housing', 'EXPENSE', 'starter_expense_housing'),
+        ($1, 'Utilities', 'utilities', 'EXPENSE', 'starter_expense_utilities'),
+        ($1, 'Shopping', 'shopping', 'EXPENSE', 'starter_expense_shopping'),
+        ($1, 'Health', 'health', 'EXPENSE', 'starter_expense_health'),
+        ($1, 'Education', 'education', 'EXPENSE', 'starter_expense_education'),
+        ($1, 'Entertainment', 'entertainment', 'EXPENSE', 'starter_expense_entertainment'),
+        ($1, 'Travel', 'travel', 'EXPENSE', 'starter_expense_travel'),
+        ($1, 'Software & Services', 'software & services', 'EXPENSE', 'starter_expense_software_services'),
+        ($1, 'Fees', 'fees', 'EXPENSE', 'starter_expense_fees'),
+        ($1, 'Other Expense', 'other expense', 'EXPENSE', 'starter_expense_other'),
+        ($1, 'Salary', 'salary', 'INCOME', 'starter_income_salary'),
+        ($1, 'Freelance', 'freelance', 'INCOME', 'starter_income_freelance'),
+        ($1, 'Business', 'business', 'INCOME', 'starter_income_business'),
+        ($1, 'Gift', 'gift', 'INCOME', 'starter_income_gift'),
+        ($1, 'Refund', 'refund', 'INCOME', 'starter_income_refund'),
+        ($1, 'Other Income', 'other income', 'INCOME', 'starter_income_other')
+     ON CONFLICT (user_id, starter_key) DO NOTHING";
 
 #[derive(Clone)]
 pub struct OnboardingService {
@@ -62,6 +84,17 @@ impl OnboardingService {
     }
 
     pub async fn state(&self, user_id: Uuid) -> Result<OnboardingState, OnboardingError> {
+        let mut database = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| OnboardingError::Persistence)?;
+        Self::reconcile_in_transaction(&mut database, user_id).await?;
+        database
+            .commit()
+            .await
+            .map_err(|_| OnboardingError::Persistence)?;
+
         sqlx::query_as::<_, (bool, Option<String>, Option<String>, bool, bool)>(
             "SELECT
                 u.timezone_configured_at IS NOT NULL,
@@ -69,7 +102,8 @@ impl OnboardingService {
                 u.default_currency_code,
                 (SELECT count(*) FROM categories c
                     WHERE c.user_id = u.id AND c.starter_key = ANY($2)) = $3,
-                EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = u.id AND w.archived_at IS NULL)
+                u.onboarding_completed_at IS NOT NULL
+                    OR EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = u.id AND w.archived_at IS NULL)
              FROM users u WHERE u.id = $1",
         )
         .bind(user_id)
@@ -126,32 +160,55 @@ impl OnboardingService {
     }
 
     pub async fn seed_categories(&self, user_id: Uuid) -> Result<(), OnboardingError> {
-        sqlx::query(
-            "INSERT INTO categories (user_id, name, normalized_name, transaction_type, starter_key) VALUES
-                ($1, 'Food & Drink', 'food & drink', 'EXPENSE', 'starter_expense_food_drink'),
-                ($1, 'Transport', 'transport', 'EXPENSE', 'starter_expense_transport'),
-                ($1, 'Housing', 'housing', 'EXPENSE', 'starter_expense_housing'),
-                ($1, 'Utilities', 'utilities', 'EXPENSE', 'starter_expense_utilities'),
-                ($1, 'Shopping', 'shopping', 'EXPENSE', 'starter_expense_shopping'),
-                ($1, 'Health', 'health', 'EXPENSE', 'starter_expense_health'),
-                ($1, 'Education', 'education', 'EXPENSE', 'starter_expense_education'),
-                ($1, 'Entertainment', 'entertainment', 'EXPENSE', 'starter_expense_entertainment'),
-                ($1, 'Travel', 'travel', 'EXPENSE', 'starter_expense_travel'),
-                ($1, 'Software & Services', 'software & services', 'EXPENSE', 'starter_expense_software_services'),
-                ($1, 'Fees', 'fees', 'EXPENSE', 'starter_expense_fees'),
-                ($1, 'Other Expense', 'other expense', 'EXPENSE', 'starter_expense_other'),
-                ($1, 'Salary', 'salary', 'INCOME', 'starter_income_salary'),
-                ($1, 'Freelance', 'freelance', 'INCOME', 'starter_income_freelance'),
-                ($1, 'Business', 'business', 'INCOME', 'starter_income_business'),
-                ($1, 'Gift', 'gift', 'INCOME', 'starter_income_gift'),
-                ($1, 'Refund', 'refund', 'INCOME', 'starter_income_refund'),
-                ($1, 'Other Income', 'other income', 'INCOME', 'starter_income_other')
-             ON CONFLICT (user_id, starter_key) DO NOTHING",
+        sqlx::query(SEED_CATEGORIES_SQL)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|_| OnboardingError::Persistence)
+    }
+
+    pub(crate) async fn reconcile_in_transaction(
+        database: &mut Transaction<'_, Postgres>,
+        user_id: Uuid,
+    ) -> Result<(), OnboardingError> {
+        let (completed, timezone_configured, default_currency_configured, has_wallet): (
+            bool,
+            bool,
+            bool,
+            bool,
+        ) = sqlx::query_as(
+            "SELECT
+                    onboarding_completed_at IS NOT NULL,
+                    timezone_configured_at IS NOT NULL,
+                    default_currency_code IS NOT NULL,
+                    EXISTS (SELECT 1 FROM wallets WHERE user_id = users.id)
+                 FROM users WHERE id = $1
+                 FOR UPDATE",
         )
         .bind(user_id)
-        .execute(&self.pool)
+        .fetch_one(&mut **database)
         .await
-        .map(|_| ())
-        .map_err(|_| OnboardingError::Persistence)
+        .map_err(|_| OnboardingError::Persistence)?;
+        let qualifies = timezone_configured && default_currency_configured && has_wallet;
+        if completed || qualifies {
+            sqlx::query(SEED_CATEGORIES_SQL)
+                .bind(user_id)
+                .execute(&mut **database)
+                .await
+                .map_err(|_| OnboardingError::Persistence)?;
+        }
+        if qualifies && !completed {
+            sqlx::query(
+                "UPDATE users
+                 SET onboarding_completed_at = now(), updated_at = now()
+                 WHERE id = $1 AND onboarding_completed_at IS NULL",
+            )
+            .bind(user_id)
+            .execute(&mut **database)
+            .await
+            .map_err(|_| OnboardingError::Persistence)?;
+        }
+        Ok(())
     }
 }

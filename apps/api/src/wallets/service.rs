@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     currency::{CurrencyCode, CurrencyError, CurrencyRepository},
     money::Money,
+    onboarding::OnboardingService,
 };
 
 #[derive(Clone)]
@@ -45,6 +46,7 @@ pub struct NewWallet {
 #[derive(Debug)]
 pub struct UpdateWallet {
     pub name: Option<String>,
+    pub opening_balance: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -112,6 +114,11 @@ impl WalletService {
             .await
             .map_err(map_currency_error)?;
         let opening_balance = parse_opening_balance(&input.opening_balance, definition.exponent)?;
+        let mut database = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| WalletError::Persistence)?;
         let wallet_id: Uuid = sqlx::query_scalar(
             "INSERT INTO wallets (user_id, name, currency_code, opening_balance)
              VALUES ($1, $2, $3, $4) RETURNING id",
@@ -120,9 +127,16 @@ impl WalletService {
         .bind(name)
         .bind(currency.as_str())
         .bind(opening_balance.decimal())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *database)
         .await
         .map_err(|_| WalletError::Persistence)?;
+        OnboardingService::reconcile_in_transaction(&mut database, user_id)
+            .await
+            .map_err(|_| WalletError::Persistence)?;
+        database
+            .commit()
+            .await
+            .map_err(|_| WalletError::Persistence)?;
         self.load(user_id, wallet_id).await
     }
 
@@ -132,21 +146,52 @@ impl WalletService {
         wallet_id: Uuid,
         input: UpdateWallet,
     ) -> Result<Wallet, WalletError> {
-        let Some(name) = input.name else {
+        if input.name.is_none() && input.opening_balance.is_none() {
             return Err(WalletError::NoChanges);
-        };
-        let name = validate_name(&name)?;
+        }
+        let mut database = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| WalletError::Persistence)?;
+        let exponent: Option<i32> = sqlx::query_scalar(
+            "SELECT c.exponent
+             FROM wallets w
+             JOIN currencies c ON c.code = w.currency_code
+             WHERE w.user_id = $1 AND w.id = $2
+             FOR UPDATE OF w",
+        )
+        .bind(user_id)
+        .bind(wallet_id)
+        .fetch_optional(&mut *database)
+        .await
+        .map_err(|_| WalletError::Persistence)?;
+        let exponent = exponent.ok_or(WalletError::NotFound)?;
+        let exponent = u32::try_from(exponent).map_err(|_| WalletError::Persistence)?;
+        let name = input.name.as_deref().map(validate_name).transpose()?;
+        let opening_balance = input
+            .opening_balance
+            .as_deref()
+            .map(|value| parse_opening_balance(value, exponent))
+            .transpose()?;
         sqlx::query(
             "UPDATE wallets
-             SET name = $3, updated_at = now()
+             SET name = COALESCE($3, name),
+                 opening_balance = COALESCE($4, opening_balance),
+                 updated_at = now()
              WHERE user_id = $1 AND id = $2",
         )
         .bind(user_id)
         .bind(wallet_id)
         .bind(name)
-        .execute(&self.pool)
+        .bind(opening_balance.as_ref().map(Money::decimal))
+        .execute(&mut *database)
         .await
         .map_err(|_| WalletError::Persistence)?;
+        database
+            .commit()
+            .await
+            .map_err(|_| WalletError::Persistence)?;
         self.load(user_id, wallet_id).await
     }
 

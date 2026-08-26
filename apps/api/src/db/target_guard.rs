@@ -27,6 +27,17 @@ const FULL_V1_MIGRATIONS: &[(i64, bool)] = &[
     (6, true),
     (7, true),
     (8, true),
+    (9, true),
+];
+const PRE_WALLET_ONBOARDING_REPAIR_MIGRATIONS: &[(i64, bool)] = &[
+    (1, true),
+    (2, true),
+    (3, true),
+    (4, true),
+    (5, true),
+    (6, true),
+    (7, true),
+    (8, true),
 ];
 const PRE_ACCOUNT_DELETION_MIGRATIONS: &[(i64, bool)] = &[
     (1, true),
@@ -54,6 +65,7 @@ const FULL_SCHEMA_MIGRATION_PREFIXES: &[&[(i64, bool)]] = &[
     PRE_HISTORY_MIGRATIONS,
     PRE_RECURRING_CONSTRAINTS_MIGRATIONS,
     PRE_ACCOUNT_DELETION_MIGRATIONS,
+    PRE_WALLET_ONBOARDING_REPAIR_MIGRATIONS,
     FULL_V1_MIGRATIONS,
 ];
 
