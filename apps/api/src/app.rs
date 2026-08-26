@@ -86,7 +86,7 @@ fn build_app_with_safety(state: AppState, config: HttpSafetyConfig, auth: AuthSe
         .fallback(not_found)
         .with_state(state)
         .layer(middleware::from_fn_with_state(
-            AuthRateLimiter::new(config.auth_rate_limits),
+            AuthRateLimiter::new(config.auth_rate_limits, config.trusted_proxies),
             enforce_auth_limit,
         ))
         .layer(middleware::from_fn(no_store))

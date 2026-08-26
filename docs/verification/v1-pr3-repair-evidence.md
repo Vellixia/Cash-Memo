@@ -207,3 +207,64 @@ removed both containers and the named network. Follow-up project `ps -a` returne
   Concrete S3 receipt success followed by database final-delete failure and identical retry passed.
 - Final named-project cleanup removed both containers and network; follow-up project `ps -a`
   returned an empty table.
+
+## Trusted-proxy-aware auth throttling
+
+- Root cause: auth limiter keyed only the Axum TCP `ConnectInfo<SocketAddr>`. Behind Traefik that
+  address is the shared proxy peer, so distinct public clients consumed one IP bucket. Trust was
+  neither configurable nor transferred through a bounded, authenticated proxy suffix.
+- `CASHMEMO_V1_TRUSTED_PROXY_CIDRS` is parsed as comma-separated CIDRs during `serve` startup.
+  Empty trusts nobody; malformed input stops startup. V1 retains one API replica and its bounded
+  in-memory limiter. No Redis or persistent attempt history was added.
+- Direct untrusted peers remain authoritative and all supplied `X-Forwarded-For` values are
+  ignored. A trusted direct peer activates a right-to-left scan that strips configured trusted
+  proxies and returns the first untrusted IP literal. It examines no more than 8192 total header
+  bytes, the rightmost 2048 bytes, and 16 hops. Once a client is established, hostile left-prefix
+  values are not parsed.
+- Trusted forwarding with a missing, malformed, all-trusted, overlong, or over-hop suffix returns
+  `400 INVALID_FORWARDING_METADATA` before identifier parsing, limiter mutation, or auth-handler
+  execution. A trusted address left of an already-established untrusted client grants nothing.
+- HTTP middleware tests inject real `ConnectInfo` extensions. They prove direct spoof resistance,
+  trusted-suffix stripping, two clients behind one proxy using distinct buckets, hostile-left
+  early stop, internal trusted-address non-escalation, and pre-handler rejection.
+- `main.rs` already served the router through
+  `into_make_service_with_connect_info::<SocketAddr>()`; the repair retains that required peer
+  propagation. The operations suite exercises the real TCP server path.
+
+### Trusted-proxy RED/GREEN evidence
+
+Initial RED:
+
+`cargo test -p cashmemo-api --test http_safety -- --nocapture`
+
+Result: compile failed because `TrustedProxyConfig` and the trusted-proxy-aware limiter constructor
+did not exist. A direct-peer-only mutation reproducing the baseline then ran
+`two_clients_behind_one_trusted_proxy_keep_distinct_ip_buckets`: client `203.0.113.9` received
+`429`, expected `401`, proving both clients shared the Traefik peer bucket.
+
+Header-bound mutation RED: removing the 8192-byte check let an oversized hostile left prefix with
+a valid rightmost client reach the handler (`401`, expected pre-handler `400`). Restoring the check
+made that HTTP test pass.
+
+Compose RED:
+
+`bash infra/v1/test-dokploy-compose.sh`
+
+Result: three expected failures: missing required API trusted-proxy CIDRs, missing rendered API
+CIDRs, and missing explicit Traefik safe-append/header-limit contract.
+
+GREEN:
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test http_safety --test operations`
+
+Result: 19 tests passed (`http_safety` 12, `operations` 7).
+
+`bash infra/v1/test-dokploy-compose.sh`
+
+Result: `Compose contract PASS`.
+
+Traefik is external to this Compose project. `x-traefik-static-arguments` records exact Dokploy
+operator configuration: `insecure=false`, safe append via `notAppendXForwardedFor=false`, optional
+exact upstream `trustedIPs`, and `http.maxHeaderBytes=8192`. The Compose contract asserts all four
+arguments and the API CIDRs. Actual managed-Traefik config and public two-client probes remain a
+pre-route-activation operational gate; this task made no Dokploy or production mutation.

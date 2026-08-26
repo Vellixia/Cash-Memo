@@ -2,6 +2,7 @@
 use std::collections::BTreeSet;
 use std::{env, net::SocketAddr, time::Duration};
 
+use ipnet::IpNet;
 use thiserror::Error;
 use url::Url;
 
@@ -107,6 +108,15 @@ pub enum SmtpSecurity {
 pub struct HttpSafetyConfig {
     pub allowed_origins: Vec<String>,
     pub auth_rate_limits: AuthRateLimitSettings,
+    pub trusted_proxies: TrustedProxyConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct TrustedProxyConfig {
+    pub cidrs: Vec<IpNet>,
+    pub edge_max_header_bytes: usize,
+    pub rust_suffix_bytes: usize,
+    pub max_hops: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -352,6 +362,7 @@ impl Default for HttpSafetyConfig {
                 login: settings.clone(),
                 reset_request: settings,
             },
+            trusted_proxies: TrustedProxyConfig::default(),
         }
     }
 }
@@ -377,7 +388,43 @@ impl HttpSafetyConfig {
                     max_keys,
                 )?,
             },
+            trusted_proxies: TrustedProxyConfig::parse(
+                &env::var("CASHMEMO_V1_TRUSTED_PROXY_CIDRS").unwrap_or_default(),
+            )?,
         })
+    }
+}
+
+impl Default for TrustedProxyConfig {
+    fn default() -> Self {
+        Self {
+            cidrs: Vec::new(),
+            edge_max_header_bytes: 8192,
+            rust_suffix_bytes: 2048,
+            max_hops: 16,
+        }
+    }
+}
+
+impl TrustedProxyConfig {
+    pub fn parse(value: &str) -> Result<Self, ConfigError> {
+        let mut config = Self::default();
+        if value.trim().is_empty() {
+            return Ok(config);
+        }
+        config.cidrs = value
+            .split(',')
+            .map(str::trim)
+            .map(|cidr| {
+                cidr.parse::<IpNet>()
+                    .map_err(|_| ConfigError::InvalidTrustedProxyCidrs)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(config)
+    }
+
+    pub fn trusts(&self, address: std::net::IpAddr) -> bool {
+        self.cidrs.iter().any(|cidr| cidr.contains(&address))
     }
 }
 
@@ -482,6 +529,8 @@ pub enum ConfigError {
     InvalidDeletionReceiptKeys,
     #[error("{name} must be a positive integer, got {value}")]
     InvalidPositiveEnvironment { name: &'static str, value: String },
+    #[error("CASHMEMO_V1_TRUSTED_PROXY_CIDRS must contain only comma-separated IP CIDRs")]
+    InvalidTrustedProxyCidrs,
 }
 
 #[cfg(test)]

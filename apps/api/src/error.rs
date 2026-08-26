@@ -127,6 +127,15 @@ impl HttpError {
         )
     }
 
+    pub fn invalid_forwarding(request_id: RequestId) -> Self {
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_FORWARDING_METADATA",
+            "Forwarding metadata is invalid.",
+            request_id,
+        )
+    }
+
     pub fn unavailable(request_id: RequestId) -> Self {
         Self::new(
             StatusCode::SERVICE_UNAVAILABLE,

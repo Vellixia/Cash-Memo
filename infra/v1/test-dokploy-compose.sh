@@ -31,15 +31,21 @@ expect_render_failure() {
 }
 
 expect_render_failure CASHMEMO_V1_DATABASE_URL \
-  CASHMEMO_V1_POSTGRES_PASSWORD=test-postgres-password
+  CASHMEMO_V1_POSTGRES_PASSWORD=test-postgres-password \
+  CASHMEMO_V1_TRUSTED_PROXY_CIDRS=172.31.0.0/16
 expect_render_failure CASHMEMO_V1_POSTGRES_PASSWORD \
-  CASHMEMO_V1_DATABASE_URL=postgres://cashmemo:test@cashmemo-v1-postgres:5432/cashmemo_v1
+  CASHMEMO_V1_DATABASE_URL=postgres://cashmemo:test@cashmemo-v1-postgres:5432/cashmemo_v1 \
+  CASHMEMO_V1_TRUSTED_PROXY_CIDRS=172.31.0.0/16
+expect_render_failure CASHMEMO_V1_TRUSTED_PROXY_CIDRS \
+  CASHMEMO_V1_DATABASE_URL=postgres://cashmemo:test@cashmemo-v1-postgres:5432/cashmemo_v1 \
+  CASHMEMO_V1_POSTGRES_PASSWORD=test-postgres-password
 
 rendered=$(mktemp)
 trap 'rm -f "$rendered"' EXIT HUP INT TERM
 base_env \
   CASHMEMO_V1_DATABASE_URL=postgres://cashmemo:test@cashmemo-v1-postgres:5432/cashmemo_v1 \
   CASHMEMO_V1_POSTGRES_PASSWORD=test-postgres-password \
+  CASHMEMO_V1_TRUSTED_PROXY_CIDRS=172.31.0.0/16 \
   CASHMEMO_V1_DOKPLOY_NETWORK=task20-edge \
   CASHMEMO_V1_PRIVATE_NETWORK=task20-private \
   "$compose_bin" -f "$compose_file" config --format json >"$rendered"
@@ -60,6 +66,10 @@ jq -e '.services["cashmemo-v1-api"].environment.CASHMEMO_V1_BIND_ADDR == "0.0.0.
   fail "approved container bind control missing"
 jq -e '(.services["cashmemo-v1-api"].environment | has("CASHMEMO_V1_ARGON2_MEMORY_KIB") and has("CASHMEMO_V1_ARGON2_TIME_COST") and has("CASHMEMO_V1_ARGON2_PARALLELISM"))' "$rendered" >/dev/null ||
   fail "approved Argon2 tuning controls missing"
+jq -e '.services["cashmemo-v1-api"].environment.CASHMEMO_V1_TRUSTED_PROXY_CIDRS == "172.31.0.0/16"' "$rendered" >/dev/null ||
+  fail "API trusted-proxy CIDRs are not explicit"
+jq -e '.["x-traefik-static-arguments"] == ["--entryPoints.websecure.forwardedHeaders.insecure=false", "--entryPoints.websecure.forwardedHeaders.notAppendXForwardedFor=false", "--entryPoints.websecure.forwardedHeaders.trustedIPs=", "--entryPoints.websecure.http.maxHeaderBytes=8192"]' "$rendered" >/dev/null ||
+  fail "Traefik safe-append and header-limit policy are not explicit"
 
 if [ "$failures" -ne 0 ]; then
   printf '%s\n' "Compose contract failures: $failures" >&2

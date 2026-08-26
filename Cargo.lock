@@ -853,6 +853,7 @@ dependencies = [
  "chrono-tz",
  "clap",
  "hmac 0.12.1",
+ "ipnet",
  "lettre",
  "rand 0.9.5",
  "rust_decimal",

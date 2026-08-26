@@ -1,10 +1,25 @@
 use axum::{
     body::{Body, to_bytes},
+    extract::ConnectInfo,
     http::{HeaderValue, Request, StatusCode, header},
+    middleware,
+    response::IntoResponse,
+    routing::post,
 };
 use cashmemo_api::app::{AppState, build_app};
+use cashmemo_api::{
+    config::{AuthRateLimitSettings, RateLimitSettings, TrustedProxyConfig},
+    http::rate_limit::{AuthRateLimiter, enforce_auth_limit},
+};
 use serde_json::Value;
-use std::time::Duration;
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use sqlx::postgres::PgPoolOptions;
 use tower::ServiceExt;
@@ -17,6 +32,61 @@ fn app() -> axum::Router {
         .unwrap();
 
     build_app(AppState { pool })
+}
+
+fn rate_limited_app(
+    trusted_proxy_cidrs: &str,
+    max_attempts: usize,
+) -> (axum::Router, Arc<AtomicUsize>) {
+    let settings = RateLimitSettings {
+        max_attempts,
+        window: Duration::from_secs(60),
+        max_keys: 100,
+    };
+    let limits = AuthRateLimitSettings {
+        register: settings.clone(),
+        verification_resend: settings.clone(),
+        login: settings.clone(),
+        reset_request: settings,
+    };
+    let handler_hits = Arc::new(AtomicUsize::new(0));
+    let handler_counter = handler_hits.clone();
+    let limiter = AuthRateLimiter::new(
+        limits,
+        TrustedProxyConfig::parse(trusted_proxy_cidrs).unwrap(),
+    );
+    let app = axum::Router::new()
+        .route(
+            "/api/v1/auth/login",
+            post(move || {
+                let handler_counter = handler_counter.clone();
+                async move {
+                    handler_counter.fetch_add(1, Ordering::SeqCst);
+                    StatusCode::UNAUTHORIZED.into_response()
+                }
+            }),
+        )
+        .layer(middleware::from_fn_with_state(limiter, enforce_auth_limit));
+    (app, handler_hits)
+}
+
+fn request_from_peer(peer: IpAddr, forwarded_for: Option<&str>) -> Request<Body> {
+    let mut request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/login")
+        .header(header::ORIGIN, "http://localhost:3000")
+        .body(Body::empty())
+        .unwrap();
+    request
+        .extensions_mut()
+        .insert(ConnectInfo(SocketAddr::new(peer, 43210)));
+    if let Some(forwarded_for) = forwarded_for {
+        request.headers_mut().insert(
+            "x-forwarded-for",
+            HeaderValue::from_str(forwarded_for).unwrap(),
+        );
+    }
+    request
 }
 
 #[tokio::test]
@@ -137,20 +207,166 @@ async fn auth_limit_returns_429_without_persistent_attempt_rows() {
     for _ in 0..6 {
         status = app
             .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/auth/login")
-                    .header(header::ORIGIN, "http://localhost:3000")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(request_from_peer(IpAddr::from([198, 51, 100, 44]), None))
             .await
             .unwrap()
             .status();
     }
 
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[test]
+fn trusted_proxy_configuration_rejects_invalid_cidrs() {
+    let error = TrustedProxyConfig::parse("10.0.0.0/8,not-a-cidr").unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("CASHMEMO_V1_TRUSTED_PROXY_CIDRS"),
+        "error: {error}"
+    );
+    assert!(TrustedProxyConfig::parse("").unwrap().cidrs.is_empty());
+}
+
+#[tokio::test]
+async fn direct_untrusted_peer_is_authoritative_and_forwarded_spoofs_are_ignored() {
+    let (app, handler_hits) = rate_limited_app("", 2);
+    let peer = IpAddr::from([198, 51, 100, 44]);
+
+    for spoof in ["203.0.113.8", "192.0.2.90"] {
+        let response = app
+            .clone()
+            .oneshot(request_from_peer(peer, Some(spoof)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+    let response = app
+        .oneshot(request_from_peer(peer, Some("203.0.113.200")))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(handler_hits.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn trusted_proxy_chain_strips_only_trusted_suffix() {
+    let (app, handler_hits) = rate_limited_app("10.0.0.0/8", 1);
+    let proxy = IpAddr::from([10, 0, 0, 2]);
+
+    let first = app
+        .clone()
+        .oneshot(request_from_peer(proxy, Some("203.0.113.8, 10.0.0.3")))
+        .await
+        .unwrap();
+    let second = app
+        .oneshot(request_from_peer(proxy, Some("203.0.113.8, 10.0.0.99")))
+        .await
+        .unwrap();
+
+    assert_eq!(first.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(handler_hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn two_clients_behind_one_trusted_proxy_keep_distinct_ip_buckets() {
+    let (app, handler_hits) = rate_limited_app("10.0.0.0/8", 1);
+    let proxy = IpAddr::from([10, 0, 0, 2]);
+
+    for client in ["203.0.113.8", "203.0.113.9"] {
+        let response = app
+            .clone()
+            .oneshot(request_from_peer(proxy, Some(client)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{client}");
+    }
+    let repeated = app
+        .oneshot(request_from_peer(proxy, Some("203.0.113.8")))
+        .await
+        .unwrap();
+
+    assert_eq!(repeated.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(handler_hits.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn hostile_left_prefix_is_not_parsed_after_real_rightmost_client() {
+    let (app, handler_hits) = rate_limited_app("10.0.0.0/8", 1);
+    let proxy = IpAddr::from([10, 0, 0, 2]);
+
+    let first = app
+        .clone()
+        .oneshot(request_from_peer(
+            proxy,
+            Some("malformed-prefix, 203.0.113.8"),
+        ))
+        .await
+        .unwrap();
+    let second = app
+        .oneshot(request_from_peer(proxy, Some("203.0.113.8")))
+        .await
+        .unwrap();
+
+    assert_eq!(first.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(handler_hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn trusted_address_inside_untrusted_chain_grants_no_trust() {
+    let (app, handler_hits) = rate_limited_app("10.0.0.0/8", 1);
+    let proxy = IpAddr::from([10, 0, 0, 2]);
+
+    let first = app
+        .clone()
+        .oneshot(request_from_peer(proxy, Some("10.9.8.7, 198.51.100.7")))
+        .await
+        .unwrap();
+    let second = app
+        .oneshot(request_from_peer(proxy, Some("192.0.2.9, 198.51.100.7")))
+        .await
+        .unwrap();
+
+    assert_eq!(first.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(handler_hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn malformed_or_excessive_trusted_suffix_fails_before_auth_handler() {
+    let (app, handler_hits) = rate_limited_app("10.0.0.0/8", 5);
+    let proxy = IpAddr::from([10, 0, 0, 2]);
+    let too_many_hops = std::iter::repeat_n("10.0.0.3", 17)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let too_many_bytes = "x".repeat(2049);
+    let oversized_header_with_rightmost_client =
+        format!("{}, 203.0.113.8", "hostile-prefix".repeat(630));
+
+    for forwarded_for in [
+        None,
+        Some("10.0.0.3"),
+        Some("203.0.113.8, malformed"),
+        Some(&too_many_hops),
+        Some(&too_many_bytes),
+        Some(&oversized_header_with_rightmost_client),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(request_from_peer(proxy, forwarded_for))
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "{forwarded_for:?}"
+        );
+    }
+
+    assert_eq!(handler_hits.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

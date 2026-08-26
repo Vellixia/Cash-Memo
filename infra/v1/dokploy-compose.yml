@@ -36,6 +36,14 @@ x-dokploy-operations:
       command: ["cleanup-auth-tokens", "--batch-size", "1000"]
       required_environment: ["CASHMEMO_V1_DATABASE_URL"]
 
+# Dokploy owns the external Traefik process, so these are exact static arguments for the operator
+# to apply there. Compose cannot configure an external process; infra/v1/traefik.md has the gate.
+x-traefik-static-arguments:
+  - --entryPoints.websecure.forwardedHeaders.insecure=false
+  - --entryPoints.websecure.forwardedHeaders.notAppendXForwardedFor=false
+  - --entryPoints.websecure.forwardedHeaders.trustedIPs=${CASHMEMO_V1_TRAEFIK_TRUSTED_FORWARDER_CIDRS:-}
+  - --entryPoints.websecure.http.maxHeaderBytes=8192
+
 x-api-environment: &api-environment
   CASHMEMO_V1_DATABASE_URL: ${CASHMEMO_V1_DATABASE_URL:?CASHMEMO_V1_DATABASE_URL is required}
   CASHMEMO_V1_BIND_ADDR: 0.0.0.0:3000
@@ -58,6 +66,7 @@ x-api-environment: &api-environment
   CASHMEMO_V1_AUTH_VERIFICATION_RESEND_LIMIT: ${CASHMEMO_V1_AUTH_VERIFICATION_RESEND_LIMIT:-5}
   CASHMEMO_V1_AUTH_LOGIN_LIMIT: ${CASHMEMO_V1_AUTH_LOGIN_LIMIT:-5}
   CASHMEMO_V1_AUTH_RESET_REQUEST_LIMIT: ${CASHMEMO_V1_AUTH_RESET_REQUEST_LIMIT:-5}
+  CASHMEMO_V1_TRUSTED_PROXY_CIDRS: ${CASHMEMO_V1_TRUSTED_PROXY_CIDRS:?CASHMEMO_V1_TRUSTED_PROXY_CIDRS is required}
   CASHMEMO_V1_ARGON2_MEMORY_KIB: ${CASHMEMO_V1_ARGON2_MEMORY_KIB:-65536}
   CASHMEMO_V1_ARGON2_TIME_COST: ${CASHMEMO_V1_ARGON2_TIME_COST:-3}
   CASHMEMO_V1_ARGON2_PARALLELISM: ${CASHMEMO_V1_ARGON2_PARALLELISM:-1}

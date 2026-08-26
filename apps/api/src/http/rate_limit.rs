@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -15,7 +15,7 @@ use axum::{
 use serde_json::Value;
 
 use crate::{
-    config::{AuthRateLimitSettings, RateLimitSettings},
+    config::{AuthRateLimitSettings, RateLimitSettings, TrustedProxyConfig},
     error::HttpError,
     http::RequestId,
 };
@@ -25,6 +25,7 @@ const MAX_AUTH_BODY_BYTES: usize = 16 * 1024;
 #[derive(Clone)]
 pub struct AuthRateLimiter {
     settings: AuthRateLimitSettings,
+    trusted_proxies: TrustedProxyConfig,
     buckets: Arc<Mutex<HashMap<String, Bucket>>>,
 }
 
@@ -42,9 +43,10 @@ pub(crate) enum EndpointClass {
 }
 
 impl AuthRateLimiter {
-    pub fn new(settings: AuthRateLimitSettings) -> Self {
+    pub fn new(settings: AuthRateLimitSettings, trusted_proxies: TrustedProxyConfig) -> Self {
         Self {
             settings,
+            trusted_proxies,
             buckets: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -90,8 +92,19 @@ pub async fn enforce_auth_limit(
     let Some(class) = endpoint_class(request.method(), request.uri().path()) else {
         return next.run(request).await;
     };
+    let client = match effective_client(&request, &limiter.trusted_proxies) {
+        Ok(client) => client,
+        Err(_) => {
+            let request_id = request
+                .extensions()
+                .get::<RequestId>()
+                .cloned()
+                .unwrap_or_else(RequestId::new);
+            return HttpError::invalid_forwarding(request_id).into_response();
+        }
+    };
     let (request, identifier) = request_with_identifier(request).await;
-    let mut keys = vec![format!("{class:?}:ip:{}", client_ip(&request))];
+    let mut keys = vec![format!("{class:?}:ip:{client}")];
     if let Some(identifier) = identifier {
         keys.push(format!("{class:?}:id:{identifier}"));
     }
@@ -136,12 +149,76 @@ fn normalize_identifier(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-fn client_ip(request: &Request) -> String {
-    request
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EffectiveClientError {
+    MissingPeer,
+    InvalidForwarding,
+}
+
+pub fn effective_client(
+    request: &Request,
+    trusted_proxies: &TrustedProxyConfig,
+) -> Result<IpAddr, EffectiveClientError> {
+    let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|peer| peer.0.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_owned())
+        .map(|peer| peer.0.ip())
+        .ok_or(EffectiveClientError::MissingPeer)?;
+    if !trusted_proxies.trusts(peer) {
+        return Ok(peer);
+    }
+
+    let values = request.headers().get_all("x-forwarded-for");
+    if values.iter().next().is_none() {
+        return Err(EffectiveClientError::InvalidForwarding);
+    }
+    let header_bytes = values
+        .iter()
+        .enumerate()
+        .try_fold(0usize, |total, (index, value)| {
+            total
+                .checked_add(value.as_bytes().len())?
+                .checked_add(usize::from(index > 0))
+        });
+    if header_bytes.is_none_or(|bytes| bytes > trusted_proxies.edge_max_header_bytes) {
+        return Err(EffectiveClientError::InvalidForwarding);
+    }
+
+    let mut inspected_bytes = 0usize;
+    let mut inspected_hops = 0usize;
+    for value in values.iter().rev() {
+        for raw_hop in value.as_bytes().rsplit(|byte| *byte == b',') {
+            inspected_bytes = inspected_bytes
+                .checked_add(raw_hop.len() + usize::from(inspected_hops > 0))
+                .ok_or(EffectiveClientError::InvalidForwarding)?;
+            inspected_hops += 1;
+            if inspected_bytes > trusted_proxies.rust_suffix_bytes
+                || inspected_hops > trusted_proxies.max_hops
+            {
+                return Err(EffectiveClientError::InvalidForwarding);
+            }
+            let hop = trim_ascii_whitespace(raw_hop);
+            let address = std::str::from_utf8(hop)
+                .ok()
+                .and_then(|hop| hop.parse::<IpAddr>().ok())
+                .ok_or(EffectiveClientError::InvalidForwarding)?;
+            if !trusted_proxies.trusts(address) {
+                return Ok(address);
+            }
+        }
+    }
+
+    Err(EffectiveClientError::InvalidForwarding)
+}
+
+fn trim_ascii_whitespace(mut value: &[u8]) -> &[u8] {
+    while value.first().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[1..];
+    }
+    while value.last().is_some_and(u8::is_ascii_whitespace) {
+        value = &value[..value.len() - 1];
+    }
+    value
 }
 
 fn prune(bucket: &mut Bucket, settings: &RateLimitSettings, now: Instant) {
