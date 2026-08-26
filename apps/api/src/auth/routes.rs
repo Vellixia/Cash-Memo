@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{error::HttpError, http::RequestId};
 
-use super::{AuthError, AuthService, AuthSession, SessionAccess};
+use super::{
+    AuthError, AuthService, AuthSession, SessionAccess,
+    cookie::{clear_session_cookie, session_cookie},
+};
 
 pub fn router<S>(auth: AuthService) -> Router<S>
 where
@@ -122,7 +125,7 @@ async fn logout(
     auth.logout(token)
         .await
         .map_err(|error| map_error(error, request_id))?;
-    Ok(clear_cookie())
+    Ok(cleared_cookie_response())
 }
 
 async fn current_session(session: AuthSession) -> Result<Json<CurrentSession>, HttpError> {
@@ -146,7 +149,7 @@ async fn revoke_all(
     auth.revoke_all(session.user_id)
         .await
         .map_err(|_| HttpError::unauthorized(RequestId::new()))?;
-    Ok(clear_cookie())
+    Ok(cleared_cookie_response())
 }
 
 async fn request_password_reset(
@@ -168,7 +171,7 @@ async fn consume_password_reset(
     auth.consume_password_reset(&body.token, &body.password)
         .await
         .map_err(|error| map_error(error, request_id))?;
-    Ok(clear_cookie())
+    Ok(cleared_cookie_response())
 }
 
 fn cookie_token(headers: &HeaderMap) -> Option<&str> {
@@ -181,18 +184,9 @@ fn cookie_token(headers: &HeaderMap) -> Option<&str> {
         .find_map(|part| part.strip_prefix("__Host-cashmemo_session="))
 }
 
-fn session_cookie(token: &str) -> String {
-    format!("__Host-cashmemo_session={token}; Path=/; Secure; HttpOnly; SameSite=Lax")
-}
-
-fn clear_cookie() -> Response {
+fn cleared_cookie_response() -> Response {
     let mut response = Json(Accepted { accepted: true }).into_response();
-    response.headers_mut().insert(
-        header::SET_COOKIE,
-        HeaderValue::from_static(
-            "__Host-cashmemo_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
-        ),
-    );
+    clear_session_cookie(&mut response);
     response
 }
 

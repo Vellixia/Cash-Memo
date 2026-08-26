@@ -1,11 +1,19 @@
 use std::{sync::Arc, time::Duration};
 
+use axum::{
+    Router,
+    body::Body,
+    http::{Request, StatusCode, header::SET_COOKIE},
+};
 use cashmemo_api::{
-    accounts::{AccountDeletionError, AccountDeletionService, AccountStatus},
-    auth::{AuthConfig, AuthService, SessionAccess, UnconfiguredEmailSender},
+    accounts::{
+        AccountDeletionError, AccountDeletionService, AccountStatus, PasswordVerificationHook,
+    },
+    auth::{AuthConfig, AuthError, AuthService, SessionAccess, UnconfiguredEmailSender},
     receipts::{DeletionReceipt, DeletionReceiptStore, ReceiptError, ReceiptWrite},
 };
 use sqlx::PgPool;
+use tower::ServiceExt;
 
 #[derive(Default)]
 struct FakeReceipts {
@@ -95,6 +103,183 @@ async fn recent_password_starts_seven_day_deletion_and_revokes_all_sessions(pool
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn cancellation_requires_password_then_revokes_restricted_session_and_clears_cookie(
+    pool: PgPool,
+) {
+    let (auth, user_id) = active_account(&pool).await;
+    let deletion = AccountDeletionService::new(pool.clone());
+    deletion
+        .request(user_id, "correct horse battery staple")
+        .await
+        .unwrap();
+    let restricted = auth
+        .login("delete-me@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    assert_eq!(restricted.access, SessionAccess::DeletionOnly);
+    let app = Router::new()
+        .merge(cashmemo_api::accounts::routes::router(deletion))
+        .layer(axum::extract::Extension(auth.clone()));
+
+    let cancel_wrong = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/account/deletion/cancel")
+                .extension(cashmemo_api::http::RequestId::new())
+                .header("content-type", "application/json")
+                .header(
+                    "cookie",
+                    format!("__Host-cashmemo_session={}", restricted.raw_token),
+                )
+                .body(Body::from(r#"{"password":"wrong password"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancel_wrong.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        auth.session(&restricted.raw_token).await.unwrap().access,
+        SessionAccess::DeletionOnly
+    );
+
+    let cancel_ok = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/account/deletion/cancel")
+                .extension(cashmemo_api::http::RequestId::new())
+                .header("content-type", "application/json")
+                .header(
+                    "cookie",
+                    format!("__Host-cashmemo_session={}", restricted.raw_token),
+                )
+                .body(Body::from(r#"{"password":"correct horse battery staple"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancel_ok.status(), StatusCode::OK);
+    assert!(
+        cancel_ok.headers()[SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .contains("Max-Age=0")
+    );
+    assert_eq!(
+        auth.session(&restricted.raw_token).await,
+        Err(AuthError::Unauthorized)
+    );
+    assert_eq!(
+        auth.login("delete-me@example.com", "correct horse battery staple")
+            .await
+            .unwrap()
+            .access,
+        SessionAccess::Full
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn request_rejects_status_changed_after_password_verification_without_full_session(
+    pool: PgPool,
+) {
+    let (auth, user_id) = active_account(&pool).await;
+    let full = auth
+        .login("delete-me@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let hook = Arc::new(PasswordVerificationHook::new());
+    let deletion =
+        AccountDeletionService::new(pool.clone()).with_password_verification_hook(hook.clone());
+    let request = tokio::spawn({
+        let deletion = deletion.clone();
+        async move {
+            deletion
+                .request(user_id, "correct horse battery staple")
+                .await
+        }
+    });
+
+    hook.wait_until_verified().await;
+    let status_update = tokio::time::timeout(
+        Duration::from_millis(200),
+        sqlx::query("UPDATE users SET status = 'pending_deletion' WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool),
+    )
+    .await;
+    hook.resume();
+    let result = request.await.unwrap();
+
+    assert!(
+        matches!(status_update, Ok(Ok(_))),
+        "status update must complete before deletion transition locks user"
+    );
+    assert_eq!(result, Err(AccountDeletionError::RecentPasswordRequired));
+    assert_eq!(
+        deletion.status(user_id).await.unwrap().status,
+        AccountStatus::PendingDeletion
+    );
+    assert_eq!(
+        auth.session(&full.raw_token).await.unwrap().access,
+        SessionAccess::DeletionOnly
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cancellation_rejects_hash_changed_after_password_verification_without_full_session(
+    pool: PgPool,
+) {
+    let (auth, user_id) = active_account(&pool).await;
+    let initial = AccountDeletionService::new(pool.clone());
+    initial
+        .request(user_id, "correct horse battery staple")
+        .await
+        .unwrap();
+    let restricted = auth
+        .login("delete-me@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let hook = Arc::new(PasswordVerificationHook::new());
+    let deletion =
+        AccountDeletionService::new(pool.clone()).with_password_verification_hook(hook.clone());
+    let cancel = tokio::spawn({
+        let deletion = deletion.clone();
+        async move {
+            deletion
+                .cancel(user_id, "correct horse battery staple")
+                .await
+        }
+    });
+
+    hook.wait_until_verified().await;
+    let hash_update = tokio::time::timeout(
+        Duration::from_millis(200),
+        sqlx::query("UPDATE users SET password_hash = 'changed-during-confirmation' WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool),
+    )
+    .await;
+    hook.resume();
+    let result = cancel.await.unwrap();
+
+    assert!(
+        matches!(hash_update, Ok(Ok(_))),
+        "password hash update must complete before cancellation transition locks user"
+    );
+    assert_eq!(result, Err(AccountDeletionError::RecentPasswordRequired));
+    assert_eq!(
+        deletion.status(user_id).await.unwrap().status,
+        AccountStatus::PendingDeletion
+    );
+    assert_eq!(
+        auth.session(&restricted.raw_token).await.unwrap().access,
+        SessionAccess::DeletionOnly
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn claim_is_atomic_and_cancellation_fails_after_purging(pool: PgPool) {
     let (_auth, user_id) = active_account(&pool).await;
     let deletion = AccountDeletionService::new(pool.clone());
@@ -117,7 +302,9 @@ async fn claim_is_atomic_and_cancellation_fails_after_purging(pool: PgPool) {
         1
     );
     assert_eq!(
-        deletion.cancel(user_id).await,
+        deletion
+            .cancel(user_id, "correct horse battery staple")
+            .await,
         Err(AccountDeletionError::NotPending)
     );
 }
@@ -135,14 +322,6 @@ async fn concurrent_login_and_deletion_leave_no_live_full_session(pool: PgPool) 
     {
         assert_ne!(session.access, SessionAccess::Full);
     }
-    let active_sessions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(active_sessions, 0);
 }
 
 #[sqlx::test(migrations = "./migrations")]

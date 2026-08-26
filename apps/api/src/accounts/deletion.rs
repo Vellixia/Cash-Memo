@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
@@ -11,8 +11,46 @@ use crate::receipts::{DeletionReceipt, DeletionReceiptStore, hmac_user_id};
 const DELETION_GRACE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 #[derive(Clone)]
+struct VerifiedUserSnapshot {
+    password_hash: String,
+    status: String,
+}
+
+#[derive(Clone)]
 pub struct AccountDeletionService {
     pool: PgPool,
+    #[cfg(debug_assertions)]
+    password_verification_hook: Option<Arc<PasswordVerificationHook>>,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug)]
+pub struct PasswordVerificationHook {
+    verified: tokio::sync::Barrier,
+    resume: tokio::sync::Notify,
+}
+
+#[cfg(debug_assertions)]
+impl PasswordVerificationHook {
+    pub fn new() -> Self {
+        Self {
+            verified: tokio::sync::Barrier::new(2),
+            resume: tokio::sync::Notify::new(),
+        }
+    }
+
+    pub async fn wait_until_verified(&self) {
+        self.verified.wait().await;
+    }
+
+    pub fn resume(&self) {
+        self.resume.notify_one();
+    }
+
+    async fn wait_after_verification(&self) {
+        self.verified.wait().await;
+        self.resume.notified().await;
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -52,7 +90,17 @@ pub enum AccountDeletionError {
 
 impl AccountDeletionService {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            #[cfg(debug_assertions)]
+            password_verification_hook: None,
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn with_password_verification_hook(mut self, hook: Arc<PasswordVerificationHook>) -> Self {
+        self.password_verification_hook = Some(hook);
+        self
     }
 
     pub async fn request(
@@ -60,27 +108,17 @@ impl AccountDeletionService {
         user_id: Uuid,
         password: &str,
     ) -> Result<DeletionStatus, AccountDeletionError> {
+        let snapshot = self.verify_password_snapshot(user_id, password).await?;
+        if snapshot.status != "active" {
+            return Err(AccountDeletionError::NotPending);
+        }
         let mut tx = self
             .pool
             .begin()
             .await
             .map_err(|_| AccountDeletionError::Persistence)?;
-        let row: Option<(String, String)> = sqlx::query_as(
-            "SELECT password_hash, status::TEXT FROM users WHERE id = $1 FOR UPDATE",
-        )
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|_| AccountDeletionError::Persistence)?;
-        let Some((password_hash, status)) = row else {
-            return Err(AccountDeletionError::RecentPasswordRequired);
-        };
-        if !verify_current_password(password, &password_hash) {
-            return Err(AccountDeletionError::RecentPasswordRequired);
-        }
-        if status != "active" {
-            return Err(AccountDeletionError::NotPending);
-        }
+        self.lock_verified_snapshot(&mut tx, user_id, &snapshot)
+            .await?;
         sqlx::query(
             "UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
         )
@@ -100,6 +138,55 @@ impl AccountDeletionService {
         })
     }
 
+    async fn verify_password_snapshot(
+        &self,
+        user_id: Uuid,
+        password: &str,
+    ) -> Result<VerifiedUserSnapshot, AccountDeletionError> {
+        let row: Option<(String, String)> =
+            sqlx::query_as("SELECT password_hash, status::TEXT FROM users WHERE id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|_| AccountDeletionError::Persistence)?;
+        let Some((password_hash, status)) = row else {
+            return Err(AccountDeletionError::RecentPasswordRequired);
+        };
+        if !verify_current_password(password, &password_hash) {
+            return Err(AccountDeletionError::RecentPasswordRequired);
+        }
+        #[cfg(debug_assertions)]
+        if let Some(hook) = &self.password_verification_hook {
+            hook.wait_after_verification().await;
+        }
+        Ok(VerifiedUserSnapshot {
+            password_hash,
+            status,
+        })
+    }
+
+    async fn lock_verified_snapshot(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        snapshot: &VerifiedUserSnapshot,
+    ) -> Result<(), AccountDeletionError> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT password_hash, status::TEXT FROM users WHERE id = $1 FOR UPDATE",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| AccountDeletionError::Persistence)?;
+        let Some((password_hash, status)) = row else {
+            return Err(AccountDeletionError::RecentPasswordRequired);
+        };
+        if password_hash != snapshot.password_hash || status != snapshot.status {
+            return Err(AccountDeletionError::RecentPasswordRequired);
+        }
+        Ok(())
+    }
+
     pub async fn status(&self, user_id: Uuid) -> Result<DeletionStatus, AccountDeletionError> {
         let row: Option<(String, Option<DateTime<Utc>>)> =
             sqlx::query_as("SELECT status::TEXT, deletion_due_at FROM users WHERE id = $1")
@@ -116,14 +203,35 @@ impl AccountDeletionService {
         })
     }
 
-    pub async fn cancel(&self, user_id: Uuid) -> Result<(), AccountDeletionError> {
-        let result = sqlx::query("UPDATE users SET status = 'active', deletion_requested_at = NULL, deletion_due_at = NULL, updated_at = now() WHERE id = $1 AND status = 'pending_deletion'")
-            .bind(user_id).execute(&self.pool).await.map_err(|_| AccountDeletionError::Persistence)?;
-        if result.rows_affected() == 1 {
-            Ok(())
-        } else {
-            Err(AccountDeletionError::NotPending)
+    pub async fn cancel(&self, user_id: Uuid, password: &str) -> Result<(), AccountDeletionError> {
+        let snapshot = self.verify_password_snapshot(user_id, password).await?;
+        if snapshot.status != "pending_deletion" {
+            return Err(AccountDeletionError::NotPending);
         }
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| AccountDeletionError::Persistence)?;
+        self.lock_verified_snapshot(&mut tx, user_id, &snapshot)
+            .await?;
+        sqlx::query(
+            "UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AccountDeletionError::Persistence)?;
+        sqlx::query(
+            "UPDATE users SET status = 'active', deletion_requested_at = NULL, deletion_due_at = NULL, updated_at = now() WHERE id = $1",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AccountDeletionError::Persistence)?;
+        tx.commit()
+            .await
+            .map_err(|_| AccountDeletionError::Persistence)
     }
 
     pub async fn claim_next(

@@ -1,3 +1,4 @@
+pub mod cookie;
 pub mod email;
 mod model;
 mod password;

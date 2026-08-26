@@ -1,13 +1,14 @@
 use axum::{
     Json, Router,
     extract::Extension,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 
 use super::{AccountDeletionError, AccountDeletionService, AccountStatus};
 use crate::{
-    auth::{AuthSession, SessionAccess},
+    auth::{AuthSession, SessionAccess, cookie::clear_session_cookie},
     error::HttpError,
     http::RequestId,
 };
@@ -39,28 +40,31 @@ async fn request(
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
     Json(body): Json<DeletionRequest>,
-) -> Result<Json<DeletionResponse>, HttpError> {
+) -> Result<Response, HttpError> {
     if session.access != SessionAccess::Full {
         return Err(HttpError::forbidden(request_id));
     }
-    service
+    let status = service
         .request(session.user_id, &body.password)
         .await
         .map(response)
-        .map(Json)
-        .map_err(|error| map_error(error, request_id))
+        .map_err(|error| map_error(error, request_id))?;
+    let mut response = Json(status).into_response();
+    clear_session_cookie(&mut response);
+    Ok(response)
 }
 
 async fn status(
     Extension(service): Extension<AccountDeletionService>,
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
-) -> Result<Json<DeletionResponse>, HttpError> {
+) -> Result<Response, HttpError> {
     service
         .status(session.user_id)
         .await
         .map(response)
         .map(Json)
+        .map(axum::Json::into_response)
         .map_err(|error| map_error(error, request_id))
 }
 
@@ -68,12 +72,20 @@ async fn cancel(
     Extension(service): Extension<AccountDeletionService>,
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
-) -> Result<Json<DeletionResponse>, HttpError> {
+    Json(body): Json<DeletionRequest>,
+) -> Result<Response, HttpError> {
     service
-        .cancel(session.user_id)
+        .cancel(session.user_id, &body.password)
         .await
         .map_err(|error| map_error(error, request_id.clone()))?;
-    status(Extension(service), session, Extension(request_id)).await
+    let status = service
+        .status(session.user_id)
+        .await
+        .map(response)
+        .map_err(|error| map_error(error, request_id))?;
+    let mut response = Json(status).into_response();
+    clear_session_cookie(&mut response);
+    Ok(response)
 }
 
 fn response(status: super::DeletionStatus) -> DeletionResponse {

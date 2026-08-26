@@ -4,6 +4,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use cashmemo_api::accounts::AccountDeletionService;
 use cashmemo_api::auth::email::SmtpEmailSender;
 use cashmemo_api::auth::{
     Argon2idConfig, AuthConfig, AuthConfigError, AuthError, AuthService, EmailError, EmailSender,
@@ -398,6 +399,52 @@ async fn session_touch_is_hourly_and_login_sets_host_only_secure_cookie(pool: Pg
     assert!(cookie.starts_with("__Host-cashmemo_session="));
     assert!(cookie.contains("Path=/; Secure; HttpOnly; SameSite=Lax"));
     assert!(!cookie.contains("Domain="));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn account_deletion_request_clears_session_cookie(pool: PgPool) {
+    let mailer = Arc::new(FakeEmailSender::default());
+    let auth = service(pool.clone(), mailer.clone());
+    auth.register("alice@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let verification = sent_token(&mailer.verification, 0).await;
+    auth.verify_email(&verification).await.unwrap();
+    let login = auth
+        .login("alice@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let app = cashmemo_api::accounts::routes::router(AccountDeletionService::new(pool))
+        .layer(axum::extract::Extension(auth.clone()));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/account/deletion")
+                .extension(cashmemo_api::http::RequestId::new())
+                .header("content-type", "application/json")
+                .header(
+                    "cookie",
+                    format!("__Host-cashmemo_session={}", login.raw_token),
+                )
+                .body(Body::from(r#"{"password":"correct horse battery staple"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        response.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("Max-Age=0")
+    );
+    assert_eq!(
+        auth.session(&login.raw_token).await,
+        Err(AuthError::Unauthorized)
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
