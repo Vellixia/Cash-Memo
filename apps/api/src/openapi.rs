@@ -474,8 +474,15 @@ fn contract(operation_id: &str) -> Contract {
             query: &[],
             errors: AUTH_ERRORS,
         },
-        "get_account_deletion" | "cancel_account_deletion" => Contract {
+        "get_account_deletion" => Contract {
             request: None,
+            response: Some(("AccountDeletionContract", false)),
+            success_status: "200",
+            query: &[],
+            errors: AUTH_ERRORS,
+        },
+        "cancel_account_deletion" => Contract {
+            request: Some("DeletionRequest"),
             response: Some(("AccountDeletionContract", false)),
             success_status: "200",
             query: &[],

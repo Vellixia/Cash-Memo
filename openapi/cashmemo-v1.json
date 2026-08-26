@@ -210,6 +210,16 @@
     "/api/v1/account/deletion/cancel": {
       "post": {
         "operationId": "cancel_account_deletion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful response",

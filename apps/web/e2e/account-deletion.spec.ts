@@ -30,10 +30,9 @@ test("revokes all sessions and cancels pending account deletion during grace", a
   await login(page, user, /\/deletion$/);
   await expect(page.getByRole("status")).toContainText("pending_deletion");
 
+  await page.getByLabel("Confirm password").fill(user.password);
   await page.getByRole("button", { name: "Cancel deletion" }).click();
-  await expect(page.getByRole("status")).toContainText("Status: active");
-  await expect(page.getByRole("button", { name: "Cancel deletion" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
   await login(page, user);
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
 });

@@ -5,6 +5,8 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+#[cfg(debug_assertions)]
+use std::sync::Arc;
 
 use super::{AccountDeletionError, AccountDeletionService, AccountStatus};
 use crate::{
@@ -33,6 +35,36 @@ struct DeletionRequest {
 struct DeletionResponse {
     status: &'static str,
     deletion_due_at: Option<String>,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug)]
+pub struct CancelAuthorizationHook {
+    session_captured: tokio::sync::Barrier,
+    resume: tokio::sync::Notify,
+}
+
+#[cfg(debug_assertions)]
+impl CancelAuthorizationHook {
+    pub fn new() -> Self {
+        Self {
+            session_captured: tokio::sync::Barrier::new(2),
+            resume: tokio::sync::Notify::new(),
+        }
+    }
+
+    pub async fn wait_until_session_is_captured(&self) {
+        self.session_captured.wait().await;
+    }
+
+    pub fn resume(&self) {
+        self.resume.notify_one();
+    }
+
+    async fn wait_after_session_is_captured(&self) {
+        self.session_captured.wait().await;
+        self.resume.notified().await;
+    }
 }
 
 async fn request(
@@ -72,8 +104,16 @@ async fn cancel(
     Extension(service): Extension<AccountDeletionService>,
     session: AuthSession,
     Extension(request_id): Extension<RequestId>,
+    #[cfg(debug_assertions)] authorization_hook: Option<Extension<Arc<CancelAuthorizationHook>>>,
     Json(body): Json<DeletionRequest>,
 ) -> Result<Response, HttpError> {
+    #[cfg(debug_assertions)]
+    if let Some(Extension(hook)) = authorization_hook {
+        hook.wait_after_session_is_captured().await;
+    }
+    if session.access != SessionAccess::DeletionOnly {
+        return Err(HttpError::forbidden(request_id));
+    }
     service
         .cancel(session.user_id, &body.password)
         .await

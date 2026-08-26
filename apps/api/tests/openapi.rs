@@ -260,6 +260,19 @@ fn representative_operations_have_typed_http_contracts() {
     }
 }
 
+#[test]
+fn cancellation_openapi_requires_password_body() {
+    let document = serde_json::to_value(ApiDoc::openapi()).expect("OpenAPI serializes");
+    let cancellation = document
+        .pointer("/paths/~1api~1v1~1account~1deletion~1cancel/post")
+        .expect("cancellation operation");
+
+    assert_eq!(
+        cancellation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/DeletionRequest"
+    );
+}
+
 fn assert_error_response(operation: &Value, status: &str) {
     assert_eq!(
         operation["responses"][status]["content"]["application/json"]["schema"]["$ref"],

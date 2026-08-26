@@ -5,6 +5,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header::SET_COOKIE},
 };
+use cashmemo_api::accounts::routes::CancelAuthorizationHook;
 use cashmemo_api::{
     accounts::{
         AccountDeletionError, AccountDeletionService, AccountStatus, PasswordVerificationHook,
@@ -177,6 +178,106 @@ async fn cancellation_requires_password_then_revokes_restricted_session_and_clea
             .unwrap()
             .access,
         SessionAccess::Full
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn full_session_cannot_cancel_account_deletion(pool: PgPool) {
+    let (auth, user_id) = active_account(&pool).await;
+    let full = auth
+        .login("delete-me@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    assert_eq!(full.access, SessionAccess::Full);
+    let app = Router::new()
+        .merge(cashmemo_api::accounts::routes::router(
+            AccountDeletionService::new(pool.clone()),
+        ))
+        .layer(axum::extract::Extension(auth));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/account/deletion/cancel")
+                .extension(cashmemo_api::http::RequestId::new())
+                .header("content-type", "application/json")
+                .header(
+                    "cookie",
+                    format!("__Host-cashmemo_session={}", full.raw_token),
+                )
+                .body(Body::from(r#"{"password":"correct horse battery staple"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status::TEXT FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "active"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn full_session_captured_before_deletion_cannot_cancel_after_deletion_starts(pool: PgPool) {
+    let (auth, user_id) = active_account(&pool).await;
+    let full = auth
+        .login("delete-me@example.com", "correct horse battery staple")
+        .await
+        .unwrap();
+    let hook = Arc::new(CancelAuthorizationHook::new());
+    let app = Router::new()
+        .merge(cashmemo_api::accounts::routes::router(
+            AccountDeletionService::new(pool.clone()),
+        ))
+        .layer(axum::extract::Extension(auth.clone()))
+        .layer(axum::extract::Extension(hook.clone()));
+    let cancellation = tokio::spawn(async move {
+        app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/account/deletion/cancel")
+                .extension(cashmemo_api::http::RequestId::new())
+                .header("content-type", "application/json")
+                .header(
+                    "cookie",
+                    format!("__Host-cashmemo_session={}", full.raw_token),
+                )
+                .body(Body::from(r#"{"password":"correct horse battery staple"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    });
+
+    hook.wait_until_session_is_captured().await;
+    AccountDeletionService::new(pool.clone())
+        .request(user_id, "correct horse battery staple")
+        .await
+        .unwrap();
+    hook.resume();
+    let response = cancellation.await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        AccountDeletionService::new(pool.clone())
+            .status(user_id)
+            .await
+            .unwrap()
+            .status,
+        AccountStatus::PendingDeletion
+    );
+    assert_eq!(
+        auth.login("delete-me@example.com", "correct horse battery staple")
+            .await
+            .unwrap()
+            .access,
+        SessionAccess::DeletionOnly
     );
 }
 

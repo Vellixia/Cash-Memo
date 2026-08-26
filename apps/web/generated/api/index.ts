@@ -233,13 +233,15 @@ const {mutation: mutationOptions} = options ?
     }
 
 export const cancelAccountDeletion = (
-
+    deletionRequest: DeletionRequest,
  signal?: AbortSignal
 ) => {
 
 
       return customAxios<AccountDeletionContract>(
-      {url: `/api/v1/account/deletion/cancel`, method: 'POST', signal
+      {url: `/api/v1/account/deletion/cancel`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: deletionRequest, signal
     },
       );
     }
@@ -248,8 +250,8 @@ export const cancelAccountDeletion = (
 
 
 export const getCancelAccountDeletionMutationOptions = <TError = ErrorEnvelope,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,void, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,CancelAccountDeletionMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,CancelAccountDeletionMutationVariables, TContext> => {
 
 const mutationKey = ['cancelAccountDeletion'];
 const {mutation: mutationOptions} = options ?
@@ -261,10 +263,10 @@ const {mutation: mutationOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelAccountDeletion>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelAccountDeletion>>, CancelAccountDeletionMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  cancelAccountDeletion()
+          return  cancelAccountDeletion(data,)
         }
 
 
@@ -275,16 +277,16 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CancelAccountDeletionMutationResult = NonNullable<Awaited<ReturnType<typeof cancelAccountDeletion>>>
-
+    export type CancelAccountDeletionMutationBody = DeletionRequest
     export type CancelAccountDeletionMutationError = ErrorEnvelope
-
+    export type CancelAccountDeletionMutationVariables = {data: DeletionRequest}
 
     export const useCancelAccountDeletion = <TError = ErrorEnvelope,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,void, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAccountDeletion>>, TError,CancelAccountDeletionMutationVariables, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof cancelAccountDeletion>>,
         TError,
-        void,
+        CancelAccountDeletionMutationVariables,
         TContext
       > => {
       return useMutation(getCancelAccountDeletionMutationOptions(options), queryClient);
