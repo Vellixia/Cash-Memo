@@ -213,6 +213,46 @@ async fn updates_name_and_opening_balance_without_changing_financial_activity(po
 }
 
 #[sqlx::test(migrations = false)]
+async fn updates_wallet_name_only_preserves_opening_balance(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (_user_id, cookie) = authenticated_user(&pool, "wallet-name-only@example.test").await;
+    let app = build_app(AppState { pool });
+    let wallet = create_wallet(&app, &cookie, "Cash", "USD", "10.00").await;
+    let updated = app
+        .oneshot(patch_wallet(
+            &cookie,
+            wallet["id"].as_str().unwrap(),
+            json!({ "name": "Pocket" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let body = response_json(updated).await;
+    assert_eq!(body["name"], "Pocket");
+    assert_eq!(body["opening_balance"], "10.00");
+}
+
+#[sqlx::test(migrations = false)]
+async fn updates_wallet_opening_balance_only_preserves_name(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (_user_id, cookie) = authenticated_user(&pool, "wallet-opening-only@example.test").await;
+    let app = build_app(AppState { pool });
+    let wallet = create_wallet(&app, &cookie, "Cash", "USD", "10.00").await;
+    let updated = app
+        .oneshot(patch_wallet(
+            &cookie,
+            wallet["id"].as_str().unwrap(),
+            json!({ "opening_balance": "20.00" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let body = response_json(updated).await;
+    assert_eq!(body["name"], "Cash");
+    assert_eq!(body["opening_balance"], "20.00");
+}
+
+#[sqlx::test(migrations = false)]
 async fn rejects_empty_currency_negative_and_excess_scale_wallet_updates(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (_user_id, cookie) =

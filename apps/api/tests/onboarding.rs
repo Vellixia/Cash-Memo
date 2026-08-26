@@ -179,6 +179,121 @@ async fn completed_user_reconciles_missing_starter_categories_once(pool: PgPool)
 }
 
 #[sqlx::test(migrations = false)]
+async fn wallet_creation_reconciles_active_custom_starter_name_collision(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "onboarding-name-collision@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(), default_currency_code = 'IDR'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let custom_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO categories (user_id, name, normalized_name, transaction_type)
+         VALUES ($1, 'Food & Drink', 'food & drink', 'EXPENSE') RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+
+    let created = app
+        .clone()
+        .oneshot(post_wallet(
+            &cookie,
+            json!({ "name": "Cash", "currency": "IDR", "opening_balance": "0" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let custom: (Option<String>, String, String) = sqlx::query_as(
+        "SELECT starter_key, normalized_name, transaction_type::TEXT
+         FROM categories WHERE id = $1",
+    )
+    .bind(custom_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        custom,
+        (None, "food & drink".to_owned(), "EXPENSE".to_owned())
+    );
+
+    let state = app.oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(state.status(), StatusCode::OK);
+    assert_eq!(response_json(state).await["categories_seeded"], true);
+    let active_collision_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM categories
+         WHERE user_id = $1 AND transaction_type = 'EXPENSE'
+           AND normalized_name = 'food & drink' AND archived_at IS NULL",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active_collision_count, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_category_reconciliation_handles_active_custom_name_collision(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "onboarding-concurrent-collision@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(), default_currency_code = 'IDR'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO categories (user_id, name, normalized_name, transaction_type)
+         VALUES ($1, 'Food & Drink', 'food & drink', 'EXPENSE')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+
+    let (first, second) = tokio::join!(
+        app.clone().oneshot(seed_categories(&cookie)),
+        app.clone().oneshot(seed_categories(&cookie)),
+    );
+    assert_eq!(first.unwrap().status(), StatusCode::OK);
+    assert_eq!(second.unwrap().status(), StatusCode::OK);
+    let repeated = app.oneshot(seed_categories(&cookie)).await.unwrap();
+    assert_eq!(repeated.status(), StatusCode::OK);
+
+    let state = response_json(
+        build_app(AppState { pool: pool.clone() })
+            .oneshot(get_onboarding(&cookie))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(state["categories_seeded"], true);
+    let active_collision_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM categories
+         WHERE user_id = $1 AND transaction_type = 'EXPENSE'
+           AND normalized_name = 'food & drink' AND archived_at IS NULL",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active_collision_count, 1);
+}
+
+#[sqlx::test(migrations = false)]
 async fn first_wallet_sets_onboarding_completion_once(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, cookie) = authenticated_user(&pool, "onboarding-first-wallet@example.test").await;
@@ -219,6 +334,82 @@ async fn first_wallet_sets_onboarding_completion_once(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(second_completed_at, first_completed_at);
+}
+
+#[sqlx::test(migrations = false)]
+async fn completed_onboarding_survives_archive_and_delete_of_only_wallet(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "onboarding-wallet-lifecycle@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(), default_currency_code = 'IDR'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+    let created = app
+        .clone()
+        .oneshot(post_wallet(
+            &cookie,
+            json!({ "name": "Cash", "currency": "IDR", "opening_balance": "0" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let wallet_id = response_json(created).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let first_completed_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let archived = app
+        .clone()
+        .oneshot(post_archive(&cookie, &wallet_id))
+        .await
+        .unwrap();
+    assert_eq!(archived.status(), StatusCode::OK);
+    let archived_state = app.clone().oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(archived_state.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(archived_state).await["has_active_wallet"],
+        true
+    );
+    let after_archive: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after_archive, first_completed_at);
+
+    let deleted = app
+        .clone()
+        .oneshot(delete_wallet(&cookie, &wallet_id))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    let deleted_state = app.oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(deleted_state.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(deleted_state).await["has_active_wallet"],
+        true
+    );
+    let after_delete: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after_delete, first_completed_at);
 }
 
 #[sqlx::test(migrations = false)]
@@ -460,6 +651,26 @@ fn post_wallet(cookie: &str, body: Value) -> Request<Body> {
         .header(header::ORIGIN, "http://localhost:3000")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+fn post_archive(cookie: &str, wallet_id: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/wallets/{wallet_id}/archive"))
+        .header(header::COOKIE, cookie)
+        .header(header::ORIGIN, "http://localhost:3000")
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn delete_wallet(cookie: &str, wallet_id: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(format!("/api/v1/wallets/{wallet_id}"))
+        .header(header::COOKIE, cookie)
+        .header(header::ORIGIN, "http://localhost:3000")
+        .body(Body::empty())
         .unwrap()
 }
 

@@ -45,7 +45,7 @@ const SEED_CATEGORIES_SQL: &str =
         ($1, 'Gift', 'gift', 'INCOME', 'starter_income_gift'),
         ($1, 'Refund', 'refund', 'INCOME', 'starter_income_refund'),
         ($1, 'Other Income', 'other income', 'INCOME', 'starter_income_other')
-     ON CONFLICT (user_id, starter_key) DO NOTHING";
+     ON CONFLICT DO NOTHING";
 
 #[derive(Clone)]
 pub struct OnboardingService {
@@ -100,14 +100,34 @@ impl OnboardingService {
                 u.timezone_configured_at IS NOT NULL,
                 CASE WHEN u.timezone_configured_at IS NOT NULL THEN u.timezone END,
                 u.default_currency_code,
-                (SELECT count(*) FROM categories c
-                    WHERE c.user_id = u.id AND c.starter_key = ANY($2)) = $3,
+                (SELECT count(DISTINCT (c.transaction_type::TEXT, c.normalized_name))
+                 FROM categories c
+                 WHERE c.user_id = u.id
+                   AND (c.transaction_type::TEXT, c.normalized_name) IN (
+                       ('EXPENSE', 'food & drink'),
+                       ('EXPENSE', 'transport'),
+                       ('EXPENSE', 'housing'),
+                       ('EXPENSE', 'utilities'),
+                       ('EXPENSE', 'shopping'),
+                       ('EXPENSE', 'health'),
+                       ('EXPENSE', 'education'),
+                       ('EXPENSE', 'entertainment'),
+                       ('EXPENSE', 'travel'),
+                       ('EXPENSE', 'software & services'),
+                       ('EXPENSE', 'fees'),
+                       ('EXPENSE', 'other expense'),
+                       ('INCOME', 'salary'),
+                       ('INCOME', 'freelance'),
+                       ('INCOME', 'business'),
+                       ('INCOME', 'gift'),
+                       ('INCOME', 'refund'),
+                       ('INCOME', 'other income')
+                   )) = $2,
                 u.onboarding_completed_at IS NOT NULL
                     OR EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = u.id AND w.archived_at IS NULL)
              FROM users u WHERE u.id = $1",
         )
         .bind(user_id)
-        .bind(STARTER_KEYS)
         .bind(STARTER_KEYS.len() as i64)
         .fetch_one(&self.pool)
         .await
