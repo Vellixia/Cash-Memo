@@ -152,3 +152,39 @@ ownership constraints.
 `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test wallets --test onboarding --test migrations --test reporting --test transactions`
 
 Result: 38 tests passed: migrations 9, onboarding 7, reporting 5, transactions 6, wallets 11.
+
+## Deletion-receipt key-version binding
+
+- Root cause: replay verified that a receipt's declared `key_version` existed, but then compared
+  its HMAC against every configured key. A canonical v1 receipt carrying a v2 HMAC could therefore
+  delete the matching restored user.
+- Replay now performs exact `key_for_version(keyring, receipt.key_version)` lookup and computes
+  only that HMAC candidate. Canonical body, object-key, and known-version validation still finish
+  before restored-database matching and transactional deletion.
+- Real S3-compatible integration coverage proves valid v1/v1 and v2/v2 replay, declared v1 with a
+  v2 HMAC failing closed, unknown version failing closed, malformed body and object key failing
+  closed, and a second replay deleting nothing.
+- Existing S3 receipt tests retain immutable PUT retry/idempotency and divergent-object behavior.
+
+### Deletion-receipt verification
+
+Local Docker CLI had no Compose plugin, so the specified commands used installed
+`docker-compose` 5.3.1 with dedicated project `cashmemo-pr3-task6`. Only `restored-postgres` and
+`deletion-receipts` started: PostgreSQL at `127.0.0.1:56430`, MinIO at
+`127.0.0.1:32774`.
+
+RED:
+
+`cargo test -p cashmemo-api --features s3-receipts --test deletion_receipt_replay -- --nocapture`
+
+Result: expected failure in `declared_v1_receipt_with_v2_hmac_never_purges`: `users_purged` was
+`1`; expected `0`. Other 6 replay tests passed.
+
+GREEN:
+
+`cargo test -p cashmemo-api --test deletion_receipt_replay --test deletion_receipts --features s3-receipts`
+
+Result: replay 7 tests passed; S3 receipt PUT/retry suite 3 tests passed.
+
+Cleanup: `docker-compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml down --volumes --remove-orphans`
+removed both containers and the named network. Follow-up project `ps -a` returned an empty table.

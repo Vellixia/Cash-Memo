@@ -180,6 +180,68 @@ mod s3_integration {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn declared_v1_receipt_with_v2_hmac_never_purges(pool: PgPool) {
+        let config = receipt_config();
+        let client = client(&config).await;
+        let _ = client.create_bucket().bucket(&config.bucket).send().await;
+        let store = S3DeletionReceiptStore::connect(config).await.unwrap();
+        let user = restored_user(pool.clone(), "wrong-key-version").await;
+        let receipt = DeletionReceipt::new(
+            hmac_user_id(&[2; 32], user).unwrap(),
+            Utc.with_ymd_and_hms(2026, 8, 21, 12, 3, 0).unwrap(),
+            1,
+        );
+        store.put_receipt(&receipt).await.unwrap();
+
+        let summary =
+            replay_deletion_receipts(&pool, &store, &[(1, vec![1; 32]), (2, vec![2; 32])])
+                .await
+                .unwrap();
+        assert_eq!(summary.receipts_scanned, 1);
+        assert_eq!(summary.users_purged, 0);
+        assert_eq!(summary.unreadable_receipts, 0);
+        assert_eq!(summary.unprocessed_matches, 0);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn unknown_key_version_is_unreadable_and_never_purges(pool: PgPool) {
+        let config = receipt_config();
+        let client = client(&config).await;
+        let _ = client.create_bucket().bucket(&config.bucket).send().await;
+        let store = S3DeletionReceiptStore::connect(config).await.unwrap();
+        let user = restored_user(pool.clone(), "unknown-key-version").await;
+        let receipt = DeletionReceipt::new(
+            hmac_user_id(&[9; 32], user).unwrap(),
+            Utc.with_ymd_and_hms(2026, 8, 21, 12, 4, 0).unwrap(),
+            9,
+        );
+        store.put_receipt(&receipt).await.unwrap();
+
+        let summary =
+            replay_deletion_receipts(&pool, &store, &[(1, vec![1; 32]), (2, vec![2; 32])])
+                .await
+                .unwrap();
+        assert_eq!(summary.receipts_scanned, 1);
+        assert_eq!(summary.users_purged, 0);
+        assert_eq!(summary.unreadable_receipts, 1);
+        assert_eq!(summary.unprocessed_matches, 0);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn malformed_or_divergent_receipt_fails_closed_without_purging_restored_user(
         pool: PgPool,
     ) {

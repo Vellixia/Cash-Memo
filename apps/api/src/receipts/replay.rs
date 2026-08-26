@@ -87,13 +87,12 @@ pub async fn replay_deletion_receipts(
         .map_err(|_| ReplayError::Database)?;
     let mut matches = BTreeSet::new();
     for receipt in receipts {
+        let key =
+            key_for_version(hmac_keyring, receipt.key_version).ok_or(ReplayError::Configuration)?;
         for user_id in &user_ids {
-            for (_, key) in hmac_keyring {
-                let candidate =
-                    hmac_user_id(key, *user_id).map_err(|_| ReplayError::Configuration)?;
-                if candidate == receipt.hmac_user_id {
-                    matches.insert(*user_id);
-                }
+            let candidate = hmac_user_id(key, *user_id).map_err(|_| ReplayError::Configuration)?;
+            if candidate == receipt.hmac_user_id {
+                matches.insert(*user_id);
             }
         }
     }
@@ -132,18 +131,20 @@ fn validate_keyring(hmac_keyring: &[(u32, Vec<u8>)]) -> Result<(), ReplayError> 
     Ok(())
 }
 
+fn key_for_version(keyring: &[(u32, Vec<u8>)], key_version: u32) -> Option<&[u8]> {
+    keyring
+        .iter()
+        .find(|(version, _)| *version == key_version)
+        .map(|(_, key)| key.as_slice())
+}
+
 fn parse_receipt(key: &str, body: &[u8], keyring: &[(u32, Vec<u8>)]) -> Option<DeletionReceipt> {
     let wire: ReceiptWire = serde_json::from_slice(body).ok()?;
     let hmac_user_id = decode_hmac(&wire.hmac_user_id)?;
     let purged_at = DateTime::parse_from_rfc3339(&wire.purged_at)
         .ok()?
         .with_timezone(&Utc);
-    if !keyring
-        .iter()
-        .any(|(version, _)| *version == wire.key_version)
-    {
-        return None;
-    }
+    key_for_version(keyring, wire.key_version)?;
     let receipt = DeletionReceipt::new(hmac_user_id, purged_at, wire.key_version);
     let canonical = canonical_receipt_bytes(&receipt).ok()?;
     (canonical == body && receipt_object_key_from_object(&receipt, key)).then_some(receipt)
