@@ -294,6 +294,117 @@ async fn concurrent_category_reconciliation_handles_active_custom_name_collision
 }
 
 #[sqlx::test(migrations = false)]
+async fn renamed_starter_category_remains_seeded_and_completed(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "onboarding-renamed-starter@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(), default_currency_code = 'IDR'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+    let created = app
+        .clone()
+        .oneshot(post_wallet(
+            &cookie,
+            json!({ "name": "Cash", "currency": "IDR", "opening_balance": "0" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let before: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE categories
+         SET name = 'Meals', normalized_name = 'meals'
+         WHERE user_id = $1 AND starter_key = 'starter_expense_food_drink'",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let state = app.oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(state.status(), StatusCode::OK);
+    assert_eq!(response_json(state).await["categories_seeded"], true);
+    let after: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT onboarding_completed_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after, before);
+    let starter: (String, String, String) = sqlx::query_as(
+        "SELECT name, normalized_name, transaction_type::TEXT
+         FROM categories WHERE user_id = $1 AND starter_key = 'starter_expense_food_drink'",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        starter,
+        ("Meals".to_owned(), "meals".to_owned(), "EXPENSE".to_owned())
+    );
+    let canonical_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM categories
+         WHERE user_id = $1 AND transaction_type = 'EXPENSE'
+           AND normalized_name = 'food & drink'",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(canonical_count, 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn incorrectly_typed_starter_key_does_not_satisfy_seeded_slot(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "onboarding-wrong-type-starter@example.test").await;
+    sqlx::query(
+        "UPDATE users
+         SET timezone = 'Asia/Jakarta', timezone_configured_at = now(), default_currency_code = 'IDR'
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO categories (user_id, name, normalized_name, transaction_type, starter_key)
+         VALUES ($1, 'Income Food', 'income food', 'INCOME', 'starter_expense_food_drink')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = build_app(AppState { pool: pool.clone() });
+    let created = app
+        .clone()
+        .oneshot(post_wallet(
+            &cookie,
+            json!({ "name": "Cash", "currency": "IDR", "opening_balance": "0" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let state = app.oneshot(get_onboarding(&cookie)).await.unwrap();
+    assert_eq!(state.status(), StatusCode::OK);
+    assert_eq!(response_json(state).await["categories_seeded"], false);
+}
+
+#[sqlx::test(migrations = false)]
 async fn first_wallet_sets_onboarding_completion_once(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, cookie) = authenticated_user(&pool, "onboarding-first-wallet@example.test").await;

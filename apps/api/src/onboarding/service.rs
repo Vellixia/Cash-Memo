@@ -100,29 +100,34 @@ impl OnboardingService {
                 u.timezone_configured_at IS NOT NULL,
                 CASE WHEN u.timezone_configured_at IS NOT NULL THEN u.timezone END,
                 u.default_currency_code,
-                (SELECT count(DISTINCT (c.transaction_type::TEXT, c.normalized_name))
-                 FROM categories c
-                 WHERE c.user_id = u.id
-                   AND (c.transaction_type::TEXT, c.normalized_name) IN (
-                       ('EXPENSE', 'food & drink'),
-                       ('EXPENSE', 'transport'),
-                       ('EXPENSE', 'housing'),
-                       ('EXPENSE', 'utilities'),
-                       ('EXPENSE', 'shopping'),
-                       ('EXPENSE', 'health'),
-                       ('EXPENSE', 'education'),
-                       ('EXPENSE', 'entertainment'),
-                       ('EXPENSE', 'travel'),
-                       ('EXPENSE', 'software & services'),
-                       ('EXPENSE', 'fees'),
-                       ('EXPENSE', 'other expense'),
-                       ('INCOME', 'salary'),
-                       ('INCOME', 'freelance'),
-                       ('INCOME', 'business'),
-                       ('INCOME', 'gift'),
-                       ('INCOME', 'refund'),
-                       ('INCOME', 'other income')
-                   )) = $2,
+                (SELECT count(*)
+                 FROM (VALUES
+                     ('starter_expense_food_drink', 'EXPENSE', 'food & drink'),
+                     ('starter_expense_transport', 'EXPENSE', 'transport'),
+                     ('starter_expense_housing', 'EXPENSE', 'housing'),
+                     ('starter_expense_utilities', 'EXPENSE', 'utilities'),
+                     ('starter_expense_shopping', 'EXPENSE', 'shopping'),
+                     ('starter_expense_health', 'EXPENSE', 'health'),
+                     ('starter_expense_education', 'EXPENSE', 'education'),
+                     ('starter_expense_entertainment', 'EXPENSE', 'entertainment'),
+                     ('starter_expense_travel', 'EXPENSE', 'travel'),
+                     ('starter_expense_software_services', 'EXPENSE', 'software & services'),
+                     ('starter_expense_fees', 'EXPENSE', 'fees'),
+                     ('starter_expense_other', 'EXPENSE', 'other expense'),
+                     ('starter_income_salary', 'INCOME', 'salary'),
+                     ('starter_income_freelance', 'INCOME', 'freelance'),
+                     ('starter_income_business', 'INCOME', 'business'),
+                     ('starter_income_gift', 'INCOME', 'gift'),
+                     ('starter_income_refund', 'INCOME', 'refund'),
+                     ('starter_income_other', 'INCOME', 'other income')
+                 ) AS starter(starter_key, transaction_type, normalized_name)
+                 WHERE EXISTS (
+                     SELECT 1 FROM categories c
+                     WHERE c.user_id = u.id
+                       AND c.transaction_type::TEXT = starter.transaction_type
+                       AND (c.starter_key = starter.starter_key
+                            OR c.normalized_name = starter.normalized_name)
+                 )) = $2,
                 u.onboarding_completed_at IS NOT NULL
                     OR EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = u.id AND w.archived_at IS NULL)
              FROM users u WHERE u.id = $1",
