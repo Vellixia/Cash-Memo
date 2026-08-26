@@ -158,9 +158,10 @@ Result: 38 tests passed: migrations 9, onboarding 7, reporting 5, transactions 6
 - Root cause: replay verified that a receipt's declared `key_version` existed, but then compared
   its HMAC against every configured key. A canonical v1 receipt carrying a v2 HMAC could therefore
   delete the matching restored user.
-- Replay now performs exact `key_for_version(keyring, receipt.key_version)` lookup and computes
-  only that HMAC candidate. Canonical body, object-key, and known-version validation still finish
-  before restored-database matching and transactional deletion.
+- Replay now performs exact `key_for_version(keyring, receipt.key_version)` lookup and verifies
+  only that declared-key HMAC with `Mac::verify_slice`. Canonical body, object-key, and
+  known-version validation still finish before restored-database matching and transactional
+  deletion.
 - Real S3-compatible integration coverage proves valid v1/v1 and v2/v2 replay, declared v1 with a
   v2 HMAC failing closed, unknown version failing closed, malformed body and object key failing
   closed, and a second replay deleting nothing.
@@ -188,3 +189,21 @@ Result: replay 7 tests passed; S3 receipt PUT/retry suite 3 tests passed.
 
 Cleanup: `docker-compose -p cashmemo-pr3-task6 -f infra/v1/test-compose.yml down --volumes --remove-orphans`
 removed both containers and the named network. Follow-up project `ps -a` returned an empty table.
+
+### Round 1 constant-time verification repair
+
+- Root cause: exact key-version binding still derived an ordinary `[u8; 32]` candidate and used
+  array `==`, whose comparison was not the required constant-time MAC verification primitive.
+- Focused RED added fixed HMAC vectors for correct declared key, modified tag, and a v2 tag checked
+  under declared v1 key. It failed to compile because minimal `verify_user_id_hmac` did not exist.
+- Focused GREEN: 3 verifier unit tests passed. Production resolves exact declared key first, then
+  constructs `Hmac<Sha256>` and calls `Mac::verify_slice`; it no longer materializes or compares a
+  candidate tag.
+- `delete_failure_rolls_back_earlier_replay_deletions` uses two deterministic matched users and
+  valid recurring data whose immutable occurrence blocks second cascade. Replay rolls back first
+  deletion, reports zero purged and two unprocessed, and preserves both users.
+- Fresh `cashmemo-pr3-task6` integration run used PostgreSQL `127.0.0.1:56430` and MinIO
+  `127.0.0.1:32776`: account deletion 11 passed, replay 8 passed, receipt PUT/retry 3 passed.
+  Concrete S3 receipt success followed by database final-delete failure and identical retry passed.
+- Final named-project cleanup removed both containers and network; follow-up project `ps -a`
+  returned an empty table.

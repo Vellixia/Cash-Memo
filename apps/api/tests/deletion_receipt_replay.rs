@@ -242,6 +242,92 @@ mod s3_integration {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn delete_failure_rolls_back_earlier_replay_deletions(pool: PgPool) {
+        let config = receipt_config();
+        let client = client(&config).await;
+        let _ = client.create_bucket().bucket(&config.bucket).send().await;
+        let store = S3DeletionReceiptStore::connect(config).await.unwrap();
+        let first = uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let blocked = uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        sqlx::query(
+            "INSERT INTO users (id, email, password_hash, status) VALUES \
+             ($1, 'replay-first@example.test', 'hash', 'active'), \
+             ($2, 'replay-blocked@example.test', 'hash', 'active')",
+        )
+        .bind(first)
+        .bind(blocked)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let wallet = uuid::Uuid::parse_str("10000000-0000-0000-0000-000000000002").unwrap();
+        let category = uuid::Uuid::parse_str("20000000-0000-0000-0000-000000000002").unwrap();
+        let recurrence = uuid::Uuid::parse_str("30000000-0000-0000-0000-000000000002").unwrap();
+        sqlx::query(
+            "INSERT INTO wallets (id, user_id, name, currency_code) VALUES ($1, $2, 'Daily', 'USD')",
+        )
+        .bind(wallet)
+        .bind(blocked)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO categories (id, user_id, name, normalized_name, transaction_type) \
+             VALUES ($1, $2, 'Bills', 'bills', 'EXPENSE')",
+        )
+        .bind(category)
+        .bind(blocked)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO recurring_transactions \
+             (id, user_id, wallet_id, category_id, transaction_type, amount, frequency, start_date, next_due_date) \
+             VALUES ($1, $2, $3, $4, 'EXPENSE', 1, 'daily', '2026-08-21', '2026-08-21')",
+        )
+        .bind(recurrence)
+        .bind(blocked)
+        .bind(wallet)
+        .bind(category)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO recurring_occurrences (user_id, recurring_transaction_id, scheduled_for) \
+             VALUES ($1, $2, '2026-08-21')",
+        )
+        .bind(blocked)
+        .bind(recurrence)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        for (user, minute) in [(first, 5), (blocked, 6)] {
+            let receipt = DeletionReceipt::new(
+                hmac_user_id(&[5; 32], user).unwrap(),
+                Utc.with_ymd_and_hms(2026, 8, 21, 12, minute, 0).unwrap(),
+                5,
+            );
+            store.put_receipt(&receipt).await.unwrap();
+        }
+
+        let summary = replay_deletion_receipts(&pool, &store, &[(5, vec![5; 32])])
+            .await
+            .unwrap();
+        assert_eq!(summary.receipts_scanned, 2);
+        assert_eq!(summary.users_purged, 0);
+        assert_eq!(summary.unreadable_receipts, 0);
+        assert_eq!(summary.unprocessed_matches, 2);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users WHERE id = ANY($1)")
+                .bind(&[first, blocked][..])
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            2
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn malformed_or_divergent_receipt_fails_closed_without_purging_restored_user(
         pool: PgPool,
     ) {

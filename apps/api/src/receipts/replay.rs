@@ -1,15 +1,14 @@
 use std::collections::BTreeSet;
 
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use sqlx::PgPool;
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::{
-    DeletionReceipt, DeletionReceiptReader, canonical_receipt_bytes, hmac_user_id,
-    receipt_object_key,
-};
+use super::{DeletionReceipt, DeletionReceiptReader, canonical_receipt_bytes, receipt_object_key};
 
 /// Unsigned operational result. It contains no identifier, receipt payload, or key material.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
@@ -90,8 +89,7 @@ pub async fn replay_deletion_receipts(
         let key =
             key_for_version(hmac_keyring, receipt.key_version).ok_or(ReplayError::Configuration)?;
         for user_id in &user_ids {
-            let candidate = hmac_user_id(key, *user_id).map_err(|_| ReplayError::Configuration)?;
-            if candidate == receipt.hmac_user_id {
+            if verify_user_id_hmac(key, *user_id, &receipt.hmac_user_id)? {
                 matches.insert(*user_id);
             }
         }
@@ -138,6 +136,16 @@ fn key_for_version(keyring: &[(u32, Vec<u8>)], key_version: u32) -> Option<&[u8]
         .map(|(_, key)| key.as_slice())
 }
 
+fn verify_user_id_hmac(
+    key: &[u8],
+    user_id: Uuid,
+    expected: &[u8; 32],
+) -> Result<bool, ReplayError> {
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(|_| ReplayError::Configuration)?;
+    mac.update(user_id.as_bytes());
+    Ok(mac.verify_slice(expected).is_ok())
+}
+
 fn parse_receipt(key: &str, body: &[u8], keyring: &[(u32, Vec<u8>)]) -> Option<DeletionReceipt> {
     let wire: ReceiptWire = serde_json::from_slice(body).ok()?;
     let hmac_user_id = decode_hmac(&wire.hmac_user_id)?;
@@ -166,4 +174,40 @@ fn decode_hmac(value: &str) -> Option<[u8; 32]> {
         *slot = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
     }
     Some(decoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::verify_user_id_hmac;
+    use uuid::Uuid;
+
+    const USER_ID: Uuid = Uuid::from_u128(0x00112233445566778899aabbccddeeff);
+    const V1_TAG: [u8; 32] = [
+        0xba, 0xbc, 0x4c, 0x3c, 0x25, 0x5e, 0x58, 0x0c, 0x1a, 0x4d, 0xb6, 0x2c, 0x89, 0xe5, 0x20,
+        0x2e, 0x8c, 0xe0, 0xa9, 0x14, 0x7f, 0xc0, 0x6f, 0xd7, 0x2f, 0xcf, 0x3b, 0x7d, 0x67, 0x8f,
+        0x1f, 0xc9,
+    ];
+    const V2_TAG: [u8; 32] = [
+        0x91, 0xda, 0x93, 0x68, 0x10, 0xa3, 0xd9, 0x01, 0x54, 0x9b, 0x60, 0x81, 0x6d, 0xb6, 0x29,
+        0x43, 0x30, 0xd1, 0x45, 0xd8, 0xd0, 0x0e, 0x64, 0xb3, 0x86, 0xbf, 0x8a, 0xba, 0xbf, 0xa5,
+        0xe2, 0x67,
+    ];
+
+    #[test]
+    fn verifier_accepts_valid_tag_for_declared_key() {
+        assert!(verify_user_id_hmac(&[1; 32], USER_ID, &V1_TAG).unwrap());
+    }
+
+    #[test]
+    fn verifier_rejects_modified_tag() {
+        let mut modified = V1_TAG;
+        modified[31] ^= 1;
+
+        assert!(!verify_user_id_hmac(&[1; 32], USER_ID, &modified).unwrap());
+    }
+
+    #[test]
+    fn verifier_rejects_tag_from_other_key_version() {
+        assert!(!verify_user_id_hmac(&[1; 32], USER_ID, &V2_TAG).unwrap());
+    }
 }
