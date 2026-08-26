@@ -96,7 +96,7 @@ async fn entry_defaults_select_only_most_recent_active_wallet_for_authenticated_
     assert_eq!(empty.status(), StatusCode::OK);
     assert_eq!(
         response_json(empty).await,
-        json!({ "last_used_wallet_id": null })
+        json!({ "last_used_wallet_id": null, "timezone": "Etc/UTC" })
     );
 
     let older = insert_wallet(&pool, user_id, "USD", false).await;
@@ -153,31 +153,41 @@ async fn entry_defaults_select_only_most_recent_active_wallet_for_authenticated_
     assert_eq!(isolated.status(), StatusCode::OK);
     assert_eq!(
         response_json(isolated).await,
-        json!({ "last_used_wallet_id": null })
+        json!({ "last_used_wallet_id": null, "timezone": "Etc/UTC" })
     );
 }
 
 #[sqlx::test(migrations = false)]
-async fn defaults_and_edits_preserve_exact_occurred_at_instant(pool: PgPool) {
+async fn manual_local_times_use_stored_timezone_and_reject_invalid_inputs(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, cookie) = authenticated_user(&pool, "transaction-time@example.test").await;
     let app = build_app(AppState { pool: pool.clone() });
     let wallet = insert_wallet(&pool, user_id, "USD", false).await;
     let category = insert_category(&pool, user_id, "EXPENSE").await;
+    sqlx::query("UPDATE users SET timezone = 'Asia/Jakarta' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let before = Utc::now();
     let created = app
         .clone()
         .oneshot(post_transaction(
             &cookie,
-            json!({ "wallet_id": wallet, "category_id": category, "direction": "expense", "amount": "1.00" }),
+            json!({
+                "wallet_id": wallet,
+                "category_id": category,
+                "direction": "expense",
+                "amount": "1.00",
+                "occurred_local": "2026-08-31T23:30"
+            }),
         ))
         .await
         .unwrap();
     assert_eq!(created.status(), StatusCode::CREATED);
     let created = response_json(created).await;
     let transaction_id = created["id"].as_str().unwrap();
-    let defaulted = parse_instant(&created["occurred_at"]);
-    assert!(defaulted >= before && defaulted <= Utc::now() + Duration::seconds(1));
+    assert_eq!(created["occurred_at"], "2026-08-31T16:30:00+00:00");
 
     let unchanged = app
         .clone()
@@ -194,20 +204,61 @@ async fn defaults_and_edits_preserve_exact_occurred_at_instant(pool: PgPool) {
         created["occurred_at"]
     );
 
-    let explicit = "2026-08-20T03:04:05+07:00";
+    let defaulted = app
+        .clone()
+        .oneshot(post_transaction(
+            &cookie,
+            json!({ "wallet_id": wallet, "category_id": category, "direction": "expense", "amount": "1.00" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(defaulted.status(), StatusCode::CREATED);
+    let defaulted = parse_instant(&response_json(defaulted).await["occurred_at"]);
+    assert!(defaulted >= before && defaulted <= Utc::now() + Duration::seconds(1));
+
+    sqlx::query("UPDATE users SET timezone = 'America/New_York' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let updated = app
+        .clone()
         .oneshot(patch_transaction(
             &cookie,
             transaction_id,
-            json!({ "occurred_at": explicit }),
+            json!({ "occurred_local": "2026-11-01T01:30" }),
         ))
         .await
         .unwrap();
     assert_eq!(updated.status(), StatusCode::OK);
     assert_eq!(
-        parse_instant(&response_json(updated).await["occurred_at"]),
-        parse_instant(&json!(explicit))
+        response_json(updated).await["occurred_at"],
+        "2026-11-01T05:30:00+00:00"
     );
+
+    for occurred_local in [
+        "2026-03-08T02:30",
+        "2026-09-01T23:30:00",
+        "2026-09-01T23:30+07:00",
+        "2026-09-01T23:30Z",
+        "2026-02-30T23:30",
+    ] {
+        let rejected = app
+            .clone()
+            .oneshot(post_transaction(
+                &cookie,
+                json!({
+                    "wallet_id": wallet,
+                    "category_id": category,
+                    "direction": "expense",
+                    "amount": "1.00",
+                    "occurred_local": occurred_local,
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
 }
 
 #[sqlx::test(migrations = false)]

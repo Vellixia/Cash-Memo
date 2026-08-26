@@ -29,3 +29,20 @@
 `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test account_deletion --test auth --test ownership`
 
 Result: 29 tests passed.
+
+## Transaction local-time write contract
+
+- `manual_local_times_use_stored_timezone_and_reject_invalid_inputs` proves Jakarta
+  `2026-08-31T23:30` stores as `2026-08-31T16:30:00+00:00`; New York's ambiguous
+  `2026-11-01T01:30` chooses earlier `2026-11-01T05:30:00+00:00`; nonexistent,
+  seconds, offset, `Z`, and impossible inputs return `422`.
+- Same test proves omitted create uses server `Utc::now()` and omitted update preserves exact
+  stored instant.
+- `entry_defaults_select_only_most_recent_active_wallet_for_authenticated_user` asserts exact
+  defaults shape: `last_used_wallet_id` plus stored IANA `timezone`, with no server local time.
+
+## Transaction time verification
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57429/cashmemo_e2e cargo test -p cashmemo-api --test transactions --test ownership`
+
+Result: 13 tests passed.

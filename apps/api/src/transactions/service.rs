@@ -6,7 +6,11 @@ use thiserror::Error;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::{currency::CurrencyCode, money::Money};
+use crate::{
+    currency::CurrencyCode,
+    money::Money,
+    time::{UserTimezone, parse_local_minute, resolve_manual_local},
+};
 
 use super::query::{HistoryCursor, HistoryQuery};
 
@@ -48,7 +52,7 @@ pub struct NewTransaction {
     pub direction: String,
     pub amount: String,
     pub note: Option<String>,
-    pub occurred_at: Option<String>,
+    pub occurred_local: Option<String>,
 }
 
 #[derive(Debug)]
@@ -58,7 +62,7 @@ pub struct UpdateTransaction {
     pub direction: Option<String>,
     pub amount: Option<String>,
     pub note: Option<Option<String>>,
-    pub occurred_at: Option<String>,
+    pub occurred_local: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -78,6 +82,7 @@ pub struct Transaction {
 #[derive(Debug, Serialize)]
 pub struct EntryDefaults {
     pub last_used_wallet_id: Option<Uuid>,
+    pub timezone: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ToSchema)]
@@ -144,12 +149,15 @@ impl TransactionService {
     ) -> Result<Transaction, TransactionError> {
         let direction = TransactionDirection::parse(&input.direction)?;
         let note = validate_note(input.note)?;
-        let occurred_at = parse_occurred_at(input.occurred_at)?;
         let mut database = self
             .pool
             .begin()
             .await
             .map_err(|_| TransactionError::Persistence)?;
+        let occurred_at = match input.occurred_local {
+            Some(value) => resolve_occurred_local(&mut database, user_id, &value).await?,
+            None => Utc::now(),
+        };
         let wallet = active_wallet(&mut database, user_id, input.wallet_id).await?;
         active_category(&mut database, user_id, input.category_id, direction).await?;
         let amount = parse_amount(&input.amount, wallet.exponent)?;
@@ -237,7 +245,7 @@ impl TransactionService {
             && input.direction.is_none()
             && input.amount.is_none()
             && input.note.is_none()
-            && input.occurred_at.is_none()
+            && input.occurred_local.is_none()
         {
             return Err(TransactionError::NoChanges);
         }
@@ -278,8 +286,8 @@ impl TransactionService {
             Some(value) => validate_note(value)?,
             None => previous.note,
         };
-        let occurred_at = match input.occurred_at {
-            Some(value) => parse_occurred_at(Some(value))?,
+        let occurred_at = match input.occurred_local {
+            Some(value) => resolve_occurred_local(&mut database, user_id, &value).await?,
             None => previous.occurred_at,
         };
         sqlx::query(
@@ -370,6 +378,12 @@ impl TransactionService {
     }
 
     pub async fn entry_defaults(&self, user_id: Uuid) -> Result<EntryDefaults, TransactionError> {
+        let timezone: String = sqlx::query_scalar("SELECT timezone FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| TransactionError::Persistence)?
+            .ok_or(TransactionError::NotFound)?;
         let last_used_wallet_id = sqlx::query_scalar(
             "SELECT t.wallet_id
              FROM transactions t
@@ -384,6 +398,7 @@ impl TransactionService {
         .map_err(|_| TransactionError::Persistence)?;
         Ok(EntryDefaults {
             last_used_wallet_id,
+            timezone,
         })
     }
 
@@ -622,13 +637,21 @@ fn validate_note(input: Option<String>) -> Result<Option<String>, TransactionErr
     }
 }
 
-fn parse_occurred_at(input: Option<String>) -> Result<DateTime<Utc>, TransactionError> {
-    match input {
-        None => Ok(Utc::now()),
-        Some(value) => DateTime::parse_from_rfc3339(&value)
-            .map(|value| value.with_timezone(&Utc))
-            .map_err(|_| TransactionError::InvalidOccurredAt),
-    }
+async fn resolve_occurred_local(
+    database: &mut PgConnection,
+    user_id: Uuid,
+    input: &str,
+) -> Result<DateTime<Utc>, TransactionError> {
+    let timezone: String = sqlx::query_scalar("SELECT timezone FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&mut *database)
+        .await
+        .map_err(|_| TransactionError::Persistence)?
+        .ok_or(TransactionError::NotFound)?;
+    let timezone = UserTimezone::parse(&timezone).map_err(|_| TransactionError::Persistence)?;
+    let local = parse_local_minute(input).map_err(|_| TransactionError::InvalidOccurredAt)?;
+    resolve_manual_local(timezone.timezone(), local)
+        .map_err(|_| TransactionError::InvalidOccurredAt)
 }
 
 fn format_amount(amount: Decimal, exponent: u32) -> String {

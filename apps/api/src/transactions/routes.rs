@@ -87,7 +87,7 @@ struct CreateTransactionRequest {
     direction: String,
     amount: String,
     note: Option<String>,
-    occurred_at: Option<String>,
+    occurred_local: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -98,7 +98,7 @@ struct UpdateTransactionRequest {
     direction: Option<String>,
     amount: Option<String>,
     note: Option<Option<String>>,
-    occurred_at: Option<String>,
+    occurred_local: Option<String>,
 }
 
 async fn entry_defaults(
@@ -130,7 +130,7 @@ async fn create_transaction(
                 direction: body.direction,
                 amount: body.amount,
                 note: body.note,
-                occurred_at: body.occurred_at,
+                occurred_local: body.occurred_local,
             },
         )
         .await
@@ -170,7 +170,7 @@ async fn update_transaction(
                 direction: body.direction,
                 amount: body.amount,
                 note: body.note,
-                occurred_at: body.occurred_at,
+                occurred_local: body.occurred_local,
             },
         )
         .await
@@ -237,7 +237,7 @@ fn map_error(error: TransactionError, request_id: RequestId) -> HttpError {
         TransactionError::InvalidDirection => validation("direction", request_id),
         TransactionError::InvalidAmount => validation("amount", request_id),
         TransactionError::InvalidNote => validation("note", request_id),
-        TransactionError::InvalidOccurredAt => validation("occurred_at", request_id),
+        TransactionError::InvalidOccurredAt => validation("occurred_local", request_id),
         TransactionError::NoChanges => HttpError::validation(BTreeMap::new(), request_id),
         TransactionError::InvalidHistoryQuery(field) => validation(field, request_id),
         TransactionError::Persistence => HttpError::internal(request_id),
