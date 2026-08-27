@@ -61,6 +61,39 @@ async fn creates_daily_recurring_transaction_with_first_due_date_at_or_after_tod
 }
 
 #[sqlx::test(migrations = false)]
+async fn recurring_read_rejects_persisted_corrupt_scale_instead_of_rounding(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "recurring-corrupt-scale@example.test").await;
+    let (wallet_id, category_id) = owned_references(&pool, user_id).await;
+    sqlx::query(
+        "INSERT INTO recurring_transactions
+         (user_id, wallet_id, category_id, transaction_type, amount, frequency, start_date, next_due_date)
+         VALUES ($1, $2, $3, 'EXPENSE', 1.231, 'daily', DATE '2026-01-01', DATE '2026-01-01')",
+    )
+    .bind(user_id)
+    .bind(wallet_id)
+    .bind(category_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = build_app(AppState { pool })
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/recurring-transactions")
+                .header(header::COOKIE, cookie)
+                .header(header::ORIGIN, "http://localhost:3000")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[sqlx::test(migrations = false)]
 async fn processor_creates_each_due_occurrence_once_and_bounds_catch_up(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, cookie) = authenticated_user(&pool, "recurring-process@example.test").await;

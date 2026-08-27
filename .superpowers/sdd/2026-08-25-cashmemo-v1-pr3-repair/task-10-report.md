@@ -134,3 +134,82 @@ was weakened or rewritten.
   `apps/api/src/accounts/routes.rs`; `cargo check -p cashmemo-api` passes.
 - `MoneyError::ExcessScale` is reused for corrupt persisted scale; no new public error variant was
   needed because callers intentionally map it to persistence failure.
+
+## Fix round 1 evidence
+
+### Findings addressed
+
+1. Recurring transaction output had a private formatter that truncated exponent-0 fractions and
+   emitted unvalidated scale for other exponents. `RecurringTransaction::try_from` now uses
+   `format_exact_for_exponent` and maps failure to `RecurringError::Persistence`.
+2. Budget update with omitted amount previously validated the stored amount against the requested
+   currency and returned `BudgetError::InvalidAmount`/HTTP 422. It now validates persisted data
+   against its stored currency exponent first, returning `BudgetError::Persistence`/HTTP 500 for
+   corruption. A valid amount incompatible with a newly requested currency remains a 422.
+
+### RED
+
+Tests added:
+
+- `recurring_read_rejects_persisted_corrupt_scale_instead_of_rounding`
+- `budget_update_with_omitted_amount_rejects_persisted_corrupt_scale_as_persistence_error`
+
+Using isolated disposable PostgreSQL (`cashmemo-task10r1`, port 57510), pre-fix commands produced
+the expected assertion failures:
+
+```text
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test recurring recurring_read_rejects_persisted_corrupt_scale -- --nocapture
+left: 200
+right: 500
+test result: FAILED
+```
+
+```text
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test budgets budget_update_with_omitted_amount_rejects_persisted_corrupt_scale_as_persistence_error -- --nocapture
+left: 422
+right: 500
+test result: FAILED
+```
+
+### GREEN
+
+Focused post-fix tests:
+
+```text
+cargo fmt --all -- --check && DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test recurring recurring_read_rejects_persisted_corrupt_scale -- --nocapture
+test result: ok. 1 passed; 0 failed
+```
+
+```text
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test budgets budget_update_with_omitted_amount_rejects_persisted_corrupt_scale_as_persistence_error -- --nocapture
+test result: ok. 1 passed; 0 failed
+```
+
+Surrounding suites:
+
+```text
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test recurring -- --nocapture
+test result: ok. 14 passed; 0 failed
+
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test budgets -- --nocapture
+test result: ok. 7 passed; 0 failed
+```
+
+Required combined command:
+
+```text
+DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57510/cashmemo_e2e cargo test -p cashmemo-api --test money --test wallets --test budgets --test reporting -- --nocapture
+test result: ok. 7 passed; 0 failed (budgets)
+test result: ok. 14 passed; 0 failed (money)
+test result: ok. 6 passed; 0 failed (reporting)
+test result: ok. 14 passed; 0 failed (wallets)
+```
+
+### Round 1 self-review and concerns
+
+- Recurring has no bespoke monetary formatter remaining; all authoritative serializers share the
+  exact formatter.
+- Budget same-currency corrupt persisted scale now fails persistence/internal. Currency-change
+  incompatibility remains validation behavior, preserving existing `budget_crud...` coverage.
+- Disposable PostgreSQL was stopped and removed after verification. `.serena/` remains untouched.
+- No deferred Minor finding addressed.

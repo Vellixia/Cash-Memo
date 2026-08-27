@@ -7,7 +7,11 @@ use thiserror::Error;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::{currency::CurrencyCode, money::Money, transactions::TransactionDirection};
+use crate::{
+    currency::CurrencyCode,
+    money::{Money, format_exact_for_exponent},
+    transactions::TransactionDirection,
+};
 
 #[derive(Clone)]
 pub struct RecurringTransactionService {
@@ -523,7 +527,8 @@ impl TryFrom<RecurringRow> for RecurringTransaction {
             category_id: row.category_id,
             direction: TransactionDirection::from_database(&row.transaction_type)
                 .map_err(map_transaction_error)?,
-            amount: format_amount(row.amount, exponent),
+            amount: format_exact_for_exponent(row.amount, exponent)
+                .map_err(|_| RecurringError::Persistence)?,
             currency: CurrencyCode::parse(&row.currency_code)
                 .map_err(|_| RecurringError::Persistence)?,
             note: row.note,
@@ -552,21 +557,6 @@ fn validate_note(value: Option<String>) -> Result<Option<String>, RecurringError
         Some(note) if note.chars().count() > 500 => Err(RecurringError::InvalidNote),
         other => Ok(other),
     }
-}
-
-fn format_amount(amount: Decimal, exponent: u32) -> String {
-    let mut rendered = amount.normalize().to_string();
-    if exponent == 0 {
-        return rendered.split('.').next().unwrap_or(&rendered).to_owned();
-    }
-    let fractional = rendered.split_once('.').map_or(0, |(_, value)| value.len());
-    if fractional == 0 {
-        rendered.push('.');
-    }
-    if fractional < exponent as usize {
-        rendered.push_str(&"0".repeat(exponent as usize - fractional));
-    }
-    rendered
 }
 
 fn map_transaction_error(error: crate::transactions::TransactionError) -> RecurringError {

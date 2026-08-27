@@ -145,6 +145,38 @@ async fn budget_read_rejects_persisted_corrupt_scale_instead_of_rounding(pool: P
 }
 
 #[sqlx::test(migrations = false)]
+async fn budget_update_with_omitted_amount_rejects_persisted_corrupt_scale_as_persistence_error(
+    pool: PgPool,
+) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "budget-corrupt-update@example.test", "UTC").await;
+    let category = insert_category(&pool, user_id, "expense").await;
+    let budget_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO budgets (user_id, category_id, currency_code, month_start, amount)
+         VALUES ($1, $2, 'USD', DATE '2026-01-01', 1.231)
+         RETURNING id",
+    )
+    .bind(user_id)
+    .bind(category)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let response = build_app(AppState { pool })
+        .oneshot(request(
+            "PATCH",
+            &format!("/api/v1/budgets/{budget_id}"),
+            &cookie,
+            Some(json!({ "month": "2026-02" })),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[sqlx::test(migrations = false)]
 async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and_permanent_delete(
     pool: PgPool,
 ) {

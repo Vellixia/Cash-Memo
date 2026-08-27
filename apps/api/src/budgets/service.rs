@@ -168,6 +168,7 @@ impl BudgetService {
         if input.category_id.is_some() {
             require_active_expense_category(&self.pool, user_id, category_id).await?;
         }
+        let currency_changed = input.currency.is_some();
         let currency = match input.currency {
             Some(value) => CurrencyCode::parse(&value).map_err(|_| BudgetError::InvalidCurrency)?,
             None => CurrencyCode::parse(&existing.currency_code)
@@ -184,7 +185,16 @@ impl BudgetService {
             .unwrap_or(existing.month_start);
         let amount = match input.amount {
             Some(value) => positive_amount(&value, definition.exponent)?,
-            None => ensure_amount_exponent(existing.amount, definition.exponent)?,
+            None => {
+                let existing_exponent =
+                    u32::try_from(existing.exponent).map_err(|_| BudgetError::Persistence)?;
+                ensure_persisted_amount(existing.amount, existing_exponent)?;
+                if currency_changed {
+                    ensure_amount_exponent(existing.amount, definition.exponent)?
+                } else {
+                    existing.amount
+                }
+            }
         };
         let row: BudgetRow = sqlx::query_as(
             "UPDATE budgets SET category_id = $3, currency_code = $4, month_start = $5, amount = $6, updated_at = now()
@@ -351,6 +361,14 @@ fn ensure_amount_exponent(amount: Decimal, exponent: u32) -> Result<Decimal, Bud
     (amount > Decimal::ZERO && amount.normalize().scale() <= exponent)
         .then_some(amount)
         .ok_or(BudgetError::InvalidAmount)
+}
+
+fn ensure_persisted_amount(amount: Decimal, exponent: u32) -> Result<Decimal, BudgetError> {
+    if amount <= Decimal::ZERO {
+        return Err(BudgetError::Persistence);
+    }
+    format_exact_for_exponent(amount, exponent).map_err(|_| BudgetError::Persistence)?;
+    Ok(amount)
 }
 
 fn format_amount(amount: Decimal, exponent: u32) -> Result<String, BudgetError> {
