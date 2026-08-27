@@ -415,3 +415,10 @@ tests/operations/*.bats tests/repository/*.bats`
 
 Result: 44 tests passed. No existing test expectation was weakened or contradicted; only BSD
 date fixture generation was replaced with equivalent helper calculations.
+
+## Reproducible clean web runtime image
+
+Task 12 implementation is recorded in `.superpowers/sdd/2026-08-25-cashmemo-v1-pr3-repair/task-12-report.md`.
+The runtime contract is now executed by the hosted `docker-images` web matrix entry before its
+existing Trivy scan. Trivy policy remains `CRITICAL,HIGH`, `ignore-unfixed: true`, `exit-code: 1`,
+and `vuln-type: os,library`.

@@ -255,6 +255,9 @@ jobs:
         env:
           IMAGE_REF: cashmemo-v1-${{ matrix.image }}:${{ github.sha }}
         run: docker build --file "${{ matrix.dockerfile }}" --tag "$IMAGE_REF" .
+      - name: Verify web runtime contract
+        if: matrix.image == 'web'
+        run: bash infra/v1/test-web-image.sh "cashmemo-v1-web:${{ github.sha }}"
       - name: Scan V1 image for high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -262,6 +265,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: 1
+          vuln-type: os,library
 
   dependency-safety:
     name: Focused V1 dependency audit
