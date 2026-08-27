@@ -258,3 +258,73 @@ build: exit 0
 - Task 14 intentionally leaves `form-field`, `dialog`, native selects, native textarea, confirm-box patterns, and `.button` link compatibility in place for later slice migrations. Inventory doc tracks those deferrals.
 - `globals.css` now carries both design tokens and temporary compat selectors. Task 24 should delete leftover compat selectors once Tasks 15–23 finish migrations.
 - Generator added broad lockfile churn. Required, but review should focus on `apps/web` dependency additions tied to Tailwind/Base UI/shadcn/Sonner.
+
+## Fix Round 1/5 — 2026-08-27
+
+Scope:
+
+- restore narrow-screen action width coverage for shadcn buttons without adding second button primitive
+- split `.error-panel` off warning surfaces onto destructive semantic styling
+
+RED additions in `apps/web/tests/design-system.spec.tsx`:
+
+- assert `globals.css` targets `.page-heading > [data-slot="button"]`
+- assert `globals.css` targets `.card-actions > [data-slot="button"]`
+- assert `.error-panel` has dedicated destructive border/surface block
+- assert `.confirm-box, .notice` remain grouped on warning styling
+
+RED command:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+pnpm --dir=apps/web exec vitest run tests/design-system.spec.tsx
+```
+
+RED output:
+
+```text
+tests/design-system.spec.tsx (6 tests | 2 failed)
+× targets shadcn button slot in narrow-screen action layouts
+× renders error panels on destructive semantic surfaces
+```
+
+Root cause:
+
+- `Button` emits `data-slot="button"`; mobile compat CSS still matched only legacy `.button`
+- `.error-panel` was grouped with `.confirm-box` and `.notice` on warning border/surface vars
+
+Fix:
+
+- mobile selectors now target both `[data-slot="button"]` and legacy `.button` fallback
+- `.error-panel` now has own block using `--destructive-border` and `--destructive-surface`
+- `.confirm-box` / `.notice` remain on warning styling
+
+GREEN command:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+pnpm --dir=apps/web exec vitest run tests/design-system.spec.tsx
+```
+
+GREEN output:
+
+```text
+Test Files  1 passed (1)
+Tests       6 passed (6)
+```
+
+Surrounding checks rerun:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run lint
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run typecheck
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run build
+```
+
+Result:
+
+```text
+lint: exit 0
+typecheck: exit 0
+build: exit 0
+```

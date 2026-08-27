@@ -431,12 +431,19 @@ a:focus-visible {
 }
 
 .confirm-box,
-.error-panel,
 .notice {
   padding: 1rem;
   border: 1px solid var(--warning-border);
   border-radius: calc(var(--radius) * 0.75);
   background: var(--warning-surface);
+  color: var(--foreground);
+}
+
+.error-panel {
+  padding: 1rem;
+  border: 1px solid var(--destructive-border);
+  border-radius: calc(var(--radius) * 0.75);
+  background: var(--destructive-surface);
   color: var(--foreground);
 }
 
@@ -636,7 +643,9 @@ a:focus-visible {
     flex-direction: column;
   }
 
+  .page-heading > [data-slot="button"],
   .page-heading > .button,
+  .card-actions > [data-slot="button"],
   .card-actions > .button {
     width: 100%;
   }

@@ -60,4 +60,16 @@ describe("design system foundation", () => {
     const hostCount = layoutSource.match(/<Toaster\b/g)?.length ?? 0;
     expect(hostCount).toBe(1);
   });
+
+  it("targets shadcn button slot in narrow-screen action layouts", () => {
+    expect(globalsCss).toContain('.page-heading > [data-slot="button"]');
+    expect(globalsCss).toContain('.card-actions > [data-slot="button"]');
+  });
+
+  it("renders error panels on destructive semantic surfaces", () => {
+    expect(globalsCss).toMatch(
+      /\.error-panel\s*\{[\s\S]*var\(--destructive-border\)[\s\S]*var\(--destructive-surface\)/,
+    );
+    expect(globalsCss).toContain(".confirm-box,\n.notice {");
+  });
 });
