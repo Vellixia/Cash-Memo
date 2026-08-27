@@ -31,6 +31,13 @@ pub struct PasswordVerificationHook {
 }
 
 #[cfg(debug_assertions)]
+impl Default for PasswordVerificationHook {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(debug_assertions)]
 impl PasswordVerificationHook {
     pub fn new() -> Self {
         Self {

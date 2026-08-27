@@ -45,6 +45,13 @@ pub struct CancelAuthorizationHook {
 }
 
 #[cfg(debug_assertions)]
+impl Default for CancelAuthorizationHook {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(debug_assertions)]
 impl CancelAuthorizationHook {
     pub fn new() -> Self {
         Self {

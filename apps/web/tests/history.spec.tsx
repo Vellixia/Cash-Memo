@@ -34,7 +34,7 @@ vi.mock("../generated/api", () => ({
                     category_id: "food",
                     direction: "expense",
                     note: "literal %_ food",
-                    occurred_at: "2026-08-25T10:00:00Z",
+                    occurred_at: new Date(Date.now() + 86_400_000).toISOString(),
                   },
                   {
                     id: "old",
@@ -44,7 +44,7 @@ vi.mock("../generated/api", () => ({
                     category_id: "food",
                     direction: "expense",
                     note: null,
-                    occurred_at: "2026-08-20T10:00:00Z",
+                    occurred_at: new Date(Date.now() - 8 * 86_400_000).toISOString(),
                   },
                 ],
                 next_cursor: "next",
