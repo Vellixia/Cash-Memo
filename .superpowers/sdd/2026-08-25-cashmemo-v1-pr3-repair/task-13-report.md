@@ -169,10 +169,9 @@ new API-client contract assertions.
 
 ## Fix round 1: reviewer Important findings
 
-Status: both Important findings are fixed in scoped Task 13 edits verified on top of signed base
-commit fb7df136a9dd9a88d2f5f766397dbabc3e0fbd92; these edits are staged for one signed follow-up
-commit. Reviewer Minor findings remain deliberately deferred. Branch remains rewrite/cashmemo-v1.
-.serena/ remains untouched and unstaged.
+Status: both Important findings are fixed in signed follow-up work verified on top of signed base
+commit fb7df136a9dd9a88d2f5f766397dbabc3e0fbd92. Reviewer Minor findings remain deliberately
+deferred. Branch remains rewrite/cashmemo-v1. .serena/ remains untouched and unstaged.
 
 ### Finding 1: endpoint-specific month omission semantics
 
