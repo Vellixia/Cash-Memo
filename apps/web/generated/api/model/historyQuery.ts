@@ -10,7 +10,11 @@ export interface HistoryQuery {
   category_id?: string | null;
   /** @nullable */
   cursor?: string | null;
-  /** @nullable */
+  /**
+     * Inclusive user-local calendar date (YYYY-MM-DD).
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   from?: string | null;
   /**
      * @minimum 0
@@ -19,7 +23,11 @@ export interface HistoryQuery {
   limit?: number | null;
   /** @nullable */
   q?: string | null;
-  /** @nullable */
+  /**
+     * Inclusive user-local calendar date (YYYY-MM-DD).
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   to?: string | null;
   /** @nullable */
   type?: string | null;

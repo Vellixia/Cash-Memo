@@ -6,6 +6,10 @@
  */
 
 export interface MonthQuery {
-  /** @nullable */
+  /**
+     * Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
+     * @nullable
+     * @pattern ^\d{4}-\d{2}$
+     */
   month?: string | null;
 }

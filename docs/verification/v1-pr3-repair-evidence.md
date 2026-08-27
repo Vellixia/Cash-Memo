@@ -1,5 +1,16 @@
 # Cashmemo V1 PR3 repair evidence
 
+## Task 13 OpenAPI/Orval contract freeze
+
+- Rust-owned OpenAPI now freezes password-confirmed deletion/cancellation, strict occurred_local
+  minute writes with omission semantics, canonical read-only UTC occurred_at, inclusive local
+  history dates, entry-default timezone, editable opening balance without currency, current
+  wallet/category names, exact two-decimal share_percent, and selected recent month.
+- RED contract assertion initially failed because repaired fields/descriptions were absent. Rust
+  schema assertions then passed 5/5; Orval regenerated the OpenAPI JSON and TypeScript client.
+- Generated diff review found only expected contract surfaces plus Orval's query-param propagation
+  for month/date filters. No generated file was manually edited.
+
 ## Account deletion password confirmation
 
 - `cancellation_requires_password_then_revokes_restricted_session_and_clears_cookie` proves a

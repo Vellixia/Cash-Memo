@@ -6,7 +6,15 @@
  */
 
 export type ListTrashedTransactionsParams = {
+/**
+ * Inclusive user-local calendar date (YYYY-MM-DD).
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
 from?: string;
+/**
+ * Inclusive user-local calendar date (YYYY-MM-DD).
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
 to?: string;
 type?: string;
 wallet_id?: string;

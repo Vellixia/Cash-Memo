@@ -8,6 +8,8 @@
 export interface TransactionContract {
   amount: string;
   category_id: string;
+  /** Current name of referenced category. */
+  category_name: string;
   currency: string;
   /** @nullable */
   deleted_at?: string | null;
@@ -15,10 +17,13 @@ export interface TransactionContract {
   id: string;
   /** @nullable */
   note?: string | null;
-  occurred_at: string;
+  /** Canonical UTC instant returned by the API; clients must write occurred_local instead. */
+  readonly occurred_at: string;
   /** @nullable */
   purge_after?: string | null;
   /** @nullable */
   recurring_occurrence_id?: string | null;
   wallet_id: string;
+  /** Current name of referenced wallet. */
+  wallet_name: string;
 }

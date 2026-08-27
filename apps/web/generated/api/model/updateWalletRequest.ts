@@ -8,4 +8,9 @@
 export interface UpdateWalletRequest {
   /** @nullable */
   name?: string | null;
+  /**
+     * Optional non-negative opening balance update; wallet currency remains immutable.
+     * @nullable
+     */
+  opening_balance?: string | null;
 }

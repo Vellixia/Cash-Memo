@@ -283,6 +283,121 @@ fn cancellation_openapi_requires_password_body() {
     );
 }
 
+#[test]
+fn repaired_dtos_publish_frozen_time_money_and_name_contracts() {
+    let document = serde_json::to_value(ApiDoc::openapi()).expect("OpenAPI serializes");
+    let schemas = document["components"]["schemas"]
+        .as_object()
+        .expect("component schemas");
+
+    let properties = |name: &str| {
+        schemas[name]["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("{name} properties"))
+    };
+    let required = |name: &str| {
+        schemas[name]["required"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{name} required fields"))
+    };
+
+    let deletion = properties("DeletionRequest");
+    assert_eq!(
+        deletion["password"]["description"],
+        "Current password required to confirm account deletion or cancellation."
+    );
+    assert_eq!(deletion["password"]["format"], "password");
+
+    for schema_name in ["CreateTransactionRequest", "UpdateTransactionRequest"] {
+        let transaction = properties(schema_name);
+        assert!(
+            !transaction.contains_key("occurred_at"),
+            "{schema_name} must not write occurred_at"
+        );
+        assert_eq!(
+            transaction["occurred_local"]["pattern"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$"
+        );
+        assert_eq!(
+            transaction["occurred_local"]["description"],
+            "Optional user-local wall-clock minute (YYYY-MM-DDTHH:mm); omitted create uses server current instant and omitted update preserves stored instant."
+        );
+    }
+
+    let transaction = properties("TransactionContract");
+    for name in ["wallet_name", "category_name"] {
+        assert!(
+            transaction.contains_key(name),
+            "missing current referenced name {name}"
+        );
+        assert_eq!(transaction[name]["type"], "string");
+    }
+    assert_eq!(transaction["occurred_at"]["readOnly"], true);
+    assert_eq!(transaction["occurred_at"]["format"], "date-time");
+    assert_eq!(
+        transaction["occurred_at"]["description"],
+        "Canonical UTC instant returned by the API; clients must write occurred_local instead."
+    );
+
+    let defaults = properties("EntryDefaults");
+    assert!(required("EntryDefaults").contains(&serde_json::json!("timezone")));
+    assert_eq!(defaults["timezone"]["type"], "string");
+    assert_eq!(
+        defaults["timezone"]["description"],
+        "Authenticated user's IANA timezone for local financial entry."
+    );
+
+    let wallet = properties("UpdateWalletRequest");
+    assert!(wallet.contains_key("name"));
+    assert!(wallet.contains_key("opening_balance"));
+    assert!(!wallet.contains_key("currency"));
+    assert_eq!(
+        wallet["opening_balance"]["type"],
+        serde_json::json!(["string", "null"])
+    );
+    assert_eq!(
+        wallet["opening_balance"]["description"],
+        "Optional non-negative opening balance update; wallet currency remains immutable."
+    );
+
+    let category = properties("ExpenseCategoryContract");
+    assert_eq!(category["share_percent"]["type"], "string");
+    assert_eq!(category["share_percent"]["pattern"], r"^\d{1,3}\.\d{2}$");
+    assert_eq!(category["share_percent"]["example"], "33.33");
+    assert_eq!(
+        category["share_percent"]["description"],
+        "Exact decimal percentage rounded to two places, in the inclusive range 0.00..100.00."
+    );
+
+    let operation = |path: &str, method: &str| {
+        document
+            .pointer(&format!("/paths/{}/{}", path.replace('/', "~1"), method))
+            .unwrap_or_else(|| panic!("missing {method} {path}"))
+    };
+    let parameter = |path: &str, method: &str, name: &str| {
+        operation(path, method)["parameters"]
+            .as_array()
+            .expect("operation parameters")
+            .iter()
+            .find(|parameter| parameter["name"] == name)
+            .unwrap_or_else(|| panic!("missing parameter {name}"))
+    };
+    for name in ["from", "to"] {
+        let parameter = parameter("/api/v1/transactions", "get", name);
+        assert_eq!(parameter["schema"]["pattern"], r"^\d{4}-\d{2}-\d{2}$");
+        assert_eq!(
+            parameter["description"],
+            "Inclusive user-local calendar date (YYYY-MM-DD)."
+        );
+    }
+    let recent_month = parameter("/api/v1/transactions/recent", "get", "month");
+    assert_eq!(recent_month["schema"]["pattern"], r"^\d{4}-\d{2}$");
+    assert_eq!(
+        recent_month["description"],
+        "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month."
+    );
+}
+
 fn assert_error_response(operation: &Value, status: &str) {
     assert_eq!(
         operation["responses"][status]["content"]["application/json"]["schema"]["$ref"],

@@ -31,6 +31,7 @@ export * from './errorEnvelope';
 export * from './expenseCategoryContract';
 export * from './getBudgetSummaryParams';
 export * from './getMonthlySummaryParams';
+export * from './getRecentTransactionsParams';
 export * from './historyPageContract';
 export * from './historyQuery';
 export * from './listBudgetsParams';

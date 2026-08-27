@@ -39,6 +39,8 @@ pub struct ErrorEnvelope {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct EntryDefaults {
     pub last_used_wallet_id: Option<Uuid>,
+    /// Authenticated user's IANA timezone for local financial entry.
+    pub timezone: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -50,11 +52,20 @@ pub struct RecurringTransactionsContract {
 pub struct TransactionContract {
     pub id: Uuid,
     pub wallet_id: Uuid,
+    /// Current name of referenced wallet.
+    pub wallet_name: String,
     pub category_id: Uuid,
+    /// Current name of referenced category.
+    pub category_name: String,
     pub recurring_occurrence_id: Option<Uuid>,
     pub direction: String,
     pub amount: String,
     pub currency: String,
+    #[schema(
+        read_only = true,
+        format = DateTime
+    )]
+    /// Canonical UTC instant returned by the API; clients must write occurred_local instead.
     pub occurred_at: String,
     pub note: Option<String>,
     pub deleted_at: Option<String>,
@@ -132,6 +143,9 @@ pub struct ExpenseCategoryContract {
     pub category_id: Uuid,
     pub name: String,
     pub expense: String,
+    #[schema(pattern = r"^\d{1,3}\.\d{2}$", example = "33.33")]
+    /// Exact decimal percentage rounded to two places, in the inclusive range 0.00..100.00.
+    pub share_percent: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -205,7 +219,9 @@ pub struct CreateTransactionRequest {
     pub direction: String,
     pub amount: String,
     pub note: Option<String>,
-    pub occurred_at: Option<String>,
+    #[schema(pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")]
+    /// Optional user-local wall-clock minute (YYYY-MM-DDTHH:mm); omitted create uses server current instant and omitted update preserves stored instant.
+    pub occurred_local: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -215,12 +231,18 @@ pub struct UpdateTransactionRequest {
     pub direction: Option<String>,
     pub amount: Option<String>,
     pub note: Option<String>,
-    pub occurred_at: Option<String>,
+    #[schema(pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")]
+    /// Optional user-local wall-clock minute (YYYY-MM-DDTHH:mm); omitted create uses server current instant and omitted update preserves stored instant.
+    pub occurred_local: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct HistoryQuery {
+    #[schema(pattern = r"^\d{4}-\d{2}-\d{2}$")]
+    /// Inclusive user-local calendar date (YYYY-MM-DD).
     pub from: Option<String>,
+    #[schema(pattern = r"^\d{4}-\d{2}-\d{2}$")]
+    /// Inclusive user-local calendar date (YYYY-MM-DD).
     pub to: Option<String>,
     #[serde(rename = "type")]
     pub transaction_type: Option<String>,
@@ -255,6 +277,10 @@ pub struct UpdateBudgetRequest {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct DeletionRequest {
+    #[schema(
+        format = Password
+    )]
+    /// Current password required to confirm account deletion or cancellation.
     pub password: String,
 }
 
@@ -268,6 +294,7 @@ pub struct CreateWalletRequest {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UpdateWalletRequest {
     pub name: Option<String>,
+    /// Optional non-negative opening balance update; wallet currency remains immutable.
     pub opening_balance: Option<String>,
 }
 
@@ -306,6 +333,8 @@ pub struct UpdateRecurringTransactionRequest {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MonthQuery {
+    #[schema(pattern = r"^\d{4}-\d{2}$")]
+    /// Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
     pub month: Option<String>,
 }
 
@@ -596,7 +625,10 @@ fn contract(operation_id: &str) -> Contract {
             query: QUERY_MONTH,
             ..json("MonthlySummaryContract")
         },
-        "get_recent_transactions" => json("RecentTransactionsContract"),
+        "get_recent_transactions" => Contract {
+            query: QUERY_MONTH,
+            ..json("RecentTransactionsContract")
+        },
         _ => authenticated,
     }
 }
@@ -681,12 +713,26 @@ fn operation(operation_id: &str, path: &str) -> utoipa::openapi::path::Operation
         );
     }
     for name in details.query {
+        let mut schema = ObjectBuilder::new().schema_type(Type::String);
+        let description = match *name {
+            "from" | "to" => Some("Inclusive user-local calendar date (YYYY-MM-DD)."),
+            "month" => Some(
+                "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
+            ),
+            _ => None,
+        };
+        if *name == "from" || *name == "to" {
+            schema = schema.pattern(Some(r"^\d{4}-\d{2}-\d{2}$"));
+        } else if *name == "month" {
+            schema = schema.pattern(Some(r"^\d{4}-\d{2}$"));
+        }
         operation = operation.parameter(
             ParameterBuilder::new()
                 .name(*name)
                 .parameter_in(ParameterIn::Query)
                 .required(Required::False)
-                .schema(Some(ObjectBuilder::new().schema_type(Type::String).build()))
+                .description(description)
+                .schema(Some(schema.build()))
                 .build(),
         );
     }

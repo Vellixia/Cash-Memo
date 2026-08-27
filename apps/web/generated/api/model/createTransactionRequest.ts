@@ -11,7 +11,11 @@ export interface CreateTransactionRequest {
   direction: string;
   /** @nullable */
   note?: string | null;
-  /** @nullable */
-  occurred_at?: string | null;
+  /**
+     * Optional user-local wall-clock minute (YYYY-MM-DDTHH:mm); omitted create uses server current instant and omitted update preserves stored instant.
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$
+     */
+  occurred_local?: string | null;
   wallet_id: string;
 }

@@ -8,4 +8,6 @@
 export interface EntryDefaults {
   /** @nullable */
   last_used_wallet_id?: string | null;
+  /** Authenticated user's IANA timezone for local financial entry. */
+  timezone: string;
 }

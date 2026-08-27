@@ -1074,9 +1074,11 @@
           {
             "name": "month",
             "in": "query",
+            "description": "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
             }
           }
         ],
@@ -3256,9 +3258,11 @@
           {
             "name": "month",
             "in": "query",
+            "description": "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
             }
           }
         ],
@@ -3363,9 +3367,11 @@
           {
             "name": "month",
             "in": "query",
+            "description": "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
             }
           }
         ],
@@ -3577,17 +3583,21 @@
           {
             "name": "from",
             "in": "query",
+            "description": "Inclusive user-local calendar date (YYYY-MM-DD).",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
           },
           {
             "name": "to",
             "in": "query",
+            "description": "Inclusive user-local calendar date (YYYY-MM-DD).",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
           },
           {
@@ -3938,6 +3948,18 @@
     "/api/v1/transactions/recent": {
       "get": {
         "operationId": "get_recent_transactions",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response",
@@ -4039,17 +4061,21 @@
           {
             "name": "from",
             "in": "query",
+            "description": "Inclusive user-local calendar date (YYYY-MM-DD).",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
           },
           {
             "name": "to",
             "in": "query",
+            "description": "Inclusive user-local calendar date (YYYY-MM-DD).",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             }
           },
           {
@@ -5753,11 +5779,13 @@
               "null"
             ]
           },
-          "occurred_at": {
+          "occurred_local": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Optional user-local wall-clock minute (YYYY-MM-DDTHH:mm); omitted create uses server current instant and omitted update preserves stored instant.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
           },
           "wallet_id": {
             "type": "string",
@@ -5860,7 +5888,9 @@
         ],
         "properties": {
           "password": {
-            "type": "string"
+            "type": "string",
+            "format": "password",
+            "description": "Current password required to confirm account deletion or cancellation."
           }
         }
       },
@@ -5877,6 +5907,9 @@
       },
       "EntryDefaults": {
         "type": "object",
+        "required": [
+          "timezone"
+        ],
         "properties": {
           "last_used_wallet_id": {
             "type": [
@@ -5884,6 +5917,10 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Authenticated user's IANA timezone for local financial entry."
           }
         }
       },
@@ -5928,7 +5965,8 @@
         "required": [
           "category_id",
           "name",
-          "expense"
+          "expense",
+          "share_percent"
         ],
         "properties": {
           "category_id": {
@@ -5940,6 +5978,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "share_percent": {
+            "type": "string",
+            "description": "Exact decimal percentage rounded to two places, in the inclusive range 0.00..100.00.",
+            "example": "33.33",
+            "pattern": "^\\d{1,3}\\.\\d{2}$"
           }
         }
       },
@@ -5983,7 +6027,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Inclusive user-local calendar date (YYYY-MM-DD).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
           "limit": {
             "type": [
@@ -6003,7 +6049,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Inclusive user-local calendar date (YYYY-MM-DD).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
           "type": {
             "type": [
@@ -6027,7 +6075,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
+            "pattern": "^\\d{4}-\\d{2}$"
           }
         }
       },
@@ -6244,7 +6294,9 @@
         "required": [
           "id",
           "wallet_id",
+          "wallet_name",
           "category_id",
+          "category_name",
           "direction",
           "amount",
           "currency",
@@ -6257,6 +6309,10 @@
           "category_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "category_name": {
+            "type": "string",
+            "description": "Current name of referenced category."
           },
           "currency": {
             "type": "string"
@@ -6281,7 +6337,10 @@
             ]
           },
           "occurred_at": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time",
+            "description": "Canonical UTC instant returned by the API; clients must write occurred_local instead.",
+            "readOnly": true
           },
           "purge_after": {
             "type": [
@@ -6299,6 +6358,10 @@
           "wallet_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "wallet_name": {
+            "type": "string",
+            "description": "Current name of referenced wallet."
           }
         }
       },
@@ -6427,11 +6490,13 @@
               "null"
             ]
           },
-          "occurred_at": {
+          "occurred_local": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Optional user-local wall-clock minute (YYYY-MM-DDTHH:mm); omitted create uses server current instant and omitted update preserves stored instant.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$"
           },
           "wallet_id": {
             "type": [
@@ -6450,6 +6515,13 @@
               "string",
               "null"
             ]
+          },
+          "opening_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional non-negative opening balance update; wallet currency remains immutable."
           }
         }
       },

@@ -6,5 +6,6 @@
  */
 
 export interface DeletionRequest {
+  /** Current password required to confirm account deletion or cancellation. */
   password: string;
 }

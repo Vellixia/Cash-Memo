@@ -5,7 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type GetBudgetSummaryParams = {
+export type GetRecentTransactionsParams = {
 /**
  * Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
  * @pattern ^\d{4}-\d{2}$

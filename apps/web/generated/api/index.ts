@@ -43,6 +43,7 @@ import type {
   ErrorEnvelope,
   GetBudgetSummaryParams,
   GetMonthlySummaryParams,
+  GetRecentTransactionsParams,
   HistoryPageContract,
   ListBudgetsParams,
   ListTransactionsParams,
@@ -2938,13 +2939,14 @@ export function useGetTransactionEntryDefaults<TData = Awaited<ReturnType<typeof
 
 
 export const getRecentTransactions = (
-
+    params?: GetRecentTransactionsParams,
  signal?: AbortSignal
 ) => {
 
 
       return customAxios<RecentTransactionsContract>(
-      {url: `/api/v1/transactions/recent`, method: 'GET', signal
+      {url: `/api/v1/transactions/recent`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -2952,23 +2954,23 @@ export const getRecentTransactions = (
 
 
 
-export const getGetRecentTransactionsQueryKey = () => {
+export const getGetRecentTransactionsQueryKey = (params?: GetRecentTransactionsParams,) => {
     return [
-    `/api/v1/transactions/recent`
+    `/api/v1/transactions/recent`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetRecentTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
+export const getGetRecentTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(params?: GetRecentTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetRecentTransactionsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetRecentTransactionsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecentTransactions>>> = ({ signal }) => getRecentTransactions(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecentTransactions>>> = ({ signal }) => getRecentTransactions(params, signal);
 
 
 
@@ -2982,7 +2984,7 @@ export type GetRecentTransactionsQueryError = ErrorEnvelope
 
 
 export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>> & Pick<
+ params: undefined |  GetRecentTransactionsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getRecentTransactions>>,
           TError,
@@ -2992,7 +2994,7 @@ export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRe
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>> & Pick<
+ params?: GetRecentTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getRecentTransactions>>,
           TError,
@@ -3002,16 +3004,16 @@ export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRe
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
+ params?: GetRecentTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useGetRecentTransactions<TData = Awaited<ReturnType<typeof getRecentTransactions>>, TError = ErrorEnvelope>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
+ params?: GetRecentTransactionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecentTransactions>>, TError, TData>>, }
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetRecentTransactionsQueryOptions(options)
+  const queryOptions = getGetRecentTransactionsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
