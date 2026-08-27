@@ -157,6 +157,8 @@ Reviewer Important finding: recovery CI did not invoke the new
 `tests/operations/utc-timestamp.bats`, leaving parser and overflow regressions outside the
 recovery job. The recovery command now includes that helper suite before preservation, replacement,
 restore, receipt, and repository gates. No test expectation changed.
+Because workflow `run: >-` folds lines into one shell command, helper and existing paths share a
+single `bats` invocation.
 
 Changed file: `.github/workflows/v1-ci.yml`.
 
