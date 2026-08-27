@@ -70,3 +70,62 @@ rg -n '<select\b|confirm-box|button-primary|button-secondary|button-danger|butto
 - `.button` link compatibility class
 
 Those remain intentionally until Tasks 15–23 migrate actual consumers.
+
+---
+
+# Cashmemo V1 PR3 Task 15 Update (Auth Flows)
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+Base/starting SHA: `cd97dc2aeb211106173eac69c1a41e73818929ed`
+Pinned CLI version: `4.19.0` (unchanged; `apps/web` devDependency)
+
+## Generated Foundation Added In Task 15
+
+| File | Source | Notes |
+| --- | --- | --- |
+| `apps/web/components/ui/field.tsx` | `pnpm exec shadcn add field alert --yes` | first consumer: auth forms + deletion form; `FieldError` renders `role="alert"` and links to the control through `aria-describedby` |
+| `apps/web/components/ui/alert.tsx` | `pnpm exec shadcn add field alert --yes` | first consumer: auth page-state panels; success/accepted panels override `role="status"` |
+
+`shadcn add` reported `Skipped 2 files: components/ui/label.tsx, components/ui/separator.tsx`
+(identical to the Task 14 output, not overwritten).
+
+## Post-generation Corrections Inside Generated Files
+
+| File | Change | Why |
+| --- | --- | --- |
+| `apps/web/components/ui/field.tsx` | `Array<T>` → `T[]` | repo ESLint `@typescript-eslint/array-type` with `--max-warnings 0` |
+| `apps/web/components/ui/field.tsx` | `uniqueErrors?.length == 1` → `uniqueErrors.length === 1` | repo ESLint `@typescript-eslint/no-unnecessary-condition` |
+
+Both generated files are left in the formatting the CLI emitted, matching the Task 14 precedent
+(every Task 14 `components/ui/*.tsx` file also fails repo-wide `pnpm format:check`).
+
+## Legacy Surface Retired By Task 15
+
+| Surface | Previous consumers | Status after Task 15 |
+| --- | --- | --- |
+| `components/ui/form-field.tsx` | auth forms, onboarding, wallets, categories, budgets, recurring, transactions, settings | no longer used by auth or the deletion screen; still used by Tasks 16–23 surfaces, so the file stays |
+| `.auth-form` CSS block in `app/globals.css` | auth forms only | now dead CSS; removal deferred because `globals.css` is Task 14/16 territory and `.dialog`, which shares the rule, still has many consumers |
+| Raw `<label>` + `<input>` in `app/(auth)/deletion/page.tsx` | deletion screen | replaced by `Field`/`FieldLabel` + `Input` |
+| `.dialog .deletion-card` markup on the deletion screen | deletion screen | replaced by `Card`; the CSS classes remain for onboarding/settings/forms consumers |
+
+## Substrate Audit
+
+- `field.tsx` composes the existing Base UI-backed `Label` and `Separator`; it adds no second label
+  or separator implementation.
+- `alert.tsx` is presentational only (no interactive substrate), so it introduces no Radix-era
+  primitive.
+- No `asChild` composition added. Auth headings are rendered as real `<h1>` elements carrying
+  `data-slot="card-title"` because the generated `CardTitle` is a `div` and public pages need one
+  document heading.
+- `dialog`, `select`, `textarea`, `combobox`, `alert-dialog`, `tabs`, `progress`, and sidebar remain
+  deferred to their first consumer tasks.
+
+## Direct Corrections Outside The Task 15 Brief File List
+
+| File | Why |
+| --- | --- |
+| `apps/web/next.config.ts` | required by brief step 8 (`Referrer-Policy: no-referrer` for `/verify-email` and `/reset-password`) |
+| `apps/web/app/globals.css` | `a:focus-visible` (and control focus) set `outline: none` with only a box-shadow ring, so the Task 14 design system failed the keyboard-focus assertion in `e2e/auth-onboarding.spec.ts`; replaced with a real `2px` outline plus the existing ring |
+| `apps/web/e2e/support/auth.ts`, `apps/web/e2e/support/mailbox.ts` | the two named E2E specs consume the shared register/verify/mailbox helpers; the fragment-token flow lives there |
+| `docs/verification/v1-pr3-ui-primitive-inventory.md` | brief step 13 (controller-authorised) |

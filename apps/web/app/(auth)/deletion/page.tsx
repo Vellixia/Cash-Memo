@@ -3,12 +3,34 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getGetAccountDeletionQueryKey, useCancelAccountDeletion, useGetAccountDeletion } from "../../../generated/api";
+import {
+  getGetAccountDeletionQueryKey,
+  useCancelAccountDeletion,
+  useGetAccountDeletion,
+} from "../../../generated/api";
+import { AuthGate } from "../../../components/auth-gate";
+import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader } from "../../../components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "../../../components/ui/field";
+import { Input } from "../../../components/ui/input";
 import { useSignOut } from "../../../features/auth/use-session";
-import { clearSessionState, deletionActionsForStatus, getDeletionErrorDestination } from "../../../lib/auth/session";
+import {
+  clearSessionState,
+  deletionActionsForStatus,
+  getDeletionErrorDestination,
+} from "../../../lib/auth/session";
 
+/** Restricted mode: no AppShell, no sidebar, no bottom navigation, no financial queries. */
 export default function DeletionPage() {
+  return (
+    <AuthGate allow="deletion-only">
+      <DeletionPanel />
+    </AuthGate>
+  );
+}
+
+function DeletionPanel() {
   const query = useGetAccountDeletion({ query: { retry: false } });
   const cancel = useCancelAccountDeletion();
   const client = useQueryClient();
@@ -18,7 +40,8 @@ export default function DeletionPage() {
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    if (cancel.isSuccess) void client.invalidateQueries({ queryKey: getGetAccountDeletionQueryKey() });
+    if (cancel.isSuccess)
+      void client.invalidateQueries({ queryKey: getGetAccountDeletionQueryKey() });
   }, [cancel.isSuccess, client]);
 
   useEffect(() => {
@@ -28,9 +51,93 @@ export default function DeletionPage() {
     }
   }, [client, query.error, query.isError, router]);
 
-  if (query.isPending) return <main className="public-page"><p role="status">Loading deletion status…</p></main>;
-  if (query.isError) return <main className="public-page"><p role="status">Returning to sign in…</p></main>;
+  if (query.isPending || query.isError) {
+    return (
+      <main className="public-page">
+        <p role="status">
+          {query.isPending ? "Loading deletion status…" : "Returning to sign in…"}
+        </p>
+      </main>
+    );
+  }
 
   const pending = deletion ? deletionActionsForStatus(deletion.status).canCancel : false;
-  return <main className="public-page"><section className="dialog deletion-card"><h1>Account deletion</h1><p role="status">Status: {deletion?.status ?? "none"}</p>{deletion?.deletion_due_at ? <p>Scheduled for {new Date(deletion.deletion_due_at).toLocaleDateString()}</p> : null}{pending ? <form onSubmit={(event) => { event.preventDefault(); cancel.mutate({ data: { password } }); }}><label htmlFor="cancel-deletion-password">Confirm password</label><input id="cancel-deletion-password" type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); }} required /><Button type="submit" variant="secondary" disabled={cancel.isPending}>Cancel deletion</Button></form> : null}<Button type="button" variant="quiet" onClick={() => { void signOut("/app"); }}>Sign out</Button></section></main>;
+
+  return (
+    <main className="public-page">
+      <Card className="w-full max-w-lg ring-foreground/12 [--card-spacing:--spacing(6)]">
+        <CardHeader>
+          <h1
+            data-slot="card-title"
+            className="font-heading m-0 text-xl leading-snug font-semibold tracking-tight"
+          >
+            Account deletion
+          </h1>
+          <CardDescription>
+            Cashmemo is in restricted mode. Only deletion controls are available.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <p role="status" className="m-0 text-sm font-semibold">
+            Status: {deletion?.status ?? "none"}
+          </p>
+          {deletion?.deletion_due_at ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              Scheduled for {new Date(deletion.deletion_due_at).toLocaleDateString()}
+            </p>
+          ) : null}
+          {cancel.isError ? (
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive/8">
+              <AlertDescription className="text-destructive">
+                Password was not accepted. Deletion is still scheduled.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {pending ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                cancel.mutate({ data: { password } });
+              }}
+            >
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="cancel-deletion-password">Confirm password</FieldLabel>
+                  <Input
+                    id="cancel-deletion-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                    }}
+                    required
+                  />
+                </Field>
+                <Button
+                  type="submit"
+                  size="lg"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={cancel.isPending}
+                >
+                  {cancel.isPending ? "Cancelling…" : "Cancel deletion"}
+                </Button>
+              </FieldGroup>
+            </form>
+          ) : null}
+          <Button
+            type="button"
+            variant="quiet"
+            className="w-full sm:w-auto sm:self-start"
+            onClick={() => {
+              void signOut("/app");
+            }}
+          >
+            Sign out
+          </Button>
+        </CardContent>
+      </Card>
+    </main>
+  );
 }

@@ -2,21 +2,20 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { currentSession, getCurrentSessionQueryKey, useCurrentSession, useLogout } from "../../generated/api";
+import {
+  currentSession,
+  getCurrentSessionQueryKey,
+  useCurrentSession,
+  useLogout,
+} from "../../generated/api";
 import { clearSessionState, getSafeReturnPath } from "../../lib/auth/session";
 
+/**
+ * Session lookup for gates. Cache clearing belongs to the gate that owns the decision, so this
+ * hook never clears the cache it is reading from; that would refetch, error, and clear again.
+ */
 export function useSession() {
-  const query = useCurrentSession({ query: { retry: false } });
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (query.error) {
-      clearSessionState(queryClient);
-    }
-  }, [query.error, queryClient]);
-
-  return query;
+  return useCurrentSession({ query: { retry: false, refetchOnWindowFocus: false } });
 }
 
 export function useSignOut() {

@@ -3,7 +3,7 @@ use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::Mailbox,
     transport::smtp::authentication::Credentials,
 };
-use url::Url;
+use url::{Url, form_urlencoded};
 
 use crate::config::{SmtpEmailConfig, SmtpSecurity};
 
@@ -53,14 +53,29 @@ impl SmtpEmailSender {
     }
 }
 
-fn verification_body(public_origin: &Url, raw_token: &str) -> String {
-    let mut verification_url = public_origin
-        .join("verify-email")
-        .expect("validated origin accepts a relative verification path");
-    verification_url
-        .query_pairs_mut()
-        .append_pair("token", raw_token);
-    format!("Verify your Cashmemo email:\n{verification_url}")
+/// Builds a token link whose secret lives only in the URL fragment, so it never reaches the
+/// Next.js server, the reverse proxy, HTTP access logs, or Rust request logs.
+fn fragment_token_url(public_origin: &Url, path: &str, raw_token: &str) -> Url {
+    let mut url = public_origin
+        .join(path)
+        .expect("validated origin accepts a relative token path");
+    url.set_query(None);
+    url.set_fragment(Some(
+        &form_urlencoded::Serializer::new(String::new())
+            .append_pair("token", raw_token)
+            .finish(),
+    ));
+    url
+}
+
+pub fn verification_email_body(public_origin: &Url, raw_token: &str) -> String {
+    let url = fragment_token_url(public_origin, "verify-email", raw_token);
+    format!("Verify your Cashmemo email:\n{url}")
+}
+
+pub fn password_reset_email_body(public_origin: &Url, raw_token: &str) -> String {
+    let url = fragment_token_url(public_origin, "reset-password", raw_token);
+    format!("Reset your Cashmemo password:\n{url}")
 }
 
 #[async_trait]
@@ -69,7 +84,7 @@ impl EmailSender for SmtpEmailSender {
         self.send(
             to,
             "Verify your Cashmemo email",
-            verification_body(&self.public_origin, raw_token),
+            verification_email_body(&self.public_origin, raw_token),
         )
         .await
     }
@@ -78,7 +93,7 @@ impl EmailSender for SmtpEmailSender {
         self.send(
             to,
             "Reset your Cashmemo password",
-            format!("Password reset token: {raw_token}"),
+            password_reset_email_body(&self.public_origin, raw_token),
         )
         .await
     }
@@ -88,15 +103,19 @@ impl EmailSender for SmtpEmailSender {
 mod tests {
     use url::Url;
 
-    use super::verification_body;
+    use super::{password_reset_email_body, verification_email_body};
 
     #[test]
-    fn verification_body_contains_public_percent_encoded_url() {
+    fn token_bodies_encode_the_token_only_in_the_fragment() {
         let origin = Url::parse("https://cashmemo.example/").unwrap();
 
         assert_eq!(
-            verification_body(&origin, "raw +/=?& token"),
-            "Verify your Cashmemo email:\nhttps://cashmemo.example/verify-email?token=raw+%2B%2F%3D%3F%26+token"
+            verification_email_body(&origin, "raw +/=?& token"),
+            "Verify your Cashmemo email:\nhttps://cashmemo.example/verify-email#token=raw+%2B%2F%3D%3F%26+token"
+        );
+        assert_eq!(
+            password_reset_email_body(&origin, "raw +/=?& token"),
+            "Reset your Cashmemo password:\nhttps://cashmemo.example/reset-password#token=raw+%2B%2F%3D%3F%26+token"
         );
     }
 }

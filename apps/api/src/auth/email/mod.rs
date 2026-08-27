@@ -3,7 +3,7 @@ mod smtp;
 use async_trait::async_trait;
 use thiserror::Error;
 
-pub use smtp::SmtpEmailSender;
+pub use smtp::{SmtpEmailSender, password_reset_email_body, verification_email_body};
 
 #[derive(Debug, Error)]
 pub enum EmailError {

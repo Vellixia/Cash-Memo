@@ -10,7 +10,11 @@ export interface E2EUser {
 
 export function isolatedUser(label: string): E2EUser {
   const suffix = crypto.randomUUID();
-  const emailLabel = label.toLowerCase().replaceAll(/[^a-z0-9]/g, "").slice(0, 12) || "user";
+  const emailLabel =
+    label
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]/g, "")
+      .slice(0, 12) || "user";
   return {
     email: `cm+${emailLabel}-${suffix}@example.test`,
     password: `Cashmemo E2E password ${suffix}`,
@@ -24,21 +28,35 @@ export async function registerVerifyAndLogin(page: Page, user: E2EUser): Promise
   await expect(page).toHaveURL(/\/login\?returnTo=%2Fapp$/);
   await page.getByRole("link", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/register$/);
-  await expect(
-    page.getByRole("heading", { name: "Create private journal", level: 1 }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your account", level: 1 })).toBeVisible();
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Verify email", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check your email", level: 1 })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("If we can deliver to that address");
+  await expect(page).toHaveURL(/\/register$/);
 
-  await openDeliveredVerification(page, user.email);
-  await expect(page.getByLabel("Verification token")).not.toHaveValue("");
+  const deliveredUrl = await openDeliveredVerification(page, user.email);
+  expect(deliveredUrl).toContain("#token=");
+  expect(deliveredUrl).not.toContain("?token=");
+  await expect(page.getByRole("heading", { name: "Verify email", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Verify email" }).click();
   await expect(page.getByRole("status")).toContainText("Email verified");
+  await expect.poll(() => new URL(page.url()).hash).toBe("");
+  expect(await persistedBrowserStorage(page)).toEqual({ local: [], session: [] });
 
   await page.getByRole("link", { name: "Back to sign in" }).click();
   await login(page, user);
+}
+
+/** No auth or financial value may survive in browser storage. */
+export async function persistedBrowserStorage(
+  page: Page,
+): Promise<{ local: string[]; session: string[] }> {
+  return page.evaluate(() => ({
+    local: Object.keys(window.localStorage),
+    session: Object.keys(window.sessionStorage),
+  }));
 }
 
 export async function login(

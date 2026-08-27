@@ -1,5 +1,12 @@
 import { expect, test } from "./support/test";
-import { completeOnboarding, isolatedUser, registerVerifyAndLogin } from "./support/auth";
+import { connectPageToRealApi } from "./support/api";
+import {
+  completeOnboarding,
+  isolatedUser,
+  persistedBrowserStorage,
+  registerVerifyAndLogin,
+} from "./support/auth";
+import { openDeliveredPasswordReset } from "./support/mailbox";
 
 test("first visit registers through delivered verification link and creates first wallet", async ({
   page,
@@ -53,4 +60,67 @@ test("first visit registers through delivered verification link and creates firs
   expect((await createWallet.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await createWallet.click();
   expect((await page.getByLabel("Wallet name").boundingBox())?.height).toBeGreaterThanOrEqual(44);
+});
+
+test("token pages send no-referrer while unrelated public pages keep normal policy", async ({
+  page,
+}) => {
+  const tokenPage = await page.goto("/verify-email");
+  expect(tokenPage?.headers()["referrer-policy"]).toBe("no-referrer");
+
+  const resetPage = await page.goto("/reset-password");
+  expect(resetPage?.headers()["referrer-policy"]).toBe("no-referrer");
+
+  const loginPage = await page.goto("/login");
+  expect(loginPage?.headers()["referrer-policy"]).toBeUndefined();
+
+  const registerPage = await page.goto("/register");
+  expect(registerPage?.headers()["referrer-policy"]).toBeUndefined();
+});
+
+test("password reset consumes a fragment token and clears it only after success", async ({
+  page,
+}) => {
+  test.slow();
+  const user = isolatedUser("reset-fragment");
+  await registerVerifyAndLogin(page, user);
+  await completeOnboarding(page, user);
+
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page.getByRole("heading", { name: "Reset your password", level: 1 })).toBeVisible();
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page.getByRole("status")).toContainText("If we can deliver to that address");
+
+  const deliveredUrl = await openDeliveredPasswordReset(page, user.email);
+  expect(deliveredUrl).toContain("#token=");
+  expect(deliveredUrl).not.toContain("?token=");
+
+  await expect(
+    page.getByRole("heading", { name: "Choose a new password", level: 1 }),
+  ).toBeVisible();
+  await page.getByLabel("New password").fill("short");
+  await page.getByRole("button", { name: "Change password" }).click();
+  // The linked field error, not the always-visible guidance, must appear.
+  await expect(page.locator("#new-password-error")).toHaveText("Use at least 12 characters");
+  await expect(page.getByLabel("New password")).toHaveAttribute(
+    "aria-describedby",
+    /new-password-error/,
+  );
+  expect(new URL(page.url()).hash).toContain("#token=");
+
+  const newPassword = `${user.password} rotated`;
+  await page.getByLabel("New password").fill(newPassword);
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(new URL(page.url()).hash).toBe("");
+  expect(await persistedBrowserStorage(page)).toEqual({ local: [], session: [] });
+
+  await connectPageToRealApi(page);
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Password").fill(newPassword);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
 });

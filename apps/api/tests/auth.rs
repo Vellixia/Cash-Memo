@@ -6,7 +6,9 @@ use axum::{
     middleware,
 };
 use cashmemo_api::accounts::AccountDeletionService;
-use cashmemo_api::auth::email::SmtpEmailSender;
+use cashmemo_api::auth::email::{
+    SmtpEmailSender, password_reset_email_body, verification_email_body,
+};
 use cashmemo_api::auth::{
     Argon2idConfig, AuthConfig, AuthConfigError, AuthError, AuthService, EmailError, EmailSender,
     PasswordError, SessionAccess, normalize_email, validate_password,
@@ -172,6 +174,34 @@ fn smtp_security_mode_requires_explicit_plaintext_for_mailpit() {
     );
     assert!(SmtpEmailSender::new(&mailpit, &Url::parse("http://localhost:3000/").unwrap()).is_ok());
     assert_eq!(SmtpSecurity::default(), SmtpSecurity::StartTls);
+}
+
+#[test]
+fn delivered_links_carry_tokens_only_in_the_url_fragment() {
+    let origin = Url::parse("https://cashmemo.example/").unwrap();
+
+    assert_eq!(
+        verification_email_body(&origin, "raw +/=?& token"),
+        "Verify your Cashmemo email:\nhttps://cashmemo.example/verify-email#token=raw+%2B%2F%3D%3F%26+token"
+    );
+    assert_eq!(
+        password_reset_email_body(&origin, "raw +/=?& token"),
+        "Reset your Cashmemo password:\nhttps://cashmemo.example/reset-password#token=raw+%2B%2F%3D%3F%26+token"
+    );
+
+    for body in [
+        verification_email_body(&origin, "plain-token"),
+        password_reset_email_body(&origin, "plain-token"),
+    ] {
+        let link = body
+            .lines()
+            .next_back()
+            .expect("delivered body ends with the link");
+        let url = Url::parse(link).expect("delivered link parses");
+        assert_eq!(url.query(), None);
+        assert_eq!(url.fragment(), Some("token=plain-token"));
+        assert!(!body.contains("?token="));
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]
