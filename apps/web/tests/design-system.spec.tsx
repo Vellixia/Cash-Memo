@@ -9,6 +9,34 @@ const webRoot = resolve(import.meta.dirname, "..");
 const globalsCss = readFileSync(resolve(webRoot, "app/globals.css"), "utf8");
 const layoutSource = readFileSync(resolve(webRoot, "app/layout.tsx"), "utf8");
 
+function getHexToken(tokenName: string) {
+  const match = new RegExp(`${tokenName}:\\s*(#[0-9a-fA-F]{6})`).exec(globalsCss);
+  if (!match) throw new Error(`token ${tokenName} missing`);
+  return match[1];
+}
+
+function srgbChannelToLinear(channel: number) {
+  const normalized = channel / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : ((normalized + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string) {
+  const value = hex.replace("#", "");
+  const red = srgbChannelToLinear(Number.parseInt(value.slice(0, 2), 16));
+  const green = srgbChannelToLinear(Number.parseInt(value.slice(2, 4), 16));
+  const blue = srgbChannelToLinear(Number.parseInt(value.slice(4, 6), 16));
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(background: string, foreground: string) {
+  const [lighter, darker] = [relativeLuminance(background), relativeLuminance(foreground)].sort(
+    (left, right) => right - left,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 describe("design system foundation", () => {
   it("tracks shadcn generator config in components.json", () => {
     const componentsJson = JSON.parse(
@@ -67,9 +95,15 @@ describe("design system foundation", () => {
   });
 
   it("renders error panels on destructive semantic surfaces", () => {
+    const destructiveSurface = getHexToken("--destructive-surface");
+    const destructiveSurfaceForeground = getHexToken("--destructive-surface-foreground");
+
     expect(globalsCss).toMatch(
-      /\.error-panel\s*\{[\s\S]*var\(--destructive-border\)[\s\S]*var\(--destructive-surface\)[\s\S]*var\(--destructive-foreground\)/,
+      /\.error-panel\s*\{[\s\S]*var\(--destructive-border\)[\s\S]*var\(--destructive-surface\)[\s\S]*var\(--destructive-surface-foreground\)/,
     );
     expect(globalsCss).toContain(".confirm-box,\n.notice {");
+    expect(contrastRatio(destructiveSurface, destructiveSurfaceForeground)).toBeGreaterThanOrEqual(
+      4.5,
+    );
   });
 });

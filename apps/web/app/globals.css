@@ -32,6 +32,7 @@
   --success-surface: #eaf6ee;
   --success-border: #b8d8c1;
   --destructive-surface: #fdebec;
+  --destructive-surface-foreground: #5f1d24;
   --destructive-border: #e4b0b3;
   --chart-1: #1f5a4d;
   --chart-2: #4f7d74;
@@ -74,6 +75,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface-foreground: var(--destructive-surface-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -444,7 +446,7 @@ a:focus-visible {
   border: 1px solid var(--destructive-border);
   border-radius: calc(var(--radius) * 0.75);
   background: var(--destructive-surface);
-  color: var(--destructive-foreground);
+  color: var(--destructive-surface-foreground);
 }
 
 .confirm-box {

@@ -329,6 +329,82 @@ typecheck: exit 0
 build: exit 0
 ```
 
+## Fix Round 3/5 — 2026-08-27
+
+Scope:
+
+- replace invalid solid-fill destructive foreground usage on pale destructive surface
+- require contrast-safe dedicated surface-text token for `.error-panel`
+
+RED updates in `apps/web/tests/design-system.spec.tsx`:
+
+- require central token `--destructive-surface-foreground`
+- require `.error-panel` block to use `var(--destructive-surface-foreground)`
+- compute contrast from source token hex values and assert WCAG AA `>= 4.5:1`
+
+RED command:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+pnpm --dir=apps/web exec vitest run tests/design-system.spec.tsx
+```
+
+RED output:
+
+```text
+tests/design-system.spec.tsx (6 tests | 1 failed)
+× renders error panels on destructive semantic surfaces
+Error: token --destructive-surface-foreground missing
+```
+
+Root cause:
+
+- round 2 forced `.error-panel` onto `--destructive-foreground`
+- token pair was for solid destructive fill, not pale surface
+- measured old contrast for `#fff8f8` on `#fdebec`: `1.10:1`
+
+Fix:
+
+- add central token `--destructive-surface-foreground: #5f1d24`
+- keep `--destructive-foreground` unchanged for solid destructive fills/buttons
+- point `.error-panel` text to `var(--destructive-surface-foreground)`
+
+Measured contrast:
+
+```text
+#fdebec` vs `#5f1d24` = `10.83:1`
+```
+
+GREEN command:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+pnpm --dir=apps/web exec vitest run tests/design-system.spec.tsx
+```
+
+GREEN output:
+
+```text
+Test Files  1 passed (1)
+Tests       6 passed (6)
+```
+
+Surrounding checks rerun:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run lint
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run typecheck
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run build
+```
+
+Result:
+
+```text
+lint: exit 0
+typecheck: exit 0
+build: exit 0
+```
+
 ## Fix Round 2/5 — 2026-08-27
 
 Scope:
