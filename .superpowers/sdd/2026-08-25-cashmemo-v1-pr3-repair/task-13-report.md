@@ -166,3 +166,99 @@ new API-client contract assertions.
   later work.
 - Local mise pnpm asset installation remains unavailable on macOS; pinned Node plus exact existing
   pnpm passed toolchain:check.
+
+## Fix round 1: reviewer Important findings
+
+Status: both Important findings are fixed in scoped Task 13 edits verified on top of signed base
+commit fb7df136a9dd9a88d2f5f766397dbabc3e0fbd92; these edits are staged for one signed follow-up
+commit. Reviewer Minor findings remain deliberately deferred. Branch remains rewrite/cashmemo-v1.
+.serena/ remains untouched and unstaged.
+
+### Finding 1: endpoint-specific month omission semantics
+
+Previous expectation was one shared month description: “Selected user-local calendar month
+(YYYY-MM). Omitted defaults to current month.” That contradicted production routes/services:
+budget list omission leaves SQL month NULL and returns all budgets; recent omission deliberately uses
+unbounded bounds and returns latest transactions; budget summary and monthly summary omission derive
+current user-local month.
+
+RED assertion correction added endpoint-specific descriptions for all four operations:
+
+- budgets list: omitted returns all budgets;
+- budget summary: omitted defaults to current month;
+- monthly summary: omitted defaults to current month;
+- recent transactions: omitted leaves month unbounded and returns latest transactions.
+
+RED run against previous contract failed with the intended stale pattern assertion first. After the
+pattern fix, the corrected month assertions passed only after operation-aware Rust descriptions were
+implemented. Production route/service behavior was not changed.
+
+### Finding 2: bounded share_percent grammar
+
+Previous pattern ^\d{1,3}\.\d{2}$ permitted 999.99 while description promised inclusive 0.00..100.00.
+Assertion now requires:
+
+    ^(?:100\.00|(?:0|[1-9][0-9]?)\.[0-9]{2})$
+
+This accepts canonical two-decimal 0.00 through 99.99 and 100.00, rejects 999.99, leading-zero
+variants, and values above 100.00. RED output identified previous pattern exactly:
+
+    left: String("^\\d{1,3}\\.\\d{2}$")
+    right: "^(?:100\\.00|(?:0|[1-9][0-9]?)\\.[0-9]{2})$"
+    test repaired_dtos_publish_frozen_time_money_and_name_contracts ... FAILED
+
+Rust source changed only after this assertion failed. OpenAPI JSON and generated TypeScript were
+regenerated; neither was manually edited.
+
+### Fix implementation and generated review
+
+Changed Rust source: apps/api/src/openapi.rs. Changed Rust contract assertions:
+apps/api/tests/openapi.rs. Generated outputs changed only where expected:
+openapi/cashmemo-v1.json, apps/web/generated/api/model/expenseCategoryContract.ts,
+apps/web/generated/api/model/getRecentTransactionsParams.ts,
+apps/web/generated/api/model/listBudgetsParams.ts, and
+apps/web/generated/api/model/monthQuery.ts.
+
+Generated review confirmed endpoint descriptions:
+
+    /api/v1/budgets GET: omitted returns all budgets
+    /api/v1/reports/budget-summary GET: omitted defaults to current month
+    /api/v1/reports/monthly-summary GET: omitted defaults to current month
+    /api/v1/transactions/recent GET: omitted leaves month unbounded and returns latest transactions
+
+Generated share_percent schema is string with bounded pattern above, example 33.33, and unchanged
+exact-range description. No UI or production behavior changed.
+
+### Fix-round verification
+
+Fresh recovery verification used repository-pinned Node 24.14.0 first in PATH with pnpm 11.13.1:
+
+    PATH=/Users/andresholivin/.local/share/mise/installs/node/24.14.0/bin:$PATH pnpm toolchain:check
+    Toolchain verified: node=24.14.0, pnpm=11.13.1
+
+Focused API contract test passed:
+
+    cargo test -p cashmemo-api --test openapi -- --nocapture
+    5 passed; 0 failed
+
+Generated-client API test passed:
+
+    pnpm exec vitest run apps/web/tests/api-client.spec.ts
+    2 passed; 0 failed
+
+Deterministic generation against staged baseline:
+
+    PATH=/Users/andresholivin/.local/share/mise/installs/node/24.14.0/bin:$PATH pnpm api:generate
+    git diff --exit-code
+
+Full tracked-tree git diff was clean. Cached paths contained only the prior Task 13 allowlist plus
+the mandatory report path; .serena/ remained unstaged. cargo fmt --all -- --check and git diff
+--check passed.
+
+### Fix-round self-review and concerns
+
+- Month descriptions now encode actual endpoint omission behavior while shared route/service code
+  remains unchanged.
+- Bounded regex matches documented inclusive range and canonical two-decimal representation.
+- Reviewer Minor findings were not expanded into this fix round.
+- Existing UI typecheck fallout remains expected until later UI rebuild and is unchanged.

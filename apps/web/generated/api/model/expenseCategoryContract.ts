@@ -11,7 +11,7 @@ export interface ExpenseCategoryContract {
   name: string;
   /**
      * Exact decimal percentage rounded to two places, in the inclusive range 0.00..100.00.
-     * @pattern ^\d{1,3}\.\d{2}$
+     * @pattern ^(?:100\.00|(?:0|[1-9][0-9]?)\.[0-9]{2})$
      */
   share_percent: string;
 }

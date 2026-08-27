@@ -362,7 +362,10 @@ fn repaired_dtos_publish_frozen_time_money_and_name_contracts() {
 
     let category = properties("ExpenseCategoryContract");
     assert_eq!(category["share_percent"]["type"], "string");
-    assert_eq!(category["share_percent"]["pattern"], r"^\d{1,3}\.\d{2}$");
+    assert_eq!(
+        category["share_percent"]["pattern"],
+        r"^(?:100\.00|(?:0|[1-9][0-9]?)\.[0-9]{2})$"
+    );
     assert_eq!(category["share_percent"]["example"], "33.33");
     assert_eq!(
         category["share_percent"]["description"],
@@ -390,12 +393,29 @@ fn repaired_dtos_publish_frozen_time_money_and_name_contracts() {
             "Inclusive user-local calendar date (YYYY-MM-DD)."
         );
     }
-    let recent_month = parameter("/api/v1/transactions/recent", "get", "month");
-    assert_eq!(recent_month["schema"]["pattern"], r"^\d{4}-\d{2}$");
-    assert_eq!(
-        recent_month["description"],
-        "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month."
-    );
+    let month_expectations = [
+        ("/api/v1/budgets", "Omitted returns all budgets."),
+        (
+            "/api/v1/reports/budget-summary",
+            "Omitted defaults to current month.",
+        ),
+        (
+            "/api/v1/reports/monthly-summary",
+            "Omitted defaults to current month.",
+        ),
+        (
+            "/api/v1/transactions/recent",
+            "Omitted leaves month unbounded and returns latest transactions.",
+        ),
+    ];
+    for (path, omission) in month_expectations {
+        let month = parameter(path, "get", "month");
+        assert_eq!(month["schema"]["pattern"], r"^\d{4}-\d{2}$");
+        assert_eq!(
+            month["description"],
+            format!("Selected user-local calendar month (YYYY-MM). {omission}")
+        );
+    }
 }
 
 fn assert_error_response(operation: &Value, status: &str) {

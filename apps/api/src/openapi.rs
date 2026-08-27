@@ -143,7 +143,10 @@ pub struct ExpenseCategoryContract {
     pub category_id: Uuid,
     pub name: String,
     pub expense: String,
-    #[schema(pattern = r"^\d{1,3}\.\d{2}$", example = "33.33")]
+    #[schema(
+        pattern = r"^(?:100\.00|(?:0|[1-9][0-9]?)\.[0-9]{2})$",
+        example = "33.33"
+    )]
     /// Exact decimal percentage rounded to two places, in the inclusive range 0.00..100.00.
     pub share_percent: String,
 }
@@ -334,7 +337,7 @@ pub struct UpdateRecurringTransactionRequest {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MonthQuery {
     #[schema(pattern = r"^\d{4}-\d{2}$")]
-    /// Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
+    /// Optional user-local calendar month (YYYY-MM); omission behavior depends on endpoint.
     pub month: Option<String>,
 }
 
@@ -716,9 +719,17 @@ fn operation(operation_id: &str, path: &str) -> utoipa::openapi::path::Operation
         let mut schema = ObjectBuilder::new().schema_type(Type::String);
         let description = match *name {
             "from" | "to" => Some("Inclusive user-local calendar date (YYYY-MM-DD)."),
-            "month" => Some(
-                "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.",
-            ),
+            "month" => Some(match operation_id {
+                "list_budgets" => {
+                    "Selected user-local calendar month (YYYY-MM). Omitted returns all budgets."
+                }
+                "get_recent_transactions" => {
+                    "Selected user-local calendar month (YYYY-MM). Omitted leaves month unbounded and returns latest transactions."
+                }
+                _ => {
+                    "Selected user-local calendar month (YYYY-MM). Omitted defaults to current month."
+                }
+            }),
             _ => None,
         };
         if *name == "from" || *name == "to" {

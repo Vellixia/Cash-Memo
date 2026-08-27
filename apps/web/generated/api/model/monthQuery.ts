@@ -7,7 +7,7 @@
 
 export interface MonthQuery {
   /**
-     * Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
+     * Optional user-local calendar month (YYYY-MM); omission behavior depends on endpoint.
      * @nullable
      * @pattern ^\d{4}-\d{2}$
      */

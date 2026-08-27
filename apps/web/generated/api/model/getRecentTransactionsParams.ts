@@ -7,7 +7,7 @@
 
 export type GetRecentTransactionsParams = {
 /**
- * Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
+ * Selected user-local calendar month (YYYY-MM). Omitted leaves month unbounded and returns latest transactions.
  * @pattern ^\d{4}-\d{2}$
  */
 month?: string;

@@ -7,7 +7,7 @@
 
 export type ListBudgetsParams = {
 /**
- * Selected user-local calendar month (YYYY-MM). Omitted defaults to current month.
+ * Selected user-local calendar month (YYYY-MM). Omitted returns all budgets.
  * @pattern ^\d{4}-\d{2}$
  */
 month?: string;
