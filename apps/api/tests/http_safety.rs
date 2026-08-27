@@ -14,7 +14,7 @@ use cashmemo_api::{
         request_id::attach,
     },
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{
     net::{IpAddr, SocketAddr},
     sync::{
@@ -221,6 +221,94 @@ async fn middleware_rejections_reuse_attached_request_id() {
             serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
         assert_eq!(body["error"]["request_id"], request_id);
+    }
+}
+
+#[tokio::test]
+async fn auth_json_rejections_keep_canonical_error_envelope_and_request_id() {
+    let endpoints = [
+        "/api/v1/auth/register",
+        "/api/v1/auth/verify-email",
+        "/api/v1/auth/verification/resend",
+        "/api/v1/auth/login",
+        "/api/v1/auth/password-reset/request",
+        "/api/v1/auth/password-reset/consume",
+    ];
+    for (kind, content_type, body) in [
+        (
+            "malformed JSON",
+            Some("application/json"),
+            r#"{"email":"sensitive-malformed@example.test","password":"malformed-secret"#,
+        ),
+        (
+            "missing Content-Type",
+            None,
+            r#"{"email":"sensitive-missing@example.test","password":"missing-secret"}"#,
+        ),
+        (
+            "wrong Content-Type",
+            Some("text/plain"),
+            r#"{"email":"sensitive-wrong@example.test","password":"wrong-secret"}"#,
+        ),
+    ] {
+        for endpoint in endpoints {
+            let request_id = uuid::Uuid::new_v4().to_string();
+            let mut request = Request::builder()
+                .method("POST")
+                .uri(endpoint)
+                .header(header::ORIGIN, "http://localhost:3000")
+                .header("x-request-id", &request_id)
+                .body(Body::from(body))
+                .unwrap();
+            if let Some(content_type) = content_type {
+                request
+                    .headers_mut()
+                    .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+            }
+            request
+                .extensions_mut()
+                .insert(ConnectInfo(SocketAddr::from(([198, 51, 100, 44], 43210))));
+
+            let response = app().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "{kind}: {endpoint}"
+            );
+            assert_eq!(
+                response.headers()["x-request-id"],
+                request_id,
+                "{kind}: {endpoint}"
+            );
+            let response_body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let response_text = std::str::from_utf8(&response_body).unwrap();
+            for secret in [
+                "sensitive-malformed@example.test",
+                "malformed-secret",
+                "sensitive-missing@example.test",
+                "missing-secret",
+                "sensitive-wrong@example.test",
+                "wrong-secret",
+            ] {
+                assert!(
+                    !response_text.contains(secret),
+                    "{kind}: {endpoint} echoed {secret}: {response_text}"
+                );
+            }
+            let response_body: Value = serde_json::from_slice(&response_body).unwrap();
+            assert_eq!(
+                response_body,
+                json!({
+                    "error": {
+                        "code": "VALIDATION_FAILED",
+                        "message": "Check the highlighted fields.",
+                        "fields": {},
+                        "request_id": request_id,
+                    }
+                }),
+                "{kind}: {endpoint}"
+            );
+        }
     }
 }
 

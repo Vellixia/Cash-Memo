@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::Extension,
+    extract::{Extension, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -63,8 +63,9 @@ struct CurrentSession {
 async fn register(
     Extension(auth): Extension<AuthService>,
     Extension(request_id): Extension<RequestId>,
-    Json(body): Json<CredentialsRequest>,
+    body: Result<Json<CredentialsRequest>, JsonRejection>,
 ) -> Result<Json<Accepted>, HttpError> {
+    let body = auth_json(body, request_id.clone())?;
     auth.register(&body.email, &body.password)
         .await
         .map_err(|error| map_error(error, request_id))?;
@@ -74,8 +75,9 @@ async fn register(
 async fn verify_email(
     Extension(auth): Extension<AuthService>,
     Extension(request_id): Extension<RequestId>,
-    Json(body): Json<TokenRequest>,
+    body: Result<Json<TokenRequest>, JsonRejection>,
 ) -> Result<Json<Accepted>, HttpError> {
+    let body = auth_json(body, request_id.clone())?;
     auth.verify_email(&body.token)
         .await
         .map_err(|error| map_error(error, request_id))?;
@@ -85,8 +87,9 @@ async fn verify_email(
 async fn resend_verification(
     Extension(auth): Extension<AuthService>,
     Extension(request_id): Extension<RequestId>,
-    Json(body): Json<EmailRequest>,
+    body: Result<Json<EmailRequest>, JsonRejection>,
 ) -> Result<Json<Accepted>, HttpError> {
+    let body = auth_json(body, request_id.clone())?;
     auth.resend_verification(&body.email)
         .await
         .map_err(|error| map_error(error, request_id))?;
@@ -96,8 +99,9 @@ async fn resend_verification(
 async fn login(
     Extension(auth): Extension<AuthService>,
     Extension(request_id): Extension<RequestId>,
-    Json(body): Json<CredentialsRequest>,
+    body: Result<Json<CredentialsRequest>, JsonRejection>,
 ) -> Result<Response, HttpError> {
+    let body = auth_json(body, request_id.clone())?;
     let session = auth
         .login(&body.email, &body.password)
         .await
@@ -159,8 +163,9 @@ async fn revoke_all(
 async fn request_password_reset(
     Extension(auth): Extension<AuthService>,
     Extension(request_id): Extension<RequestId>,
-    Json(body): Json<EmailRequest>,
+    body: Result<Json<EmailRequest>, JsonRejection>,
 ) -> Result<Json<Accepted>, HttpError> {
+    let body = auth_json(body, request_id.clone())?;
     auth.request_password_reset(&body.email)
         .await
         .map_err(|error| map_error(error, request_id))?;
@@ -170,8 +175,9 @@ async fn request_password_reset(
 async fn consume_password_reset(
     Extension(auth): Extension<AuthService>,
     Extension(request_id): Extension<RequestId>,
-    Json(body): Json<ResetRequest>,
+    body: Result<Json<ResetRequest>, JsonRejection>,
 ) -> Result<Response, HttpError> {
+    let body = auth_json(body, request_id.clone())?;
     auth.consume_password_reset(&body.token, &body.password)
         .await
         .map_err(|error| map_error(error, request_id))?;
@@ -192,6 +198,14 @@ fn cleared_cookie_response() -> Response {
     let mut response = Json(Accepted { accepted: true }).into_response();
     clear_session_cookie(&mut response);
     response
+}
+
+fn auth_json<T>(
+    body: Result<Json<T>, JsonRejection>,
+    request_id: RequestId,
+) -> Result<T, HttpError> {
+    body.map(|Json(body)| body)
+        .map_err(|_| HttpError::validation(Default::default(), request_id))
 }
 
 fn map_error(error: AuthError, request_id: RequestId) -> HttpError {

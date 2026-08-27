@@ -324,3 +324,21 @@ Log privacy evidence: real TCP matched and hostile unmatched requests carried pa
 note, and amount values in body/query. Captured JSON logs assert matched route
 `/api/v1/health/live`, unmatched route `<unmatched>`, and absence of every raw query/path prefix
 and secret value.
+
+### Canonical ID/log Round 1: auth JSON rejections
+
+- Root cause: each auth JSON body was a bare Axum `Json<T>` extractor. Malformed JSON and
+  missing/wrong `Content-Type` rejected before route handlers could reuse attached request ID,
+  returning Axum framework `400`/`415` bodies while outer middleware attached a canonical header.
+- Every auth JSON route now receives `Result<Json<T>, JsonRejection>` and passes it through one
+  reusable mapper. Rejections return generic `422 VALIDATION_FAILED` envelope with attached
+  request ID and empty fields; parser/content-type details and request body are discarded.
+- Regression covers register, verify-email, verification-resend, login, reset-request, and
+  reset-consume for malformed JSON, missing `Content-Type`, and wrong `Content-Type`. It asserts
+  header/body UUID equality, canonical envelope, and absence of supplied email/password secrets.
+
+GREEN:
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57433/cashmemo_e2e cargo test -p cashmemo-api --test http_safety --test operations --test auth -- --test-threads=1`
+
+Result: 42 tests passed (`auth` 15, `http_safety` 14, `operations` 13).

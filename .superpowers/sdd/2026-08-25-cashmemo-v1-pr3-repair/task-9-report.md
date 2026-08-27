@@ -64,3 +64,37 @@ untracked `.serena/` remains untouched.
 ## Commit
 
 Signed commit subject: `fix: keep request IDs consistent in errors and logs`.
+
+## Round 1: Auth JSON rejection mapping
+
+### Root cause
+
+Six auth handlers used bare Axum `Json<T>`. JSON syntax and content-type rejection occurred
+before handler code, so Axum returned framework `400`/`415` text while outer middleware emitted a
+canonical `x-request-id` header. No canonical error body request ID existed.
+
+### RED/GREEN
+
+RED: malformed JSON against `/api/v1/auth/register` returned `400`, expected canonical `422`
+envelope. Test then covers all six JSON routes for malformed JSON plus missing/wrong
+`Content-Type`.
+
+GREEN: routes accept fallible JSON extraction and use one `auth_json` mapper that discards Axum
+rejection detail and returns `VALIDATION_FAILED`, empty fields, and attached request ID.
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57433/cashmemo_e2e cargo test -p cashmemo-api --test http_safety --test operations --test auth -- --test-threads=1`
+
+Result: 42 passed: auth 15, http_safety 14, operations 13.
+
+Round 1 cleanup reused only fresh project `cashmemo-pr3-task9` on port `57433`; exact Compose
+`down --volumes --remove-orphans` removed container/network and follow-up `ps -a` was empty.
+
+### Privacy evidence
+
+For every covered route/type, regression compares header/body UUID, exact canonical envelope, and
+asserts response never contains supplied email/password values. Mapper never serializes
+`JsonRejection`, so malformed syntax and content-type detail cannot echo request content.
+
+### Follow-up commit
+
+Signed follow-up commit subject: `fix: map auth JSON rejections to canonical errors`.
