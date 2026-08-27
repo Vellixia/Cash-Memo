@@ -36,7 +36,7 @@ pub async fn enforce_exact_origin(
             .extensions()
             .get::<RequestId>()
             .cloned()
-            .unwrap_or_else(RequestId::new);
+            .expect("request ID middleware must run before origin enforcement");
         return HttpError::forbidden(request_id).into_response();
     }
 

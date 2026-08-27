@@ -99,7 +99,7 @@ pub async fn enforce_auth_limit(
                 .extensions()
                 .get::<RequestId>()
                 .cloned()
-                .unwrap_or_else(RequestId::new);
+                .expect("request ID middleware must run before rate limiting");
             return HttpError::invalid_forwarding(request_id).into_response();
         }
     };
@@ -114,7 +114,7 @@ pub async fn enforce_auth_limit(
             .extensions()
             .get::<RequestId>()
             .cloned()
-            .unwrap_or_else(RequestId::new);
+            .expect("request ID middleware must run before rate limiting");
         return HttpError::throttled(request_id).into_response();
     }
 

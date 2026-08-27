@@ -18,6 +18,7 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 use tower::ServiceExt;
 
 const REQUEST_ID: &str = "c5c2b736-c4bc-48ea-98a1-239d0e4f8f35";
+const MATCHED_REQUEST_ID: &str = "50890d83-05bd-4dc0-a926-8e3549788522";
 
 fn unavailable_app() -> axum::Router {
     let pool = PgPoolOptions::new()
@@ -284,11 +285,19 @@ async fn request_log_has_only_canonical_operational_fields(pool: PgPool) {
     let response = request(
         address,
         &format!(
-            "POST /api/v1/missing HTTP/1.1\r\nHost: {address}\r\nOrigin: https://cashmemo.example\r\nX-Request-Id: {REQUEST_ID}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{secret_body}",
+            "POST /api/v1/missing?password=query-password&note=private-query-note&amount=999.99 HTTP/1.1\r\nHost: {address}\r\nOrigin: https://cashmemo.example\r\nX-Request-Id: {REQUEST_ID}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{secret_body}",
             secret_body.len()
         ),
     );
     assert!(response.starts_with("HTTP/1.1 404"), "response: {response}");
+
+    let response = request(
+        address,
+        &format!(
+            "GET /api/v1/health/live?token=matched-token&note=matched-private-note HTTP/1.1\r\nHost: {address}\r\nX-Request-Id: {MATCHED_REQUEST_ID}\r\nConnection: close\r\n\r\n"
+        ),
+    );
+    assert!(response.starts_with("HTTP/1.1 200"), "response: {response}");
 
     terminate(&child);
     let output = child.wait_with_output().unwrap();
@@ -307,8 +316,31 @@ async fn request_log_has_only_canonical_operational_fields(pool: PgPool) {
     assert!(fields["latency_ms"].is_u64());
     assert_eq!(
         fields.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["event", "latency_ms", "request_id", "status"]
+        [
+            "event",
+            "latency_ms",
+            "method",
+            "request_id",
+            "route",
+            "service",
+            "status",
+            "version",
+        ]
     );
+    assert_eq!(fields["method"], "POST");
+    assert_eq!(fields["route"], "<unmatched>");
+    assert_eq!(fields["service"], "cashmemo-api");
+    assert_eq!(fields["version"], "0.1.0");
+    let matched = events
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|event| {
+            event["fields"]["event"] == "http_request"
+                && event["fields"]["request_id"] == MATCHED_REQUEST_ID
+        })
+        .expect("matched structured http_request event");
+    assert_eq!(matched["fields"]["method"], "GET");
+    assert_eq!(matched["fields"]["route"], "/api/v1/health/live");
     for secret in [
         "secret-password",
         "secret-token",
@@ -318,6 +350,12 @@ async fn request_log_has_only_canonical_operational_fields(pool: PgPool) {
         "token",
         "note",
         "amount",
+        "query-password",
+        "private-query-note",
+        "matched-token",
+        "matched-private-note",
+        "/api/v1/missing?",
+        "/api/v1/health/live?",
     ] {
         assert!(!events.contains(secret), "log leaked {secret}: {events}");
     }

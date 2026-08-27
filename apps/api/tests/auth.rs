@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use axum::{
-    body::Body,
-    http::{Request, StatusCode},
+    body::{Body, to_bytes},
+    http::{Request, StatusCode, header},
+    middleware,
 };
 use cashmemo_api::accounts::AccountDeletionService;
 use cashmemo_api::auth::email::SmtpEmailSender;
@@ -11,6 +12,7 @@ use cashmemo_api::auth::{
     PasswordError, SessionAccess, normalize_email, validate_password,
 };
 use cashmemo_api::config::{AppEnvironment, SmtpEmailConfig, SmtpSecurity};
+use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
 use url::Url;
@@ -445,6 +447,82 @@ async fn account_deletion_request_clears_session_cookie(pool: PgPool) {
         auth.session(&login.raw_token).await,
         Err(AuthError::Unauthorized)
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn restricted_auth_routes_and_extractor_reuse_attached_request_id(pool: PgPool) {
+    let mailer = Arc::new(FakeEmailSender::default());
+    let auth = service(pool.clone(), mailer.clone());
+    auth.register("restricted@example.test", "correct horse battery staple")
+        .await
+        .unwrap();
+    let verification = sent_token(&mailer.verification, 0).await;
+    auth.verify_email(&verification).await.unwrap();
+    let login = auth
+        .login("restricted@example.test", "correct horse battery staple")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET status = 'pending_deletion' WHERE id = $1")
+        .bind(login.user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let app = cashmemo_api::auth::routes::router(auth)
+        .layer(middleware::from_fn(cashmemo_api::http::request_id::attach));
+    for (method, uri, request_id) in [
+        (
+            "GET",
+            "/sessions/current",
+            "cbca2e85-4d7c-4ce6-9a8c-69f7e647905b",
+        ),
+        (
+            "POST",
+            "/sessions/revoke-all",
+            "d71b794d-8818-4ef1-9c83-15b4d1fb2209",
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header(
+                        header::COOKIE,
+                        format!("__Host-cashmemo_session={}", login.raw_token),
+                    )
+                    .header("x-request-id", request_id)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{uri}");
+        assert_eq!(response.headers()["x-request-id"], request_id, "{uri}");
+        let body: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["request_id"], request_id, "{uri}");
+    }
+
+    let request_id = "4fec33c7-eea9-4bcf-b481-50eb8e032248";
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/sessions/current")
+                .header("x-request-id", request_id)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.headers()["x-request-id"], request_id);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["error"]["request_id"], request_id);
 }
 
 #[sqlx::test(migrations = "./migrations")]

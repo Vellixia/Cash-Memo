@@ -288,3 +288,39 @@ GREEN:
 `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57432/cashmemo_e2e cargo test -p cashmemo-api --test operations --test migrations --test http_safety`
 
 Result: 34 tests passed (`http_safety` 12, `migrations` 9, `operations` 13).
+
+## Canonical request IDs and safe request logs
+
+- Root cause: restricted `GET /sessions/current` and `POST /sessions/revoke-all` minted fresh
+  `RequestId`s for errors, while the auth extractor and origin/rate-limit middleware could also
+  fall back to fresh IDs. Error envelopes could therefore disagree with the response header for
+  one request. Request logs emitted only request ID, status, and latency.
+- Request-ID attachment remains the outermost app middleware. Incoming IDs must be canonical UUIDs
+  of the exact accepted size; malformed values receive a generated canonical UUID. Auth routes,
+  extractor, origin policy, rate limiter, and request logger now require and reuse that attachment.
+- Structured `http_request` records contain only `request_id`, `method`, matched route template
+  (or literal `<unmatched>`), `status`, `latency_ms`, `service`, and `version`, plus the event
+  discriminator. URI and query strings are never logged.
+
+### Canonical ID/log RED/GREEN evidence
+
+RED:
+
+- Restricted current-session request returned body request ID
+  `0fda5273-1b1f-4aeb-a417-a3e1b069d966`, not incoming
+  `cbca2e85-4d7c-4ce6-9a8c-69f7e647905b`.
+- Structured log test contained only `event`, `latency_ms`, `request_id`, and `status`; required
+  method, route, service, and version were absent.
+
+GREEN:
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57433/cashmemo_e2e cargo test -p cashmemo-api --test http_safety --test operations --test auth -- --test-threads=1`
+
+Result: 41 tests passed (`auth` 15, `http_safety` 13, `operations` 13). Serial test threads avoid
+SQLx temporary-database cleanup collisions observed when these database-backed tests run in
+parallel.
+
+Log privacy evidence: real TCP matched and hostile unmatched requests carried password, token,
+note, and amount values in body/query. Captured JSON logs assert matched route
+`/api/v1/health/live`, unmatched route `<unmatched>`, and absence of every raw query/path prefix
+and secret value.

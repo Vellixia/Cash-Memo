@@ -128,9 +128,12 @@ async fn logout(
     Ok(cleared_cookie_response())
 }
 
-async fn current_session(session: AuthSession) -> Result<Json<CurrentSession>, HttpError> {
+async fn current_session(
+    session: AuthSession,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Json<CurrentSession>, HttpError> {
     if session.access != SessionAccess::Full {
-        return Err(HttpError::forbidden(RequestId::new()));
+        return Err(HttpError::forbidden(request_id));
     }
     Ok(Json(CurrentSession {
         user_id: session.user_id,
@@ -142,13 +145,14 @@ async fn current_session(session: AuthSession) -> Result<Json<CurrentSession>, H
 async fn revoke_all(
     Extension(auth): Extension<AuthService>,
     session: AuthSession,
+    Extension(request_id): Extension<RequestId>,
 ) -> Result<Response, HttpError> {
     if session.access != SessionAccess::Full {
-        return Err(HttpError::forbidden(RequestId::new()));
+        return Err(HttpError::forbidden(request_id));
     }
     auth.revoke_all(session.user_id)
         .await
-        .map_err(|_| HttpError::unauthorized(RequestId::new()))?;
+        .map_err(|_| HttpError::unauthorized(request_id))?;
     Ok(cleared_cookie_response())
 }
 

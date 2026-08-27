@@ -119,7 +119,7 @@ where
             .extensions
             .get::<crate::http::RequestId>()
             .cloned()
-            .unwrap_or_default();
+            .expect("request ID middleware must run before auth extraction");
         let Extension(auth) = Extension::<AuthService>::from_request_parts(parts, state)
             .await
             .map_err(|_| HttpError::unauthorized(request_id.clone()))?;

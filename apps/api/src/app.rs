@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Extension, Request, State},
+    extract::{Extension, MatchedPath, Request, State},
     http::StatusCode,
     middleware,
     middleware::Next,
@@ -104,14 +104,25 @@ async fn log_request(request: Request, next: Next) -> Response {
         .extensions()
         .get::<RequestId>()
         .cloned()
-        .unwrap_or_default();
+        .expect("request ID middleware must run before request logging");
+    let method = request.method().clone();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str)
+        .unwrap_or("<unmatched>")
+        .to_owned();
     let started = Instant::now();
     let response = next.run(request).await;
     tracing::info!(
         event = "http_request",
         latency_ms = started.elapsed().as_millis() as u64,
+        method = %method,
         request_id = request_id.as_str(),
+        route,
+        service = env!("CARGO_PKG_NAME"),
         status = response.status().as_u16(),
+        version = env!("CARGO_PKG_VERSION"),
     );
     response
 }

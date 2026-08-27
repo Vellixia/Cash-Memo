@@ -9,7 +9,10 @@ use axum::{
 use cashmemo_api::app::{AppState, build_app};
 use cashmemo_api::{
     config::{AuthRateLimitSettings, RateLimitSettings, TrustedProxyConfig},
-    http::rate_limit::{AuthRateLimiter, enforce_auth_limit},
+    http::{
+        rate_limit::{AuthRateLimiter, enforce_auth_limit},
+        request_id::attach,
+    },
 };
 use serde_json::Value;
 use std::{
@@ -66,7 +69,8 @@ fn rate_limited_app(
                 }
             }),
         )
-        .layer(middleware::from_fn_with_state(limiter, enforce_auth_limit));
+        .layer(middleware::from_fn_with_state(limiter, enforce_auth_limit))
+        .layer(middleware::from_fn(attach));
     (app, handler_hits)
 }
 
@@ -183,6 +187,41 @@ async fn canonical_request_id_is_returned_in_header_and_error() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(body["error"]["code"], "INTERNAL_SERVER_ERROR");
     assert_eq!(body["error"]["request_id"], request_id);
+}
+
+#[tokio::test]
+async fn middleware_rejections_reuse_attached_request_id() {
+    for (request, expected_status, request_id) in [
+        (
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/currencies")
+                .header("x-request-id", "e4d9df47-895d-4b99-bd83-a3055882d3ba")
+                .body(Body::empty())
+                .unwrap(),
+            StatusCode::FORBIDDEN,
+            "e4d9df47-895d-4b99-bd83-a3055882d3ba",
+        ),
+        (
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header(header::ORIGIN, "http://localhost:3000")
+                .header("x-request-id", "d9e45845-fd78-44c5-9cab-4e6c949544d1")
+                .body(Body::empty())
+                .unwrap(),
+            StatusCode::BAD_REQUEST,
+            "d9e45845-fd78-44c5-9cab-4e6c949544d1",
+        ),
+    ] {
+        let response = app().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), expected_status);
+        assert_eq!(response.headers()["x-request-id"], request_id);
+        let body: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["request_id"], request_id);
+    }
 }
 
 #[tokio::test]
