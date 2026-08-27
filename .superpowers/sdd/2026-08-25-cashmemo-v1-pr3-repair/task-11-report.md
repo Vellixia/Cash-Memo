@@ -150,3 +150,39 @@ calculations. No recovery assertion was skipped, weakened, or deleted.
   existing pnpm `11.13.1` binary with the mise Node `24.14.0` directory first in `PATH`.
 - `--now` is inherently wall-clock dependent, but only convenience setup uses it; deterministic
   assertions and all offset calculations use fixed explicit bases.
+
+## Fix round 1: CI gates timestamp helper
+
+Reviewer Important finding: recovery CI did not invoke the new
+`tests/operations/utc-timestamp.bats`, leaving parser and overflow regressions outside the
+recovery job. The recovery command now includes that helper suite before preservation, replacement,
+restore, receipt, and repository gates. No test expectation changed.
+
+Changed file: `.github/workflows/v1-ci.yml`.
+
+Verification under pinned Node `24.14.0`:
+
+```text
+PATH=/Users/andresholivin/.local/share/mise/installs/node/24.14.0/bin:$PATH bats tests/operations/utc-timestamp.bats
+1..5
+ok 1 UTC timestamp adds signed integer seconds to explicit RFC3339 base
+ok 2 UTC timestamp accepts only exact UTC seconds and round-trips dates
+ok 3 UTC timestamp rejects invalid mode and offset arguments
+ok 4 UTC timestamp rejects overflow after checked second addition
+ok 5 UTC timestamp supports now mode with strict UTC seconds output
+```
+
+```text
+PATH=/Users/andresholivin/.local/share/mise/installs/node/24.14.0/bin:$PATH bats tests/operations/utc-timestamp.bats tests/operations/preservation-gate.bats tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats tests/operations/deletion-receipt-replay.bats tests/repository/legacy-removal-manifest.bats tests/repository/canonical-layout.bats
+1..44
+44 tests passed
+```
+
+YAML and diff checks:
+
+```text
+ruby -e 'require "yaml"; YAML.load_file(".github/workflows/v1-ci.yml")'
+git diff --check
+```
+
+Both passed. `.serena/` remained untouched.

@@ -229,6 +229,7 @@ jobs:
           cargo test --locked -p cashmemo-api --features s3-receipts --test deletion_receipt_replay
       - name: Preserve fail-closed replacement and restore contracts
         run: >-
+          bats tests/operations/utc-timestamp.bats
           bats tests/operations/preservation-gate.bats
           tests/operations/production-replacement-gate.bats tests/operations/restore-drill.bats
           tests/operations/deletion-receipt-replay.bats
