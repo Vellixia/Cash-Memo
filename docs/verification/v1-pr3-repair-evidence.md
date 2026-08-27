@@ -387,3 +387,31 @@ GREEN:
 `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57433/cashmemo_e2e cargo test -p cashmemo-api --test http_safety --test operations --test auth -- --test-threads=1`
 
 Result: 42 tests passed (`auth` 15, `http_safety` 14, `operations` 13).
+
+## Portable recovery timestamps
+
+- `scripts/operations/utc-timestamp.mjs` provides deterministic `--base <RFC3339>|--now
+  --offset-seconds <signed integer>` output in exact UTC-seconds form.
+- Explicit bases must match the strict UTC-seconds grammar and an exact `Date` ISO round-trip;
+  impossible dates, milliseconds, offsets, malformed values, unsafe arithmetic, and Date-range
+  overflow fail closed. `--now` truncates to UTC seconds for convenience only.
+- Preservation and restore Bats fixtures derive all expiration, stale, and future values through
+  the helper, removing BSD `date -v` dependencies. Recovery CI pins Node `24.14.0` through
+  `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020` before Bats.
+
+### Portable timestamp verification
+
+RED: `bats tests/operations/utc-timestamp.bats` failed because
+`scripts/operations/utc-timestamp.mjs` was missing (`MODULE_NOT_FOUND`).
+
+GREEN: `PATH=/Users/andresholivin/.local/share/mise/installs/node/24.14.0/bin:$PATH bats
+tests/operations/utc-timestamp.bats tests/operations/preservation-gate.bats
+tests/operations/restore-drill.bats` passed 19 tests.
+
+Full operations and repository verification:
+
+`PATH=/Users/andresholivin/.local/share/mise/installs/node/24.14.0/bin:$PATH bats
+tests/operations/*.bats tests/repository/*.bats`
+
+Result: 44 tests passed. No existing test expectation was weakened or contradicted; only BSD
+date fixture generation was replaced with equivalent helper calculations.

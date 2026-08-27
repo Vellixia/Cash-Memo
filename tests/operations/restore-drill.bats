@@ -5,8 +5,9 @@ setup() {
   evidence="$BATS_TEST_TMPDIR/restore.json"
   key=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
   export CASHMEMO_V1_RESTORE_EVIDENCE_HMAC_KEY="$key"
-  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  expires=$(date -u -v+10M +%Y-%m-%dT%H:%M:%SZ)
+  timestamp="$repo/scripts/operations/utc-timestamp.mjs"
+  now=$(node "$timestamp" --now --offset-seconds 0)
+  expires=$(node "$timestamp" --base "$now" --offset-seconds 600)
 }
 
 sign() {
@@ -67,14 +68,14 @@ verify() {
 
 @test "restore verification rejects signed expired and future-issued evidence" {
   write_restore_evidence
-  issued=$(date -u -v-899S +%Y-%m-%dT%H:%M:%SZ)
-  expired=$(date -u -v-898S +%Y-%m-%dT%H:%M:%SZ)
+  issued=$(node "$timestamp" --base "$now" --offset-seconds -899)
+  expired=$(node "$timestamp" --base "$now" --offset-seconds -898)
   jq --arg issued "$issued" --arg expired "$expired" '.issued_at=$issued | .expires_at=$expired | .backup.fresh_at=$issued | .operator.approved_at=$issued | .approval.signed_at=$issued' "$evidence" >"$evidence.next" && mv "$evidence.next" "$evidence"
   sign
   run verify
   [ "$status" -ne 0 ]
-  issued=$(date -u -v+60S +%Y-%m-%dT%H:%M:%SZ)
-  expires_future=$(date -u -v+120S +%Y-%m-%dT%H:%M:%SZ)
+  issued=$(node "$timestamp" --base "$now" --offset-seconds 60)
+  expires_future=$(node "$timestamp" --base "$now" --offset-seconds 120)
   jq --arg issued "$issued" --arg expires "$expires_future" '.issued_at=$issued | .expires_at=$expires | .backup.fresh_at=$issued | .operator.approved_at=$issued | .approval.signed_at=$issued' "$evidence" >"$evidence.next" && mv "$evidence.next" "$evidence"
   sign
   run verify
