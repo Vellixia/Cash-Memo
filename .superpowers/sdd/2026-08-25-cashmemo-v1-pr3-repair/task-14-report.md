@@ -328,3 +328,66 @@ lint: exit 0
 typecheck: exit 0
 build: exit 0
 ```
+
+## Fix Round 2/5 — 2026-08-27
+
+Scope:
+
+- require destructive semantic foreground on `.error-panel`
+
+RED addition in `apps/web/tests/design-system.spec.tsx`:
+
+- `.error-panel` block must include `var(--destructive-foreground)` in addition to destructive border/surface
+
+RED command:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+pnpm --dir=apps/web exec vitest run tests/design-system.spec.tsx
+```
+
+RED output:
+
+```text
+tests/design-system.spec.tsx (6 tests | 1 failed)
+× renders error panels on destructive semantic surfaces
+```
+
+Root cause:
+
+- `.error-panel` already used destructive border/surface
+- text color still pointed at `var(--foreground)` instead of destructive semantic foreground
+
+Fix:
+
+- `.error-panel { color: var(--destructive-foreground); }`
+
+GREEN command:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+pnpm --dir=apps/web exec vitest run tests/design-system.spec.tsx
+```
+
+GREEN output:
+
+```text
+Test Files  1 passed (1)
+Tests       6 passed (6)
+```
+
+Surrounding checks rerun:
+
+```bash
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run lint
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run typecheck
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir=apps/web run build
+```
+
+Result:
+
+```text
+lint: exit 0
+typecheck: exit 0
+build: exit 0
+```

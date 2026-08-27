@@ -68,7 +68,7 @@ describe("design system foundation", () => {
 
   it("renders error panels on destructive semantic surfaces", () => {
     expect(globalsCss).toMatch(
-      /\.error-panel\s*\{[\s\S]*var\(--destructive-border\)[\s\S]*var\(--destructive-surface\)/,
+      /\.error-panel\s*\{[\s\S]*var\(--destructive-border\)[\s\S]*var\(--destructive-surface\)[\s\S]*var\(--destructive-foreground\)/,
     );
     expect(globalsCss).toContain(".confirm-box,\n.notice {");
   });
