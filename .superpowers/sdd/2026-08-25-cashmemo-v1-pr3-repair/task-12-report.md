@@ -2,14 +2,17 @@
 
 ## Status and identities
 
-Status: implementation complete; signed commit created after evidence verification (exact SHA in
-handoff below).
+Status: implementation complete in signed implementation commit
+`6f7fff7a63f8717c5e9b9f9dc3788661c3dc92e2`; this fix round adds separate signed evidence commit.
 
 - Branch: `rewrite/cashmemo-v1`
-- Base and initial feature HEAD: `d3f328155c260907799720aa762efad9b2674f17`
-- `git rev-parse HEAD`: `d3f328155c260907799720aa762efad9b2674f17`
+- Base commit: `d3f328155c260907799720aa762efad9b2674f17`
+- Implementation commit: `6f7fff7a63f8717c5e9b9f9dc3788661c3dc92e2`
+- `git rev-parse HEAD` at implementation evidence capture: `6f7fff7a63f8717c5e9b9f9dc3788661c3dc92e2`
 - `git rev-parse d3f328155c260907799720aa762efad9b2674f17`: same SHA
-- `git merge-base HEAD d3f328155c260907799720aa762efad9b2674f17`: same SHA
+- `git merge-base 6f7fff7a63f8717c5e9b9f9dc3788661c3dc92e2 d3f328155c260907799720aa762efad9b2674f17`: base SHA
+- Implementation signature: `G` (good), key `C07803C796C084B1DCEF44F88A4D51F050B1D09F`,
+  `andres (personal-mac) <andresholivin01@gmail.com>`.
 
 Initial `git status --short --branch` showed only user-owned untracked `.serena/`; it was ignored,
 reported, and never read or changed. No production, deploy, Dokploy, generated, or existing test
@@ -164,3 +167,13 @@ Commit command required by task:
 git add infra/v1 .github/workflows/v1-ci.yml docs/verification/v1-pr3-repair-evidence.md .superpowers/sdd/2026-08-25-cashmemo-v1-pr3-repair/task-12-report.md
 git commit -S -m "fix: harden the web runtime image"
 ```
+
+## Fix round 1 evidence
+
+Reviewer correction addressed: prior report incorrectly described base as current HEAD and omitted
+implementation SHA from status. Report now distinguishes base
+`d3f328155c260907799720aa762efad9b2674f17` from implementation commit
+`6f7fff7a63f8717c5e9b9f9dc3788661c3dc92e2`, and records its good signature identity above.
+
+This report-only correction creates a separate signed evidence-fix commit. Its exact SHA is
+returned in final handoff; application, Dockerfile, workflow, and `.serena/` remain unchanged.
