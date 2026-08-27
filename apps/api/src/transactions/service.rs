@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     currency::CurrencyCode,
-    money::Money,
+    money::{Money, format_exact_for_exponent},
     time::{
         UserTimezone, first_valid_instant_at_or_after_midnight, local_date_range,
         parse_local_minute, resolve_manual_local,
@@ -660,7 +660,8 @@ impl TryFrom<TransactionRow> for Transaction {
             category_id: row.category_id,
             category_name: row.category_name,
             direction: TransactionDirection::from_database(&row.transaction_type)?,
-            amount: format_amount(row.amount, exponent),
+            amount: format_exact_for_exponent(row.amount, exponent)
+                .map_err(|_| TransactionError::Persistence)?,
             currency: CurrencyCode::parse(&row.currency_code)
                 .map_err(|_| TransactionError::Persistence)?,
             occurred_at: row.occurred_at.to_rfc3339(),
@@ -701,21 +702,4 @@ async fn resolve_occurred_local(
     let local = parse_local_minute(input).map_err(|_| TransactionError::InvalidOccurredAt)?;
     resolve_manual_local(timezone.timezone(), local)
         .map_err(|_| TransactionError::InvalidOccurredAt)
-}
-
-fn format_amount(amount: Decimal, exponent: u32) -> String {
-    let mut rendered = amount.normalize().to_string();
-    if exponent == 0 {
-        return rendered.split('.').next().unwrap_or(&rendered).to_owned();
-    }
-    let fractional_length = rendered
-        .split_once('.')
-        .map_or(0, |(_, fractional)| fractional.len());
-    if fractional_length == 0 {
-        rendered.push('.');
-    }
-    if fractional_length < exponent as usize {
-        rendered.push_str(&"0".repeat(exponent as usize - fractional_length));
-    }
-    rendered
 }

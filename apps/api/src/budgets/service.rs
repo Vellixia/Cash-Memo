@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     currency::{CurrencyCode, CurrencyRepository},
-    money::Money,
+    money::{Money, format_exact_for_exponent, format_percentage_2dp},
     time::local_month_range,
 };
 
@@ -348,21 +348,17 @@ fn positive_amount(input: &str, exponent: u32) -> Result<Decimal, BudgetError> {
 }
 
 fn ensure_amount_exponent(amount: Decimal, exponent: u32) -> Result<Decimal, BudgetError> {
-    (amount > Decimal::ZERO && amount.round_dp(exponent) == amount)
+    (amount > Decimal::ZERO && amount.normalize().scale() <= exponent)
         .then_some(amount)
         .ok_or(BudgetError::InvalidAmount)
 }
 
-fn format_amount(amount: Decimal, exponent: u32) -> String {
-    let mut value = amount.round_dp(exponent);
-    value.rescale(exponent);
-    value.to_string()
+fn format_amount(amount: Decimal, exponent: u32) -> Result<String, BudgetError> {
+    format_exact_for_exponent(amount, exponent).map_err(|_| BudgetError::Persistence)
 }
 
 fn format_progress(spent: Decimal, budgeted: Decimal) -> String {
-    let mut value = (spent * Decimal::ONE_HUNDRED / budgeted).round_dp(2);
-    value.rescale(2);
-    value.to_string()
+    format_percentage_2dp(spent * Decimal::ONE_HUNDRED / budgeted)
 }
 
 fn format_month(month: NaiveDate) -> String {
@@ -391,7 +387,7 @@ impl TryFrom<BudgetRow> for Budget {
             amount: format_amount(
                 row.amount,
                 u32::try_from(row.exponent).map_err(|_| BudgetError::Persistence)?,
-            ),
+            )?,
         })
     }
 }
@@ -406,9 +402,9 @@ impl TryFrom<SummaryRow> for BudgetProgress {
             category_id: row.category_id,
             currency: CurrencyCode::parse(&row.currency_code)
                 .map_err(|_| BudgetError::Persistence)?,
-            budgeted: format_amount(row.amount, exponent),
-            spent: format_amount(row.spent, exponent),
-            remaining: format_amount(row.amount - row.spent, exponent),
+            budgeted: format_amount(row.amount, exponent)?,
+            spent: format_amount(row.spent, exponent)?,
+            remaining: format_amount(row.amount - row.spent, exponent)?,
             progress: format_progress(row.spent, row.amount),
         })
     }

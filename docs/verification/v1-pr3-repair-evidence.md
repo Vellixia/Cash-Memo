@@ -269,6 +269,51 @@ exact upstream `trustedIPs`, and `http.maxHeaderBytes=8192`. The Compose contrac
 arguments and the API CIDRs. Actual managed-Traefik config and public two-client probes remain a
 pre-route-activation operational gate; this task made no Dokploy or production mutation.
 
+## Exact monetary output invariant
+
+- Root cause: wallet, transaction, budget, and reporting services each formatted persisted
+  `Decimal` values independently; authoritative paths used `round_dp` or equivalent rendering,
+  silently changing a corrupt-scale value such as `1.231` for a two-decimal currency into `1.23`.
+- `format_exact_for_exponent` normalizes trailing zeroes, rejects normalized scale above the
+  currency exponent with `MoneyError::ExcessScale`, and only then pads/rescales output. Negative
+  net values remain exact. `format_percentage_2dp` is separate and explicitly uses
+  `MidpointAwayFromZero` for presentation-only share/progress values.
+- Corrupt persisted-row regressions cover wallet list, budget list, and monthly reporting; each
+  expects an internal error rather than a rounded successful response. Existing reporting and
+  budget assertions continue to require two-decimal percentage strings.
+
+### Exact-money verification
+
+RED:
+
+`cargo test -p cashmemo-api --test money -- --nocapture`
+
+Result: compile failed as expected because `format_exact_for_exponent` and
+`format_percentage_2dp` did not yet exist. Initial combined endpoint RED also reached compilation,
+then DB-backed execution was unavailable because `DATABASE_URL` was unset (`DATABASE_URL must be
+set`).
+
+GREEN:
+
+`cargo fmt --all -- --check && cargo test -p cashmemo-api --lib`
+
+Result: formatting passed; 8 library tests passed.
+
+`cargo test -p cashmemo-api --test money exact_formatter -- --nocapture`
+
+Result: 3 exact formatter tests passed (11 filtered).
+
+`cargo test -p cashmemo-api --test wallets --test budgets --test reporting --no-run`
+
+Result: all three DB-backed targets compiled.
+
+Required DB-backed command was rerun:
+
+`cargo test -p cashmemo-api --test money --test wallets --test budgets --test reporting -- --nocapture`
+
+Result: compilation succeeded; execution is blocked in this workspace because `DATABASE_URL` is
+unset. No database was started or mutated by this task.
+
 ## Read-only schema-aware readiness
 
 - Root cause: `/api/v1/health/ready` issued only `SELECT 1`, so an empty database, a stale V1

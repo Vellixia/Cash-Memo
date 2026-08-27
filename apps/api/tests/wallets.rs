@@ -296,6 +296,27 @@ async fn rejects_empty_currency_negative_and_excess_scale_wallet_updates(pool: P
 }
 
 #[sqlx::test(migrations = false)]
+async fn wallet_read_rejects_persisted_corrupt_scale_instead_of_rounding(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) = authenticated_user(&pool, "wallet-corrupt-scale@example.test").await;
+    sqlx::query(
+        "INSERT INTO wallets (user_id, name, currency_code, opening_balance)
+         VALUES ($1, 'Corrupt', 'USD', 1.231)",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = build_app(AppState { pool })
+        .oneshot(get_wallets(&cookie))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[sqlx::test(migrations = false)]
 async fn archive_and_restore_preserve_transaction_history(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, cookie) = authenticated_user(&pool, "wallet-archive@example.test").await;

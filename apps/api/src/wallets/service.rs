@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     currency::{CurrencyCode, CurrencyError, CurrencyRepository},
-    money::Money,
+    money::{Money, format_exact_for_exponent},
     onboarding::OnboardingService,
 };
 
@@ -304,11 +304,13 @@ impl TryFrom<WalletRow> for Wallet {
             id: row.id,
             name: row.name,
             currency: currency.clone(),
-            opening_balance: format_amount(row.opening_balance, exponent),
+            opening_balance: format_exact_for_exponent(row.opening_balance, exponent)
+                .map_err(|_| WalletError::Persistence)?,
             archived_at: row.archived_at.map(|time| time.to_rfc3339()),
             balance: WalletBalance {
                 currency,
-                amount: format_amount(row.balance, exponent),
+                amount: format_exact_for_exponent(row.balance, exponent)
+                    .map_err(|_| WalletError::Persistence)?,
                 as_of: row.as_of.to_rfc3339(),
             },
         })
@@ -349,21 +351,4 @@ fn map_currency_error(error: CurrencyError) -> WalletError {
         CurrencyError::NotFound | CurrencyError::Disabled => WalletError::UnsupportedCurrency,
         CurrencyError::Database(_) => WalletError::Persistence,
     }
-}
-
-fn format_amount(amount: Decimal, exponent: u32) -> String {
-    let mut rendered = amount.normalize().to_string();
-    if exponent == 0 {
-        return rendered.split('.').next().unwrap_or(&rendered).to_owned();
-    }
-    let fractional_length = rendered
-        .split_once('.')
-        .map_or(0, |(_, fractional)| fractional.len());
-    if fractional_length == 0 {
-        rendered.push('.');
-    }
-    if fractional_length < exponent as usize {
-        rendered.push_str(&"0".repeat(exponent as usize - fractional_length));
-    }
-    rendered
 }

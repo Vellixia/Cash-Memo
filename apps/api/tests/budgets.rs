@@ -115,6 +115,36 @@ async fn budget_summary_derives_active_expense_spending_by_local_month_category_
 }
 
 #[sqlx::test(migrations = false)]
+async fn budget_read_rejects_persisted_corrupt_scale_instead_of_rounding(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, cookie) =
+        authenticated_user(&pool, "budget-corrupt-scale@example.test", "UTC").await;
+    let category = insert_category(&pool, user_id, "expense").await;
+    sqlx::query(
+        "INSERT INTO budgets (user_id, category_id, currency_code, month_start, amount)
+         VALUES ($1, $2, 'USD', DATE '2026-01-01', 1.231)",
+    )
+    .bind(user_id)
+    .bind(category)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let app = build_app(AppState { pool });
+    let response = app
+        .oneshot(request(
+            "GET",
+            "/api/v1/budgets?month=2026-01",
+            &cookie,
+            None,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[sqlx::test(migrations = false)]
 async fn budget_summary_recalculates_after_transaction_updates_trash_restore_and_permanent_delete(
     pool: PgPool,
 ) {

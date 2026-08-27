@@ -143,6 +143,36 @@ async fn monthly_summary_partitions_currency_and_aggregates_exact_decimal_string
 }
 
 #[sqlx::test(migrations = false)]
+async fn monthly_summary_rejects_persisted_corrupt_scale_instead_of_rounding(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let app = build_app(AppState { pool: pool.clone() });
+    let (user_id, cookie) =
+        authenticated_user(&pool, "reporting-corrupt-scale@example.test", "UTC").await;
+    let category = insert_category(&pool, user_id, "EXPENSE", "Food").await;
+    let wallet = insert_wallet(&pool, user_id, "USD").await;
+    sqlx::query(
+        "INSERT INTO transactions
+         (user_id, wallet_id, category_id, transaction_type, amount, occurred_at)
+         VALUES ($1, $2, $3, 'EXPENSE', 1.231, '2026-01-15T12:00:00Z')",
+    )
+    .bind(user_id)
+    .bind(wallet)
+    .bind(category)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = get(
+        &app,
+        &cookie,
+        "/api/v1/reports/monthly-summary?month=2026-01",
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[sqlx::test(migrations = false)]
 async fn monthly_summary_defaults_using_user_timezone_and_excludes_future_transactions(
     pool: PgPool,
 ) {

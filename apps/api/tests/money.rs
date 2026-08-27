@@ -7,10 +7,12 @@ use axum::{
 use cashmemo_api::{
     app::{AppState, build_app},
     currency::{CurrencyCode, CurrencyError, CurrencyRepository},
-    money::{Money, MoneyError},
+    money::{Money, MoneyError, format_exact_for_exponent, format_percentage_2dp},
     time::UserTimezone,
 };
+use rust_decimal::Decimal;
 use sqlx::PgPool;
+use std::str::FromStr;
 use tower::ServiceExt;
 
 #[test]
@@ -43,6 +45,38 @@ fn serializes_as_an_exact_json_string() {
 
     assert_eq!(serde_json::to_string(&money).unwrap(), "\"12.30\"");
     assert_eq!(money.decimal().to_string(), "12.30");
+}
+
+#[test]
+fn exact_formatter_normalizes_trailing_zeroes_without_rounding() {
+    assert_eq!(
+        format_exact_for_exponent(Decimal::from_str("1.2300").unwrap(), 2).unwrap(),
+        "1.23"
+    );
+}
+
+#[test]
+fn exact_formatter_rejects_corrupt_scale() {
+    assert_eq!(
+        format_exact_for_exponent(Decimal::from_str("1.231").unwrap(), 2).unwrap_err(),
+        MoneyError::ExcessScale
+    );
+}
+
+#[test]
+fn exact_formatter_preserves_valid_negative_net() {
+    assert_eq!(
+        format_exact_for_exponent(Decimal::from_str("-1.20").unwrap(), 2).unwrap(),
+        "-1.20"
+    );
+}
+
+#[test]
+fn percentage_formatter_rounds_to_two_decimal_places_explicitly() {
+    assert_eq!(
+        format_percentage_2dp(Decimal::from_str("12.345").unwrap()),
+        "12.35"
+    );
 }
 
 #[test]

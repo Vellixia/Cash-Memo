@@ -2,13 +2,18 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use chrono_tz::Tz;
-use rust_decimal::{Decimal, RoundingStrategy};
+use rust_decimal::Decimal;
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{currency::CurrencyCode, time::local_month_range, transactions::Transaction};
+use crate::{
+    currency::CurrencyCode,
+    money::{format_exact_for_exponent, format_percentage_2dp},
+    time::local_month_range,
+    transactions::Transaction,
+};
 
 #[derive(Clone)]
 pub struct ReportingQueries {
@@ -152,9 +157,9 @@ impl ReportingQueries {
                     .map_err(|_| ReportingError::Persistence)?;
                 Ok(CurrencyMonthlySummary {
                     currency,
-                    income: format_amount(row.income, currency_exponent),
-                    expense: format_amount(row.expense, currency_exponent),
-                    net: format_amount(row.income - row.expense, currency_exponent),
+                    income: format_amount(row.income, currency_exponent)?,
+                    expense: format_amount(row.expense, currency_exponent)?,
+                    net: format_amount(row.income - row.expense, currency_exponent)?,
                     expense_categories: by_currency
                         .remove(&row.currency_code)
                         .unwrap_or_default()
@@ -164,7 +169,7 @@ impl ReportingQueries {
                             Ok(ExpenseCategorySummary {
                                 category_id: category.category_id,
                                 name: category.name,
-                                expense: format_amount(category.expense, exponent),
+                                expense: format_amount(category.expense, exponent)?,
                                 share_percent: format_share_percent(category.expense, row.expense),
                             })
                         })
@@ -255,22 +260,17 @@ fn exponent(value: i32) -> Result<u32, ReportingError> {
     u32::try_from(value).map_err(|_| ReportingError::Persistence)
 }
 
-fn format_amount(amount: Decimal, exponent: u32) -> String {
-    let mut amount = amount.round_dp(exponent);
-    amount.rescale(exponent);
-    amount.to_string()
+fn format_amount(amount: Decimal, exponent: u32) -> Result<String, ReportingError> {
+    format_exact_for_exponent(amount, exponent).map_err(|_| ReportingError::Persistence)
 }
 
 fn format_share_percent(expense: Decimal, total_expense: Decimal) -> String {
-    let mut share = if total_expense <= Decimal::ZERO {
+    let share = if total_expense <= Decimal::ZERO {
         Decimal::ZERO
     } else {
-        (expense * Decimal::ONE_HUNDRED / total_expense)
-            .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+        expense * Decimal::ONE_HUNDRED / total_expense
     };
-    share = share.clamp(Decimal::ZERO, Decimal::ONE_HUNDRED);
-    share.rescale(2);
-    share.to_string()
+    format_percentage_2dp(share.clamp(Decimal::ZERO, Decimal::ONE_HUNDRED))
 }
 
 fn format_month(month: NaiveDate) -> String {
@@ -294,7 +294,7 @@ impl TryFrom<RecentRow> for Transaction {
             category_id: row.category_id,
             category_name: row.category_name,
             direction,
-            amount: format_amount(row.amount, exponent),
+            amount: format_amount(row.amount, exponent)?,
             currency: CurrencyCode::parse(&row.currency_code)
                 .map_err(|_| ReportingError::Persistence)?,
             occurred_at: row.occurred_at.to_rfc3339(),

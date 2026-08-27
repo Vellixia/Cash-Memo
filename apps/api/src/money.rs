@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -17,6 +17,24 @@ pub enum MoneyError {
     InvalidFormat,
     #[error("currency exponent must be between zero and four")]
     InvalidExponent,
+}
+
+pub fn format_exact_for_exponent(amount: Decimal, exponent: u32) -> Result<String, MoneyError> {
+    if exponent > 4 {
+        return Err(MoneyError::InvalidExponent);
+    }
+    let mut normalized = amount.normalize();
+    if normalized.scale() > exponent {
+        return Err(MoneyError::ExcessScale);
+    }
+    normalized.rescale(exponent);
+    Ok(normalized.to_string())
+}
+
+pub fn format_percentage_2dp(value: Decimal) -> String {
+    let mut rounded = value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+    rounded.rescale(2);
+    rounded.to_string()
 }
 
 impl Money {
