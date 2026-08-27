@@ -134,6 +134,9 @@ pub async fn assert_v1_migration_target(pool: &PgPool) -> Result<TargetState, Ta
 
 pub async fn assert_latest_v1_migration_target(pool: &PgPool) -> Result<TargetState, TargetError> {
     let state = assert_v1_migration_target(pool).await?;
+    if state != TargetState::CashmemoV1 {
+        return Err(TargetError::UnknownNonEmpty);
+    }
     let migrations: Vec<(i64, bool, Vec<u8>)> =
         sqlx::query_as("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
             .fetch_all(pool)

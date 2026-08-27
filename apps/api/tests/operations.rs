@@ -9,7 +9,7 @@ use std::{
 };
 
 use axum::{
-    body::Body,
+    body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
 use cashmemo_api::app::{AppState, build_app};
@@ -57,6 +57,132 @@ async fn readiness_fails_when_database_is_unavailable() {
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct DatabaseSnapshot {
+    tables: Vec<String>,
+    columns: Vec<(String, String, String, String, i32)>,
+    migrations: Vec<(i64, bool, String)>,
+}
+
+async fn snapshot_database(pool: &PgPool) -> DatabaseSnapshot {
+    let tables = sqlx::query_scalar(
+        "SELECT tablename
+         FROM pg_catalog.pg_tables
+         WHERE schemaname = 'public'
+         ORDER BY tablename",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    let columns = sqlx::query_as(
+        "SELECT table_name, column_name, data_type, is_nullable, ordinal_position
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+         ORDER BY table_name, ordinal_position",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    let migrations = if tables.iter().any(|table| table == "_sqlx_migrations") {
+        sqlx::query_as(
+            "SELECT version, success, encode(checksum, 'hex')
+             FROM _sqlx_migrations
+             ORDER BY version",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap()
+    } else {
+        Vec::new()
+    };
+
+    DatabaseSnapshot {
+        tables,
+        columns,
+        migrations,
+    }
+}
+
+async fn assert_readiness(pool: &PgPool, expected_status: StatusCode) {
+    let before = snapshot_database(pool).await;
+    let response = build_app(AppState { pool: pool.clone() })
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/health/ready")
+                .header("x-request-id", REQUEST_ID)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), expected_status);
+    assert_eq!(response.headers()["x-request-id"], REQUEST_ID);
+    if expected_status == StatusCode::SERVICE_UNAVAILABLE {
+        let body: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["code"], "SERVICE_UNAVAILABLE");
+        assert_eq!(body["error"]["request_id"], REQUEST_ID);
+    }
+    assert_eq!(snapshot_database(pool).await, before);
+}
+
+#[sqlx::test(migrations = false)]
+async fn readiness_accepts_only_current_exact_v1_without_mutation(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+
+    assert_readiness(&pool, StatusCode::OK).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn readiness_rejects_empty_database_without_mutation(pool: PgPool) {
+    assert_readiness(&pool, StatusCode::SERVICE_UNAVAILABLE).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn readiness_rejects_v1_migration_prefix_without_mutation(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 9")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_readiness(&pool, StatusCode::SERVICE_UNAVAILABLE).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn readiness_rejects_failed_migration_without_mutation(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("UPDATE _sqlx_migrations SET success = FALSE WHERE version = 9")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_readiness(&pool, StatusCode::SERVICE_UNAVAILABLE).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn readiness_rejects_checksum_divergence_without_mutation(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = '\\x00' WHERE version = 9")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_readiness(&pool, StatusCode::SERVICE_UNAVAILABLE).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn readiness_rejects_unknown_non_empty_database_without_mutation(pool: PgPool) {
+    sqlx::query("CREATE TABLE alien_data(id bigint primary key)")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_readiness(&pool, StatusCode::SERVICE_UNAVAILABLE).await;
 }
 
 #[test]

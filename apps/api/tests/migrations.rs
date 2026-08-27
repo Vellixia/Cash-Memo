@@ -2,6 +2,7 @@ mod support;
 
 use cashmemo_api::db::{
     migrate::migrate_v1,
+    readiness::check_latest_v1_readiness,
     target_guard::{
         TargetError, TargetState, assert_latest_v1_migration_target, assert_v1_migration_target,
     },
@@ -27,6 +28,7 @@ async fn empty_or_identified_v1_database_is_allowed(pool: PgPool) {
         assert_v1_migration_target(&pool).await.unwrap(),
         TargetState::Empty
     );
+    assert!(check_latest_v1_readiness(&pool).await.is_err());
 
     support::migrate_v1(&pool).await;
 
@@ -38,6 +40,7 @@ async fn empty_or_identified_v1_database_is_allowed(pool: PgPool) {
         assert_latest_v1_migration_target(&pool).await.unwrap(),
         TargetState::CashmemoV1
     );
+    check_latest_v1_readiness(&pool).await.unwrap();
 }
 
 #[sqlx::test(migrations = false)]

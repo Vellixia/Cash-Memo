@@ -268,3 +268,23 @@ operator configuration: `insecure=false`, safe append via `notAppendXForwardedFo
 exact upstream `trustedIPs`, and `http.maxHeaderBytes=8192`. The Compose contract asserts all four
 arguments and the API CIDRs. Actual managed-Traefik config and public two-client probes remain a
 pre-route-activation operational gate; this task made no Dokploy or production mutation.
+
+## Read-only schema-aware readiness
+
+- Root cause: `/api/v1/health/ready` issued only `SELECT 1`, so an empty database, a stale V1
+  migration prefix, failed migration, divergent migration checksum, and unknown non-empty database
+  all incorrectly returned `200`.
+- `check_latest_v1_readiness` now calls the existing V1 target guard only. It verifies expected
+  table set, `cashmemo`/`v1` identity, and successful checksummed migrations 1 through 9 with
+  SELECT queries; it never initializes metadata, obtains advisory locks, runs migrations, or
+  repairs state.
+- Readiness tests snapshot public tables, public column schema, and `_sqlx_migrations` version,
+  success, and checksum before and after each request. Exact current V1 alone returns `200`; empty,
+  stale-prefix, failed, checksum-divergent, and unknown non-empty states return canonical `503`
+  responses with preserved request ID. Liveness remains `200` without database connectivity.
+
+GREEN:
+
+`DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:57432/cashmemo_e2e cargo test -p cashmemo-api --test operations --test migrations --test http_safety`
+
+Result: 34 tests passed (`http_safety` 12, `migrations` 9, `operations` 13).

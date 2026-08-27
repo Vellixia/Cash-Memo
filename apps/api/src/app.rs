@@ -17,6 +17,7 @@ use crate::{
     categories::{CategoryService, router as category_routes},
     config::{AppConfig, HttpSafetyConfig},
     currency::{CurrencyRepository, EnabledCurrencyResponse},
+    db::readiness::check_latest_v1_readiness,
     error::HttpError,
     http::{
         RequestId,
@@ -133,10 +134,9 @@ async fn health_ready(
     State(state): State<AppState>,
     Extension(request_id): Extension<RequestId>,
 ) -> Result<StatusCode, HttpError> {
-    sqlx::query_scalar::<_, i32>("SELECT 1")
-        .fetch_one(&state.pool)
+    check_latest_v1_readiness(&state.pool)
         .await
-        .map(|_| StatusCode::OK)
+        .map(|()| StatusCode::OK)
         .map_err(|_| HttpError::unavailable(request_id))
 }
 
