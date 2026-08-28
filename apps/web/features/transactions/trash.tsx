@@ -1,139 +1,128 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../components/ui/alert-dialog";
+import { MoneyAmount } from "../../components/money/amount";
+import {
+  useGetOnboarding,
   useListTrashedTransactions,
   usePermanentlyDeleteTransaction,
   useRestoreTransaction,
 } from "../../generated/api";
 import type { TransactionContract } from "../../generated/api/model/transactionContract";
-import { invalidateTransactionScopes } from "./query-keys";
+import { invalidateTransactionLifecycleScopes, invalidateTransactionScopes } from "./query-keys";
 
 function errorText(error: unknown) {
-  const value = error as { message?: string };
-  return value.message ?? "Request unavailable. Try again.";
+  return (error as { message?: string }).message ?? "Request unavailable. Try again.";
+}
+
+function formatDate(value: string | null | undefined, timezone: string) {
+  if (!value) return "server schedule unavailable";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: timezone }).format(new Date(value));
 }
 
 export function TransactionTrash() {
   const queryClient = useQueryClient();
   const list = useListTrashedTransactions(undefined, { query: { retry: 1 } });
+  const onboarding = useGetOnboarding({ query: { retry: 1 } });
+  const timezone = onboarding.data?.data.timezone ?? "UTC";
   const restore = useRestoreTransaction();
   const remove = usePermanentlyDeleteTransaction();
-  const [confirming, setConfirming] = useState<string>();
-  const [items, setItems] = useState<TransactionContract[] | undefined>();
+  const restoring = useRef(new Set<string>());
+  const deleting = useRef(new Set<string>());
+  const [items, setItems] = useState<TransactionContract[]>();
   const transactions = items ?? list.data?.data.items ?? [];
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
+
   async function restoreItem(item: TransactionContract) {
+    if (restoring.current.has(item.id)) return;
+    restoring.current.add(item.id);
     try {
       await restore.mutateAsync({ transactionId: item.id });
       setItems((current) => (current ?? transactions).filter((value) => value.id !== item.id));
-      await invalidateTransactionScopes(queryClient, { next: item });
+      await invalidateTransactionScopes(queryClient, { next: item, timezone });
       setStatus({ kind: "success", text: "Transaction restored." });
     } catch (error) {
       setStatus({ kind: "error", text: errorText(error) });
+    } finally {
+      restoring.current.delete(item.id);
     }
   }
+
   async function deleteItem(item: TransactionContract) {
+    if (deleting.current.has(item.id)) return;
+    deleting.current.add(item.id);
     try {
       await remove.mutateAsync({ transactionId: item.id });
       setItems((current) => (current ?? transactions).filter((value) => value.id !== item.id));
-      setConfirming(undefined);
-      await invalidateTransactionScopes(queryClient, { previous: item });
+      await invalidateTransactionLifecycleScopes(queryClient);
       setStatus({ kind: "success", text: "Transaction permanently deleted." });
     } catch (error) {
       setStatus({ kind: "error", text: errorText(error) });
+    } finally {
+      deleting.current.delete(item.id);
     }
   }
+
   if (list.isPending) return <p className="loading-state">Loading Trash…</p>;
   if (list.isError)
     return (
       <section>
         <h1>Trash</h1>
-        <p role="alert" className="field-error">
-          Could not load Trash.
-        </p>
-        <Button type="button" onClick={() => void list.refetch()}>
-          Retry
-        </Button>
+        <p role="alert" className="field-error">Could not load Trash.</p>
+        <Button type="button" onClick={() => void list.refetch()}>Retry</Button>
       </section>
     );
+
   return (
     <section className="management-page">
       <div className="page-heading">
-        <div>
-          <p className="muted">Recover deleted memos before purge</p>
-          <h1>Trash</h1>
-        </div>
+        <div><p className="muted">Recover deleted memos before purge</p><h1>Trash</h1></div>
       </div>
-      {status ? (
-        <p
-          role={status.kind === "error" ? "alert" : "status"}
-          className={status.kind === "error" ? "field-error" : "success"}
-        >
-          {status.text}
-        </p>
-      ) : null}
+      {status ? <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>{status.text}</p> : null}
       {transactions.length === 0 ? (
-        <div className="empty-state">
-          <h2>Trash is empty</h2>
-        </div>
+        <div className="empty-state"><h2>Trash is empty</h2><p>Deleted memos will appear here until their scheduled purge.</p></div>
       ) : (
-        <div className="card-list">
+        <div className="card-list transaction-list">
           {transactions.map((item) => (
-            <article className="management-card" key={item.id}>
-              <div>
-                <h2>
-                  {item.direction} {item.amount} {item.currency}
-                </h2>
-                <p className="muted">
-                  Purge after{" "}
-                  {item.purge_after
-                    ? new Date(item.purge_after).toLocaleDateString()
-                    : "server schedule unavailable"}
-                </p>
+            <article className="transaction-row" key={item.id}>
+              <div className="transaction-row-main">
+                <div>
+                  <p className="transaction-row-title"><span>{item.direction === "income" ? "Income" : "Expense"}</span><Badge variant="outline">Trash</Badge></p>
+                  <p className="muted">{item.category_name} · {item.wallet_name}</p>
+                  <p className="muted"><time dateTime={item.occurred_at}>{formatDate(item.occurred_at, timezone)}</time> · Deleted {formatDate(item.deleted_at, timezone)}</p>
+                  <p className="muted">Scheduled for automatic deletion after {formatDate(item.purge_after, timezone)}.</p>
+                </div>
+                <MoneyAmount value={item.amount} currency={item.currency} direction={item.direction as "income" | "expense"} />
               </div>
               <div className="card-actions">
-                <Button
-                  type="button"
-                  onClick={() => void restoreItem(item)}
-                  disabled={restore.isPending}
-                >
-                  Restore
-                </Button>
-                {confirming === item.id ? (
-                  <div className="confirm-box" role="alert">
-                    <p>Permanently delete this transaction? This cannot be undone.</p>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={() => void deleteItem(item)}
-                      disabled={remove.isPending}
-                    >
-                      Confirm permanent delete
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="quiet"
-                      onClick={() => {
-                        setConfirming(undefined);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    onClick={() => {
-                      setConfirming(item.id);
-                    }}
-                  >
-                    Delete forever
-                  </Button>
-                )}
+                <Button type="button" onClick={() => void restoreItem(item)} disabled={restoring.current.has(item.id)}>Restore</Button>
+                <AlertDialog>
+                  <AlertDialogTrigger render={<Button type="button" variant="quiet" />}>Delete forever</AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete transaction forever?</AlertDialogTitle>
+                      <AlertDialogDescription>This permanently removes this trashed memo and cannot be undone.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => void deleteItem(item)}>Delete forever</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </article>
           ))}

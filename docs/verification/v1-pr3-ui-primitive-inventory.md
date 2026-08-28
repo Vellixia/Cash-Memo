@@ -249,3 +249,27 @@ Branch: `rewrite/cashmemo-v1`
 | Native transaction direction select | replaced by accessible Expense/Income segmented RadioGroup |
 | Browser-timezone `occurred_at` payload conversion | removed; create writes `occurred_local`, untouched edit omits it |
 | `/app/transactions/{id}` detail-as-edit route | removed; canonical edit is `/app/transactions/{id}/edit` |
+
+# Cashmemo V1 PR3 Task 19 Update (Compact history, filters, Trash)
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+Pinned CLI version: `4.19.0`
+
+## Generated Foundation Added In Task 19
+
+| File | Source | Notes |
+| --- | --- | --- |
+| `apps/web/components/ui/dropdown-menu.tsx` | `pnpm exec shadcn add dropdown-menu` | Base UI Menu substrate; transaction secondary actions |
+| `apps/web/components/ui/alert-dialog.tsx` | `pnpm exec shadcn add alert-dialog` | Base UI Dialog substrate; permanent Trash deletion only |
+| `apps/web/components/ui/badge.tsx` | `pnpm exec shadcn add badge` | Presentational outline badge for Future/Trash state |
+
+Generator prompted on existing `button.tsx`; answered no and preserved Task 14 Button. No duplicate
+substrate or Radix-era primitive introduced.
+
+## Task 19 Substrate Audit
+
+- Existing Task 16 Sheet reused for mobile filter drafts and one Apply/Clear commit.
+- DropdownMenu and AlertDialog are generated Base UI primitives; no raw menus/dialogs added.
+- Compact rows delegate exact display to `MoneyAmount`; direction and Future/Trash states are text and badges.
+- No Orval-generated files edited.

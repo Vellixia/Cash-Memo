@@ -25,7 +25,9 @@ vi.mock("../generated/api", () => ({
             amount: "12",
             currency: "USD",
             wallet_id: "w",
+            wallet_name: "Main wallet",
             category_id: "c",
+            category_name: "Food",
             direction: "expense",
             occurred_at: "2026-08-20T00:00:00Z",
             purge_after: "2026-09-19T00:00:00Z",
@@ -38,6 +40,7 @@ vi.mock("../generated/api", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
+  useGetOnboarding: () => ({ data: { data: { timezone: "Asia/Jakarta" } } }),
   useRestoreTransaction: () => ({ mutateAsync: mocks.restore, isPending: false }),
   usePermanentlyDeleteTransaction: () => ({ mutateAsync: mocks.remove, isPending: false }),
   getListTransactionsQueryKey: () => ["/api/v1/transactions"],
@@ -57,22 +60,28 @@ function renderTrash() {
     </QueryClientProvider>,
   );
 }
+
+function permanentDeleteAction() {
+  const action = screen.getByRole("alertdialog").querySelector("button[data-slot=alert-dialog-action]");
+  if (!(action instanceof HTMLElement)) throw new Error("Permanent delete action missing");
+  return action;
+}
 describe("transaction trash", () => {
-  it("shows server purge date and restores transaction", async () => {
+  it("shows lifecycle dates in configured timezone and restores transaction", async () => {
     mocks.restore.mockClear();
     renderTrash();
-    expect(screen.getByText(/Purge after/)).toBeTruthy();
+    expect(screen.getByText(/Scheduled for automatic deletion after/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() => {
       expect(mocks.restore).toHaveBeenCalledWith({ transactionId: "gone" });
     });
   });
-  it("needs explicit permanent-delete confirmation", async () => {
+  it("needs explicit permanent-delete AlertDialog confirmation", async () => {
     mocks.remove.mockClear();
     renderTrash();
     fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
-    expect(screen.getByText(/permanently delete/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    fireEvent.click(permanentDeleteAction());
     await waitFor(() => {
       expect(mocks.remove).toHaveBeenCalledWith({ transactionId: "gone" });
     });
@@ -86,19 +95,19 @@ describe("transaction trash", () => {
     await waitFor(() => {
       expect(mocks.restore).toHaveBeenCalledWith({ transactionId: "gone" });
     });
-    expect(screen.getByRole("article")).toBeTruthy();
+    expect(screen.getByRole("article", { hidden: true })).toBeTruthy();
     pending.reject(new Error("restore unavailable"));
     await waitFor(() => {
       expect(screen.getByRole("alert").textContent).toContain("restore unavailable");
     });
-    expect(screen.getByRole("article")).toBeTruthy();
+    expect(screen.getByRole("article", { hidden: true })).toBeTruthy();
     const succeeded = deferred<{ data: object }>();
     mocks.restore.mockImplementationOnce(() => succeeded.promise);
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() => {
       expect(mocks.restore).toHaveBeenCalledTimes(2);
     });
-    expect(screen.getByRole("article")).toBeTruthy();
+    expect(screen.getByRole("article", { hidden: true })).toBeTruthy();
     succeeded.resolve({ data: {} });
     await waitFor(() => {
       expect(screen.queryByRole("article")).toBeNull();
@@ -110,23 +119,24 @@ describe("transaction trash", () => {
     mocks.remove.mockImplementationOnce(() => rejected.promise);
     renderTrash();
     fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+    fireEvent.click(permanentDeleteAction());
     await waitFor(() => {
       expect(mocks.remove).toHaveBeenCalledWith({ transactionId: "gone" });
     });
-    expect(screen.getByRole("article")).toBeTruthy();
+    expect(screen.getByRole("article", { hidden: true })).toBeTruthy();
     rejected.reject(new Error("permanent delete unavailable"));
     await waitFor(() => {
       expect(screen.getByText("permanent delete unavailable")).toBeTruthy();
     });
-    expect(screen.getByRole("article")).toBeTruthy();
+    expect(screen.getByRole("article", { hidden: true })).toBeTruthy();
     const succeeded = deferred<object>();
     mocks.remove.mockImplementationOnce(() => succeeded.promise);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
+    fireEvent.click(permanentDeleteAction());
     await waitFor(() => {
       expect(mocks.remove).toHaveBeenCalledTimes(2);
     });
-    expect(screen.getByRole("article")).toBeTruthy();
+    expect(screen.getByRole("article", { hidden: true })).toBeTruthy();
     succeeded.resolve({});
     await waitFor(() => {
       expect(screen.queryByRole("article")).toBeNull();
