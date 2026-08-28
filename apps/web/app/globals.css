@@ -642,6 +642,54 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.category-row {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.category-row-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+[data-slot="progress"] {
+  width: 100%;
+  align-items: center;
+}
+
+[data-slot="progress-track"] {
+  min-height: 0.65rem;
+}
+
+.progress-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.progress-value {
+  margin-inline-start: auto;
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-skeleton {
+  width: 100%;
+}
+
+.dashboard-skeleton-summary {
+  min-height: 12rem;
+}
+
+.dashboard-skeleton-budget {
+  min-height: 8rem;
+}
+
+.dashboard-skeleton-recent {
+  min-height: 10rem;
+}
+
 .money-amount {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

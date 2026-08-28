@@ -172,6 +172,7 @@ describe("budgets", () => {
     expect(screen.getByRole("progressbar").getAttribute("aria-valuetext")).toBe(
       "125% used — over budget",
     );
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
   });
 
   it("refetches active parameterless reads and renders authoritative returned progress after update", async () => {

@@ -192,3 +192,32 @@ No regeneration/version change was needed. Partial generated files were audited 
 | `/app` auth layout import boundary | added `apps/web/components/full-access-app-shell.tsx` wrapper with `next/dynamic` shell load | restricted `/app` sessions must redirect before `AppShell` code imports or mounts |
 | onboarding currency registry pending/error UX | explicit loading `status`, retryable error `alert`, disabled input until registry recovers | pending/error registry state is not user validation; client must wait for authoritative server registry |
 | focused regressions | added `/app` layout module-graph test plus onboarding currency pending/error/recovery tests | preserves restricted-shell isolation and durable onboarding accessibility after repair |
+
+# Cashmemo V1 PR3 Task 17 Update (Currency-separated dashboard and exact money)
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+Base/starting SHA: `22a3d1ef360fbd9cbdc3498e3b4ce5d6792e4194`
+Pinned CLI version: `4.19.0`
+
+## Generated Foundation Added In Task 17
+
+| File | Source | Notes |
+| --- | --- | --- |
+| `apps/web/components/ui/progress.tsx` | `pnpm --dir apps/web exec shadcn add progress` | Generated Base UI `@base-ui/react/progress` primitive; first consumer is dashboard category share and budget progress |
+
+## Task 17 Substrate Audit
+
+- `Progress` remains the single generated Base UI-backed progress substrate; no native progress or Radix-era wrapper was added.
+- `MoneyAmount` is presentational and delegates exact string validation/grouping to `components/money/exact-decimal.ts`.
+- No Orval-generated files were edited.
+
+## Task 17 Composition Changes
+
+| Surface | Change | Why |
+| --- | --- | --- |
+| Dashboard month | `?month=YYYY-MM` state updates monthly summary, budget summary, and recent transactions together | backend owns month/query semantics |
+| Currency sections | summary and budget sections are grouped independently by currency | no cross-currency hero total, scale, or context |
+| Category composition | proportional bars consume server `share_percent` only; displayed percentage stays canonical string | avoids client financial math |
+| Loading/error/empty | stable Skeleton regions plus local endpoint errors; no-activity and no-budget copy remain distinct | preserves successful sibling sections |
+| Money | canonical signed decimal digits grouped as strings; direction is explicit text and accessible label | no rounding/recalculation or color-only meaning |

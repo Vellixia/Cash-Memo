@@ -1,22 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useGetBudgetSummary,
   useGetMonthlySummary,
   useGetRecentTransactions,
 } from "../../generated/api";
-import { Amount } from "../../components/money/amount";
+import type { BudgetProgressContract } from "../../generated/api/model/budgetProgressContract";
+import { CurrencyGroup } from "../../components/money/currency-group";
+import { Skeleton } from "../../components/ui/skeleton";
+import { BudgetProgress } from "../budgets/budget-progress";
 import { MonthlySummary } from "./monthly-summary";
 import { RecentTransactions } from "./recent-transactions";
 
-function QueryError({
-  children,
-  retry,
-}: {
-  children: string;
-  retry: () => unknown;
-}) {
+function QueryError({ children, retry }: { children: string; retry: () => unknown }) {
   return (
     <div className="error-panel" role="alert">
       <p>{children}</p>
@@ -32,11 +29,19 @@ export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
   const params = month ? { month } : undefined;
   const monthly = useGetMonthlySummary(params, { query: { retry: false } });
   const budgets = useGetBudgetSummary(params, { query: { retry: false } });
-  const recent = useGetRecentTransactions(undefined, { query: { retry: false } });
+  const recent = useGetRecentTransactions(params, { query: { retry: false } });
+  useEffect(() => {
+    if (!initialMonth && typeof window !== "undefined") {
+      const urlMonth = new URLSearchParams(window.location.search).get("month") ?? "";
+      if (/^\d{4}-\d{2}$/.test(urlMonth)) setMonth(urlMonth);
+    }
+  }, [initialMonth]);
   const reportMonth =
-    month.length > 0
-      ? month
-      : (monthly.data?.data.month ?? budgets.data?.data.month ?? "");
+    month.length > 0 ? month : (monthly.data?.data.month ?? budgets.data?.data.month ?? "");
+  const budgetsByCurrency: Record<string, BudgetProgressContract[]> = {};
+  budgets.data?.data.budgets.forEach((budget) => {
+    (budgetsByCurrency[budget.currency] ??= []).push(budget);
+  });
 
   return (
     <section className="management-page">
@@ -52,7 +57,14 @@ export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
             type="month"
             value={reportMonth}
             onChange={(event) => {
-              setMonth(event.target.value);
+              const nextMonth = event.target.value;
+              setMonth(nextMonth);
+              if (typeof window !== "undefined") {
+                const url = new URL(window.location.href);
+                if (nextMonth) url.searchParams.set("month", nextMonth);
+                else url.searchParams.delete("month");
+                window.history.replaceState({}, "", url);
+              }
             }}
           />
         </label>
@@ -63,7 +75,10 @@ export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
           Monthly summary
         </h2>
         {monthly.isPending ? (
-          <p role="status">Loading monthly summary…</p>
+          <div className="currency-grid" role="status" aria-label="Loading monthly summary">
+            <Skeleton className="dashboard-skeleton dashboard-skeleton-summary" />
+            <Skeleton className="dashboard-skeleton dashboard-skeleton-summary" />
+          </div>
         ) : monthly.isError ? (
           <QueryError retry={monthly.refetch}>Could not load monthly summary.</QueryError>
         ) : (
@@ -77,33 +92,45 @@ export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
           <a href="/app/budgets">Manage budgets</a>
         </div>
         {budgets.isPending ? (
-          <p role="status">Loading budget summary…</p>
+          <Skeleton
+            className="dashboard-skeleton dashboard-skeleton-budget"
+            role="status"
+            aria-label="Loading budget summary"
+          />
         ) : budgets.isError ? (
           <QueryError retry={budgets.refetch}>Could not load budget summary.</QueryError>
         ) : budgets.data.data.budgets.length > 0 ? (
-          <div className="card-list">
-            {budgets.data.data.budgets.map((budget) => (
-              <article className="management-card" key={budget.id}>
-                <div>
-                  <h3>Category budget</h3>
-                  <p>{budget.progress}% used</p>
+          <div className="currency-grid">
+            {Object.entries(budgetsByCurrency).map(([currency, items]) => (
+              <CurrencyGroup key={currency} currency={currency} idPrefix="budget-currency">
+                <div className="card-list">
+                  {items.map((budget) => (
+                    <BudgetProgress
+                      key={budget.id}
+                      budget={budget}
+                      categoryName="Category budget"
+                    />
+                  ))}
                 </div>
-                <p>
-                  <Amount currency={budget.currency} value={budget.spent} /> of{" "}
-                  <Amount currency={budget.currency} value={budget.budgeted} />
-                </p>
-              </article>
+              </CurrencyGroup>
             ))}
           </div>
         ) : (
-          <p className="muted">No budgets for this month.</p>
+          <div className="empty-state">
+            <h3>No budgets this month</h3>
+            <p className="muted">Create a budget to track category limits.</p>
+          </div>
         )}
       </section>
 
       <section aria-labelledby="recent-heading">
         <h2 id="recent-heading">Recent transactions</h2>
         {recent.isPending ? (
-          <p role="status">Loading recent transactions…</p>
+          <Skeleton
+            className="dashboard-skeleton dashboard-skeleton-recent"
+            role="status"
+            aria-label="Loading recent transactions"
+          />
         ) : recent.isError ? (
           <QueryError retry={recent.refetch}>Could not load recent transactions.</QueryError>
         ) : (

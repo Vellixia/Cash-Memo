@@ -1,17 +1,27 @@
-function groupDigits(value: string): string {
-  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
+import { formatExactDecimal } from "./exact-decimal";
 
 export function formatDecimal(value: string): string {
-  const trimmed = value.trim();
-  const match = /^-?\d+(?:\.\d+)?$/.exec(trimmed);
-  if (!match) return value;
-  const decimalIndex = trimmed.indexOf(".");
-  const whole = decimalIndex === -1 ? trimmed : trimmed.slice(0, decimalIndex);
-  const fraction = decimalIndex === -1 ? "" : trimmed.slice(decimalIndex);
-  return `${groupDigits(whole)}${fraction}`;
+  return formatExactDecimal(value);
 }
 
-export function Amount({ value, currency }: { value: string; currency: string }) {
-  return <span className="money-amount">{currency} {formatDecimal(value)}</span>;
+export interface MoneyAmountProps {
+  value: string;
+  currency: string;
+  direction?: "income" | "expense";
+  context?: string;
+}
+
+export function MoneyAmount({ value, currency, direction, context }: MoneyAmountProps) {
+  const formatted = formatExactDecimal(value);
+  const meaning = direction ? `${direction === "income" ? "Income" : "Expense"} ` : "";
+  const label = `${meaning}${currency} ${formatted}${context ? `, ${context}` : ""}`;
+  return (
+    <span className="money-amount" data-direction={direction} aria-label={label}>
+      {currency} {formatted}
+    </span>
+  );
+}
+
+export function Amount(props: MoneyAmountProps) {
+  return <MoneyAmount {...props} />;
 }
