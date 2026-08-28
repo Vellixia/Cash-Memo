@@ -55,3 +55,19 @@ Static review covered dashboard mobile/desktop grid behavior (`repeat(auto-fit, 
 Updated `docs/verification/v1-pr3-ui-primitive-inventory.md` with Task 17 generated foundation, substrate audit, and composition ownership. Existing Task 14–16 entries were preserved without reformatting.
 
 Known environment concern: `node --version` reported `v22.19.0`, while task pins Node `24.14.0`; `pnpm --version` matched `11.13.1`. Tests/build/typecheck/lint passed under available runtime. No product contradiction found. Remaining concern: `BudgetProgress` uses same bounded decimal percentage helper for graphical clamp because Base UI Progress requires numeric `value`; authoritative money itself remains string-only.
+
+## Fix Round 1/5 — URL month request race
+
+Date: 2026-08-28
+
+RED tests added before production change:
+
+- Valid `?month=2026-07` must be first argument to monthly, budget, and recent hooks on first render.
+- Invalid `?month=2026-13` must pass `undefined` to all hooks and clean `month` from URL.
+- Picker change must update URL and all three query params.
+
+RED evidence: under explicit Node 24.14.0, focused URL tests initially failed with first hook param `undefined` for valid URL and stale `?month=2026-13` after invalid render.
+
+Fix: `useSearchParams` synchronously seeds state before hook calls. `validMonth` enforces `YYYY-MM` plus month `01..12`; invalid URL month disables all month requests, then effect removes only invalid `month` while preserving other query keys. Picker validates before state/query update and uses `history.replaceState` without reload.
+
+GREEN evidence: `pnpm toolchain:check` verified Node 24.14.0/pnpm 11.13.1; dashboard/budget/accessibility suite 25/25 passed; scoped Prettier, ESLint, TypeScript, and Next build passed. No generated files changed. Minors deferred.

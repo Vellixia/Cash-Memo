@@ -9,6 +9,11 @@ const api = vi.hoisted(() => ({
   monthParams: [] as unknown[],
   budgetParams: [] as unknown[],
   recentParams: [] as unknown[],
+  urlMonth: null as string | null,
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => ({ get: (name: string) => (name === "month" ? api.urlMonth : null) }),
 }));
 
 vi.mock("../generated/api", () => ({
@@ -129,9 +134,31 @@ describe("dashboard", () => {
     api.month = "success";
     api.budgets = "success";
     api.recent = "success";
+    api.urlMonth = null;
     api.monthParams.length = 0;
     api.budgetParams.length = 0;
     api.recentParams.length = 0;
+    window.history.replaceState({}, "", "/app");
+  });
+
+  it("uses valid URL month on first render for every dashboard request", async () => {
+    api.urlMonth = "2026-07";
+    const { Dashboard } = await import("../features/dashboard/dashboard");
+    view(<Dashboard />);
+    expect(api.monthParams[0]).toEqual({ month: "2026-07" });
+    expect(api.budgetParams[0]).toEqual({ month: "2026-07" });
+    expect(api.recentParams[0]).toEqual({ month: "2026-07" });
+  });
+
+  it("rejects invalid calendar month before any request and cleans URL", async () => {
+    api.urlMonth = "2026-13";
+    window.history.replaceState({}, "", "/app?month=2026-13");
+    const { Dashboard } = await import("../features/dashboard/dashboard");
+    view(<Dashboard />);
+    expect(api.monthParams[0]).toBeUndefined();
+    expect(api.budgetParams[0]).toBeUndefined();
+    expect(api.recentParams[0]).toBeUndefined();
+    expect(window.location.search).toBe("");
   });
 
   it("exact money: preserves huge canonical decimals and explicit direction semantics", async () => {
@@ -184,6 +211,7 @@ describe("dashboard", () => {
     expect(api.monthParams.at(-1)).toEqual({ month: "2026-07" });
     expect(api.budgetParams.at(-1)).toEqual({ month: "2026-07" });
     expect(api.recentParams.at(-1)).toEqual({ month: "2026-07" });
+    expect(new URL(window.location.href).searchParams.get("month")).toBe("2026-07");
   });
 
   it("renders category share from server percentage and keeps currency sections independent", async () => {

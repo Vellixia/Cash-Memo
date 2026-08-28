@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   useGetBudgetSummary,
   useGetMonthlySummary,
@@ -24,18 +25,36 @@ function QueryError({ children, retry }: { children: string; retry: () => unknow
   );
 }
 
+function validMonth(value: string | null | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) return false;
+  const month = value.slice(-2);
+  return month >= "01" && month <= "12";
+}
+
 export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
-  const [month, setMonth] = useState(initialMonth);
+  const searchParams = useSearchParams();
+  const urlMonth = searchParams.get("month");
+  const initialSelectedMonth =
+    urlMonth !== null
+      ? validMonth(urlMonth)
+        ? urlMonth
+        : ""
+      : validMonth(initialMonth)
+        ? initialMonth
+        : "";
+  const [month, setMonth] = useState(initialSelectedMonth);
   const params = month ? { month } : undefined;
   const monthly = useGetMonthlySummary(params, { query: { retry: false } });
   const budgets = useGetBudgetSummary(params, { query: { retry: false } });
   const recent = useGetRecentTransactions(params, { query: { retry: false } });
   useEffect(() => {
-    if (!initialMonth && typeof window !== "undefined") {
-      const urlMonth = new URLSearchParams(window.location.search).get("month") ?? "";
-      if (/^\d{4}-\d{2}$/.test(urlMonth)) setMonth(urlMonth);
+    if (typeof window === "undefined") return;
+    if (urlMonth !== null && !validMonth(urlMonth)) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("month");
+      window.history.replaceState({}, "", url);
     }
-  }, [initialMonth]);
+  }, [urlMonth]);
   const reportMonth =
     month.length > 0 ? month : (monthly.data?.data.month ?? budgets.data?.data.month ?? "");
   const budgetsByCurrency: Record<string, BudgetProgressContract[]> = {};
@@ -58,10 +77,11 @@ export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
             value={reportMonth}
             onChange={(event) => {
               const nextMonth = event.target.value;
-              setMonth(nextMonth);
+              const nextSelectedMonth = validMonth(nextMonth) ? nextMonth : "";
+              setMonth(nextSelectedMonth);
               if (typeof window !== "undefined") {
                 const url = new URL(window.location.href);
-                if (nextMonth) url.searchParams.set("month", nextMonth);
+                if (nextSelectedMonth) url.searchParams.set("month", nextSelectedMonth);
                 else url.searchParams.delete("month");
                 window.history.replaceState({}, "", url);
               }
