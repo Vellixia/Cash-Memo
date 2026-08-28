@@ -49,5 +49,6 @@ Order: Expense/Income segmented RadioGroup, prominent exact amount, wallet/curre
 
 - Confirmed no unrelated `.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, or `.serena/` content was read/edited/staged.
 - Shell reports Node 22.19.0, while brief pins Node 24.14.0; pnpm and generated CLI match pinned versions.
-- Real cross-timezone Playwright run remains environment-dependent and should be run with fresh named services before release.
-- Final signed commit SHA is returned in task handoff after commit creation.
+- Real services-backed Playwright evidence (2026-08-28): toolchain `/Users/andresholivin/.nvm/versions/node/v24.14.0/bin` verified `node=24.14.0`, `pnpm=11.13.1` with `pnpm toolchain:check`. Pre-cleaned and post-cleaned only `COMPOSE_PROJECT_NAME=cashmemo-pr3-task18-e2e` using `infra/v1/test-compose.yml`, with Postgres `57456`, SMTP `1145`, Mailpit HTTP `8845`, `--volumes --remove-orphans`; post-clean `docker-compose ... ps -a` returned no containers.
+- Command: `pnpm -C apps/web exec playwright test e2e/transactions.spec.ts`. First run exposed representation mismatch only: API returned RFC3339 UTC `2026-08-31T16:30:00+00:00`, semantically equal to required UTC `2026-08-31T16:30:00Z`; assertion changed to `new Date(...).toISOString()`. Fresh rerun passed `2 passed (32.4s)`: normal expense/income flow plus browser `America/Los_Angeles` / profile `Asia/Jakarta` proof, local input `2026-08-31T23:30`, API canonical UTC `2026-08-31T16:30:00.000Z`, edit display `2026-08-31T23:30`.
+- Implementation commit: `52edb0c`; final verification assertion/report update is signed in follow-up commit returned in handoff.

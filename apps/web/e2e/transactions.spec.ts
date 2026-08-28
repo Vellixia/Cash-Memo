@@ -45,9 +45,7 @@ test("round trips local transaction minute across browser and profile timezones"
     await page.getByRole("button", { name: "Save transaction" }).click();
     const response = await delivered;
     const created = (await response.json()) as { id: string; occurred_at: string };
-    expect(created).toMatchObject({
-      occurred_at: "2026-08-31T16:30:00Z",
-    });
+    expect(new Date(created.occurred_at).toISOString()).toBe("2026-08-31T16:30:00.000Z");
     await page.goto(`/app/transactions/${created.id}/edit`);
     await expect(page.getByLabel("Occurred at")).toHaveValue("2026-08-31T23:30");
   } finally {
