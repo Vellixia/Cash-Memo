@@ -94,7 +94,8 @@ export function TransactionForm({
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
-  const configuredTimezone = parseCashmemoTimezone(defaults.data?.data.timezone);
+  const rawTimezone = defaults.data?.data.timezone;
+  const configuredTimezone = parseCashmemoTimezone(rawTimezone);
   const timezone = configuredTimezone;
   const walletRegistry = (wallets.data?.data ?? []).map(({ id, name, currency, archived_at }) => ({
     id,
@@ -156,10 +157,11 @@ export function TransactionForm({
         category.kind.toLowerCase() === direction,
     ),
   ];
-  const optionsPending =
-    defaults.isPending || wallets.isPending || currencies.isPending || categories.isPending;
-  const optionsError =
-    defaults.isError || wallets.isError || currencies.isError || categories.isError;
+  const timezoneInvalid = Boolean(rawTimezone) && !configuredTimezone;
+  const timezonePending = defaults.isPending || (!rawTimezone && !defaults.isError);
+  const timezoneError = defaults.isError || timezoneInvalid;
+  const optionsPending = wallets.isPending || currencies.isPending || categories.isPending;
+  const optionsError = wallets.isError || currencies.isError || categories.isError;
 
   // Resolver depends on selected wallet currency precision. Keep exact amount text intact while
   // re-validating against newly selected wallet.
@@ -292,6 +294,13 @@ export function TransactionForm({
         noValidate
       >
         {optionsPending ? <p role="status">Loading transaction options…</p> : null}
+        {timezonePending ? <p role="status">Loading timezone…</p> : null}
+        {timezoneError ? (
+          <div role="alert" className="field-error">
+            <p>Could not load timezone configuration.</p>
+            <Button type="button" variant="quiet" onClick={() => void defaults.refetch()}>Retry timezone</Button>
+          </div>
+        ) : null}
         {optionsError ? (
           <div role="alert" className="field-error">
             <p>Could not load transaction options.</p>

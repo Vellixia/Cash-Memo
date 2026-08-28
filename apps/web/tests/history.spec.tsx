@@ -67,7 +67,9 @@ vi.mock("../generated/api", () => ({
   useTrashTransaction: () => ({ mutateAsync: mocks.trash, isPending: false }),
   useRestoreTransaction: () => ({ mutateAsync: mocks.restore, isPending: false }),
   useGetOnboarding: () => ({
-    data: mocks.timezoneState === "ready" ? { data: { timezone: "Asia/Jakarta" } } : undefined,
+    data: mocks.timezoneState === "ready"
+      ? { data: { timezone: "Asia/Jakarta" } }
+      : mocks.timezoneState === "invalid" ? { data: { timezone: "+05:00" } } : undefined,
     isPending: mocks.timezoneState === "pending",
     isError: mocks.timezoneState === "error",
     refetch: vi.fn(),
@@ -196,6 +198,23 @@ describe("transaction history", () => {
     expect(screen.getByText("Loading timezone…")).toBeTruthy();
     expect(screen.queryByRole("time")).toBeNull();
     mocks.timezoneState = "ready";
+  });
+  it("accepts only backend-compatible IANA timezone identifiers", () => {
+    for (const value of ["UTC", "Etc/UTC", "Asia/Jakarta", "America/New_York", "Europe/London", "Pacific/Auckland"]) {
+      expect(parseCashmemoTimezone(value)).toBeTruthy();
+    }
+    for (const value of ["+05:00", "CET", "Asia/NotAZone", "not-a-zone"]) {
+      expect(parseCashmemoTimezone(value)).toBeUndefined();
+    }
+  });
+  it("shows invalid timezone configuration as an actionable error and recovers", () => {
+    mocks.timezoneState = "invalid";
+    const view = renderHistory();
+    expect(screen.getAllByRole("alert").some((alert) => alert.textContent.includes("Could not load timezone"))).toBe(true);
+    expect(screen.getByRole("button", { name: "Retry timezone" })).toBeTruthy();
+    mocks.timezoneState = "ready";
+    view.rerender(<QueryClientProvider client={new QueryClient()}><TransactionHistory /></QueryClientProvider>);
+    expect(screen.queryByText("Could not load timezone configuration.")).toBeNull();
   });
   it("keeps q ephemeral while structured filters use URL replace", () => {
     renderHistory();

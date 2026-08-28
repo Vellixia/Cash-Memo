@@ -38,8 +38,11 @@ export function TransactionTrash() {
   const queryClient = useQueryClient();
   const list = useListTrashedTransactions(undefined, { query: { retry: 1 } });
   const onboarding = useGetOnboarding({ query: { retry: 1 } });
-  const timezone = parseCashmemoTimezone(onboarding.data?.data.timezone);
-  const timezonePending = onboarding.isPending || (!timezone && !onboarding.isError);
+  const rawTimezone = onboarding.data?.data.timezone;
+  const timezone = parseCashmemoTimezone(rawTimezone);
+  const timezoneInvalid = Boolean(rawTimezone) && !timezone;
+  const timezonePending = onboarding.isPending || (!rawTimezone && !onboarding.isError);
+  const timezoneError = onboarding.isError || timezoneInvalid;
   const restore = useRestoreTransaction();
   const remove = usePermanentlyDeleteTransaction();
   const restoring = useRef(new Set<string>());
@@ -103,7 +106,7 @@ export function TransactionTrash() {
         <div><p className="muted">Recover deleted memos before purge</p><h1>Trash</h1></div>
       </div>
       {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
-      {onboarding.isError ? <p role="alert" className="field-error">Could not load timezone. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
+      {timezoneError ? <p role="alert" className="field-error">Could not load timezone configuration. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
       {status ? <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>{status.text}</p> : null}
       {transactions.length === 0 ? (
         <div className="empty-state"><h2>Trash is empty</h2><p>Deleted memos will appear here until their scheduled purge.</p></div>

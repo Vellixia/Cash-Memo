@@ -95,8 +95,11 @@ export function TransactionHistory() {
   const [restoringUndo, setRestoringUndo] = useState(false);
   const queryClient = useQueryClient();
   const onboarding = useGetOnboarding({ query: { retry: 1 } });
-  const timezone = parseCashmemoTimezone(onboarding.data?.data.timezone);
-  const timezonePending = onboarding.isPending || (!timezone && !onboarding.isError);
+  const rawTimezone = onboarding.data?.data.timezone;
+  const timezone = parseCashmemoTimezone(rawTimezone);
+  const timezoneInvalid = Boolean(rawTimezone) && !timezone;
+  const timezonePending = onboarding.isPending || (!rawTimezone && !onboarding.isError);
+  const timezoneError = onboarding.isError || timezoneInvalid;
   const transactions = useListTransactions(
     { ...serializeHistoryFilters(filters), q: query || undefined, cursor, limit: "50" },
     { query: { retry: cursor === undefined ? 1 : false } },
@@ -187,7 +190,7 @@ export function TransactionHistory() {
       </div>
       <TransactionFilters query={query} onQueryChange={setQuery} />
       {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
-      {onboarding.isError ? <p role="alert" className="field-error">Could not load timezone. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
+      {timezoneError ? <p role="alert" className="field-error">Could not load timezone configuration. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
       {status ? (
         <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>
           {status.text} {undo ? <Button type="button" variant="quiet" onClick={() => void undoDelete()} disabled={restoringUndo} aria-busy={restoringUndo}>Undo</Button> : null}

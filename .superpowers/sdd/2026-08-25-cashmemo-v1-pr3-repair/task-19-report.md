@@ -230,3 +230,49 @@ The final round-2 Chromium run passed `1` test in `32.8s` with fresh named servi
 remained `149/149`; focused history/Trash/form was `25/25`; lint, serial typecheck, and pinned
 toolchain check all passed. Build completed inside the Playwright web-server startup. Changes are
 ready in the final signed round-2 implementation commit containing this report.
+
+## Round 3/5 repair follow-up
+
+### RED evidence
+
+Round 3 added boundary tests before the UI repair: the old `Intl`-only parser accepted `+05:00`,
+`CET`, and fixed-offset aliases even though the backend parses `chrono_tz::Tz`; invalid timezone
+data also appeared as pending because the surfaces only checked query `isPending`/`isError`.
+Tests now cover accepted `UTC`, `Etc/UTC`, `Asia/Jakarta`, `America/New_York`, `Europe/London`,
+and `Pacific/Auckland`, while rejecting offsets, abbreviations, malformed names, and unknown zones.
+History, Trash, and form tests cover invalid configuration as an accessible error, retry action,
+and recovery when valid data returns.
+
+### Implementation
+
+- Added a deterministic 518-entry registry derived from the pinned backend `chrono-tz 0.10.4`
+  timezone variants. Path-based IANA identifiers are included; fixed-offset `Etc/GMT*` entries and
+  non-IANA abbreviations are excluded. `UTC` and `Etc/UTC` are explicit approved UTC identifiers.
+  `parseCashmemoTimezone` now validates only this registry and returns the branded
+  `CashmemoTimezone` boundary type.
+- History and Trash distinguish missing data while the onboarding query is genuinely pending from
+  present-but-invalid timezone configuration. Invalid data shows `Could not load timezone
+  configuration.` with accessible `Retry timezone`; date content stays gated and actions remain
+  blocked until valid authenticated data returns.
+- Transaction form now has the same distinction: invalid timezone configuration is an actionable
+  error, not a loading state, and Save remains disabled. Recovery removes the error when valid
+  onboarding data is supplied.
+
+### Round 3 GREEN and audits
+
+- `/Users/andresholivin/.nvm/versions/node/v24.14.0/bin` + `pnpm toolchain:check` → Node
+  `24.14.0`, pnpm `11.13.1`.
+- `cd apps/web && pnpm vitest run tests/history.spec.tsx tests/trash.spec.tsx tests/transaction-form.spec.tsx` → `29/29`.
+- `cd apps/web && pnpm vitest run` → `16 files`, `153/153`.
+- `cd apps/web && pnpm lint` → exit 0.
+- `cd apps/web && pnpm typecheck` → exit 0.
+- `cd apps/web && pnpm exec playwright test e2e/history-trash.spec.ts --project=chromium` →
+  Chromium `1 passed` in `40.1s`, fresh named Postgres/Mailpit/API services with cleanup.
+- Fresh-service Playwright web-server build completed successfully. No generated API, server,
+  production, primitive, or unrelated instruction paths were changed.
+
+### Round 3 concerns
+
+The registry intentionally follows the backend `chrono-tz 0.10.4` source rather than browser ICU
+availability, preventing browser/runtime drift and numeric-offset acceptance. Existing dirty
+`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, and `.serena/` remain untouched and unstaged.

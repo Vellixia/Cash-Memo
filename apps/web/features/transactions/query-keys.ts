@@ -10,23 +10,15 @@ import {
   getListWalletsQueryKey,
 } from "../../generated/api";
 import { historyMonthBounds } from "./history-params";
+import { parseCashmemoTimezone, type CashmemoTimezone } from "./timezones";
+
+export { parseCashmemoTimezone } from "./timezones";
+export type { CashmemoTimezone } from "./timezones";
 
 interface Scope {
   wallet_id: string;
   category_id: string;
   occurred_at: string;
-}
-
-export type CashmemoTimezone = string & { readonly __cashmemoTimezone: unique symbol };
-
-export function parseCashmemoTimezone(value: string | null | undefined): CashmemoTimezone | undefined {
-  if (!value) return undefined;
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: value }).format();
-    return value as CashmemoTimezone;
-  } catch {
-    return undefined;
-  }
 }
 
 function month(occurredAt: string, timezone: CashmemoTimezone) {

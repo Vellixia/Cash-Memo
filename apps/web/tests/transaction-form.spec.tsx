@@ -162,6 +162,17 @@ describe("transaction entry", () => {
     expect(call.data.occurred_local).toBeUndefined();
   });
 
+  it("treats invalid timezone configuration as an error and keeps save disabled", async () => {
+    mocks.defaultsState = { data: { last_used_wallet_id: "wallet-2", timezone: "+05:00" }, isPending: false, isError: false };
+    const view = renderForm();
+    expect(screen.getByText("Could not load timezone configuration.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry timezone" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save transaction" })).toHaveProperty("disabled", true);
+    mocks.defaultsState = { data: { last_used_wallet_id: "wallet-2", timezone: "Asia/Jakarta" }, isPending: false, isError: false };
+    view.rerender(<QueryClientProvider client={view.client}><TransactionForm /></QueryClientProvider>);
+    await waitFor(() => expect(screen.queryByText("Could not load timezone configuration.")).toBeNull());
+  });
+
   it("preserves archived wallet and category context, omitting unchanged references on note edit", async () => {
     mocks.wallets = [
       { id: "wallet-archived", name: "Old Bank", currency: "USD", archived_at: "2026-01-01T00:00:00Z" },

@@ -43,7 +43,9 @@ vi.mock("../generated/api", () => ({
     refetch: vi.fn(),
   }),
   useGetOnboarding: () => ({
-    data: mocks.timezoneState === "ready" ? { data: { timezone: "Asia/Jakarta" } } : undefined,
+    data: mocks.timezoneState === "ready"
+      ? { data: { timezone: "Asia/Jakarta" } }
+      : mocks.timezoneState === "invalid" ? { data: { timezone: "+05:00" } } : undefined,
     isPending: mocks.timezoneState === "pending",
     isError: mocks.timezoneState === "error",
     refetch: vi.fn(),
@@ -95,6 +97,15 @@ describe("transaction trash", () => {
     expect(screen.getAllByRole("alert").at(-1)?.textContent).toContain("Could not load timezone");
     expect(screen.getByRole("button", { name: "Retry timezone" })).toBeTruthy();
     mocks.timezoneState = "ready";
+  });
+  it("shows invalid timezone configuration as an actionable error and recovers", () => {
+    mocks.timezoneState = "invalid";
+    const view = renderTrash();
+    expect(screen.getAllByRole("alert").some((alert) => alert.textContent.includes("Could not load timezone"))).toBe(true);
+    expect(screen.getByRole("button", { name: "Retry timezone" })).toBeTruthy();
+    mocks.timezoneState = "ready";
+    view.rerender(<QueryClientProvider client={new QueryClient()}><TransactionTrash /></QueryClientProvider>);
+    expect(screen.queryByText("Could not load timezone configuration.")).toBeNull();
   });
   it("needs explicit permanent-delete AlertDialog confirmation", async () => {
     mocks.remove.mockClear();
