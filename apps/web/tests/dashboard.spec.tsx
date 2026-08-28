@@ -10,15 +10,26 @@ const api = vi.hoisted(() => ({
   budgetParams: [] as unknown[],
   recentParams: [] as unknown[],
   urlMonth: null as string | null,
+  earlyHttpCalls: [] as string[],
+  httpCalls: [] as string[],
 }));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => ({ get: (name: string) => (name === "month" ? api.urlMonth : null) }),
 }));
 
+function recordTransport(endpoint: string, options: unknown) {
+  const enabled = (options as { query?: { enabled?: boolean } } | undefined)?.query?.enabled;
+  if (enabled === false) return;
+  const requestedMonth = new URL(window.location.href).searchParams.get("month");
+  if (requestedMonth === "2026-13") api.earlyHttpCalls.push(endpoint);
+  else api.httpCalls.push(endpoint);
+}
+
 vi.mock("../generated/api", () => ({
-  useGetMonthlySummary: (params: unknown) => {
+  useGetMonthlySummary: (params: unknown, options?: unknown) => {
     api.monthParams.push(params);
+    recordTransport("monthly", options);
     return {
       data:
         api.month === "success"
@@ -65,8 +76,9 @@ vi.mock("../generated/api", () => ({
       refetch: vi.fn(),
     };
   },
-  useGetBudgetSummary: (params: unknown) => {
+  useGetBudgetSummary: (params: unknown, options?: unknown) => {
     api.budgetParams.push(params);
+    recordTransport("budget", options);
     return {
       data:
         api.budgets === "success"
@@ -92,8 +104,9 @@ vi.mock("../generated/api", () => ({
       refetch: vi.fn(),
     };
   },
-  useGetRecentTransactions: (params: unknown) => {
+  useGetRecentTransactions: (params: unknown, options?: unknown) => {
     api.recentParams.push(params);
+    recordTransport("recent", options);
     return {
       data:
         api.recent === "success"
@@ -135,6 +148,8 @@ describe("dashboard", () => {
     api.budgets = "success";
     api.recent = "success";
     api.urlMonth = null;
+    api.earlyHttpCalls.length = 0;
+    api.httpCalls.length = 0;
     api.monthParams.length = 0;
     api.budgetParams.length = 0;
     api.recentParams.length = 0;
@@ -158,6 +173,7 @@ describe("dashboard", () => {
     expect(api.monthParams[0]).toBeUndefined();
     expect(api.budgetParams[0]).toBeUndefined();
     expect(api.recentParams[0]).toBeUndefined();
+    expect(api.earlyHttpCalls).toEqual([]);
     expect(window.location.search).toBe("");
   });
 

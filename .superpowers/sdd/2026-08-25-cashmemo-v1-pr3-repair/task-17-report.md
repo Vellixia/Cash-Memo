@@ -71,3 +71,11 @@ RED evidence: under explicit Node 24.14.0, focused URL tests initially failed wi
 Fix: `useSearchParams` synchronously seeds state before hook calls. `validMonth` enforces `YYYY-MM` plus month `01..12`; invalid URL month disables all month requests, then effect removes only invalid `month` while preserving other query keys. Picker validates before state/query update and uses `history.replaceState` without reload.
 
 GREEN evidence: `pnpm toolchain:check` verified Node 24.14.0/pnpm 11.13.1; dashboard/budget/accessibility suite 25/25 passed; scoped Prettier, ESLint, TypeScript, and Next build passed. No generated files changed. Minors deferred.
+
+## Fix Round 2/5 — disable invalid-month transports
+
+RED behavioral evidence: instrumented dashboard hook mocks as transport boundaries. With `?month=2026-13`, pre-fix render recorded `monthly`, `budget`, and `recent` HTTP/query calls before URL cleanup, despite each receiving `params === undefined`.
+
+Fix: invalid URL detection initializes `normalizingUrl`; all three generated hooks remain unconditionally mounted but receive shared `query.enabled: false` during normalization. Cleanup deletes only `month`, restores valid `initialMonth` fallback when present, and flips gate once; first enabled render then uses one consistent fallback/selected params object. Valid URL first-render path remains enabled immediately.
+
+Round 2 GREEN: explicit Node 24.14.0/pnpm 11.13.1 `pnpm toolchain:check`; dashboard/budgets/accessibility `25/25`; TypeScript, ESLint, Next build, Prettier, and diff checks passed. No generated edits; listed Minors deferred.

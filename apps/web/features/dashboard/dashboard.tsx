@@ -42,19 +42,24 @@ export function Dashboard({ initialMonth = "" }: { initialMonth?: string }) {
       : validMonth(initialMonth)
         ? initialMonth
         : "";
+  const invalidUrlMonth = urlMonth !== null && !validMonth(urlMonth);
   const [month, setMonth] = useState(initialSelectedMonth);
+  const [normalizingUrl, setNormalizingUrl] = useState(invalidUrlMonth);
   const params = month ? { month } : undefined;
-  const monthly = useGetMonthlySummary(params, { query: { retry: false } });
-  const budgets = useGetBudgetSummary(params, { query: { retry: false } });
-  const recent = useGetRecentTransactions(params, { query: { retry: false } });
+  const queryOptions = { query: { retry: false, enabled: !normalizingUrl } };
+  const monthly = useGetMonthlySummary(params, queryOptions);
+  const budgets = useGetBudgetSummary(params, queryOptions);
+  const recent = useGetRecentTransactions(params, queryOptions);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (urlMonth !== null && !validMonth(urlMonth)) {
+    if (invalidUrlMonth) {
       const url = new URL(window.location.href);
       url.searchParams.delete("month");
       window.history.replaceState({}, "", url);
+      setMonth(validMonth(initialMonth) ? initialMonth : "");
+      setNormalizingUrl(false);
     }
-  }, [urlMonth]);
+  }, [initialMonth, invalidUrlMonth]);
   const reportMonth =
     month.length > 0 ? month : (monthly.data?.data.month ?? budgets.data?.data.month ?? "");
   const budgetsByCurrency: Record<string, BudgetProgressContract[]> = {};
