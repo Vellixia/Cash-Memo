@@ -84,6 +84,14 @@ function view(node: React.ReactNode) {
   );
 }
 
+async function choose(label: string, option: string | RegExp) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.pointerDown(item);
+  fireEvent.pointerUp(item);
+  fireEvent.click(item);
+}
+
 describe("recurring transactions", () => {
   beforeEach(() => {
     cleanup();
@@ -113,16 +121,16 @@ describe("recurring transactions", () => {
   it("offers every cadence and creates exact server-owned recurrence input", async () => {
     const { RecurringForm } = await import("../features/recurring/recurring-form");
     view(<RecurringForm />);
-    expect(
-      Array.from(screen.getByLabelText<HTMLSelectElement>("Frequency").options).map(
-        (option) => option.value,
-      ),
-    ).toEqual(["daily", "weekly", "monthly", "yearly"]);
+    fireEvent.click(screen.getByRole("combobox", { name: "Frequency" }));
+    expect(await screen.findAllByRole("option")).toHaveLength(4);
+    const weekly = await screen.findByRole("option", { name: "Weekly" });
+    fireEvent.pointerDown(weekly);
+    fireEvent.pointerUp(weekly);
+    fireEvent.click(weekly);
     expect(screen.getByText(/server calculates the next due date/i)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Wallet"), { target: { value: "wallet" } });
-    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "food" } });
+    await choose("Wallet", "Cash — USD");
+    await choose("Category", "Food");
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25.00" } });
-    fireEvent.change(screen.getByLabelText("Frequency"), { target: { value: "weekly" } });
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-08-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Create recurring rule" }));
     await waitFor(() => {
@@ -154,6 +162,12 @@ describe("recurring transactions", () => {
     });
   });
 
+  it("renders local date-only due dates without constructing a Date", async () => {
+    const { RecurringList } = await import("../features/recurring/recurring-list");
+    view(<RecurringList />);
+    expect(screen.getByText(/Next due: September 30, 2026/)).toBeTruthy();
+  });
+
   it("links required field errors and blocks unknown currency precision", async () => {
     const { RecurringForm } = await import("../features/recurring/recurring-form");
     const rendered = view(<RecurringForm />);
@@ -167,8 +181,8 @@ describe("recurring transactions", () => {
     rendered.unmount();
     api.currencies = [];
     view(<RecurringForm />);
-    fireEvent.change(screen.getByLabelText("Wallet"), { target: { value: "wallet" } });
-    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "food" } });
+    await choose("Wallet", "Cash — USD");
+    await choose("Category", "Food");
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25.00" } });
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-08-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Create recurring rule" }));
@@ -218,8 +232,8 @@ describe("recurring transactions", () => {
     const { RecurringList } = await import("../features/recurring/recurring-list");
     api.create.mockRejectedValueOnce(new Error("create unavailable"));
     const form = view(<RecurringForm />);
-    fireEvent.change(screen.getByLabelText("Wallet"), { target: { value: "wallet" } });
-    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "food" } });
+    await choose("Wallet", "Cash — USD");
+    await choose("Category", "Food");
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "25.00" } });
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-08-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Create recurring rule" }));

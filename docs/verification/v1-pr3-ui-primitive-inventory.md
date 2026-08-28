@@ -299,3 +299,20 @@ Dialog wrapper is superseded. DropdownMenu, AlertDialog, Badge, and MoneyAmount 
   owns the single border/background/shadow/padding surface; archive errors remain inside their
   consequence Dialog focus trap and category panels pair generated Tabs triggers with tabpanels.
 - No Orval-generated files edited.
+
+# Cashmemo V1 PR3 Task 21 Update (Budgets and recurring rules)
+
+Date: 2026-08-28
+
+## Task 21 Substrate Audit
+
+- Budget and recurring forms now use existing Base UI Select, Input, Dialog, AlertDialog, and
+  Badge primitives; no native select or homemade confirmation remains in these consumers.
+- Embedded forms omit standalone `.dialog` surface when rendered inside generated Dialog; destructive
+  budget/rule removal uses AlertDialog with proportionate history-preserving copy.
+- Budget progress remains single generated Progress composition: server percentage stays textual,
+  bounded numeric value serves graphical width only; exact negative zero/malformed values do not
+  create false over-budget status.
+- Recurring due dates render semantic local DATE strings without JavaScript Date/UTC conversion;
+  lifecycle copy documents paused-period suppression, future-only edits, and no-backfill resume.
+- No Orval-generated files edited.

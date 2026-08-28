@@ -1,9 +1,15 @@
 import { expect, test } from "./support/test";
 import { provisionUser } from "./support/auth";
+import type { Page } from "@playwright/test";
 
 function cssTimeMilliseconds(value: string): number {
   const amount = Number.parseFloat(value);
   return value.endsWith("ms") ? amount : amount * 1_000;
+}
+
+async function chooseOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
 }
 
 test("updates a server-owned budget and pauses then resumes a recurring rule", async ({ page }) => {
@@ -14,8 +20,8 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
   await expect(page.getByRole("heading", { name: "Budgets", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "New budget", level: 2 })).toBeVisible();
   await expect(page.getByLabel("Month", { exact: true })).not.toHaveValue("");
-  await page.getByLabel("Category").selectOption({ label: "Food & Drink" });
-  await page.getByLabel("Currency").selectOption("USD");
+  await chooseOption(page, "Category", "Food & Drink");
+  await chooseOption(page, "Currency", "USD — US Dollar");
   await page.getByLabel("Budget amount").fill("100.00");
   await page.getByRole("button", { name: "Create budget" }).click();
   await expect(page.getByRole("status")).toContainText("Budget saved");
@@ -47,10 +53,10 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
   expect(cssTimeMilliseconds(reducedMotion.transitionDuration)).toBeCloseTo(0.01, 5);
   expect(reducedMotion.animationIterationCount).toBe("1");
   await createRule.click();
-  await page.getByLabel("Wallet").selectOption({ label: `${user.walletName} — USD` });
-  await page.getByLabel("Category").selectOption({ label: "Food & Drink" });
+  await chooseOption(page, "Wallet", `${user.walletName} — USD`);
+  await chooseOption(page, "Category", "Food & Drink");
   await page.getByLabel("Amount").fill("15.00");
-  await page.getByLabel("Frequency").selectOption("weekly");
+  await chooseOption(page, "Frequency", "Weekly");
   await page.getByLabel("Start date").fill(new Date().toISOString().slice(0, 10));
   const recurringNote = `Weekly lunch ${user.email}`;
   await page.getByLabel("Note").fill(recurringNote);

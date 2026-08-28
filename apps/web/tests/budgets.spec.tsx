@@ -59,6 +59,12 @@ function monthlyKey(params?: unknown) {
   return params ? ["/api/v1/reports/monthly-summary", params] : ["/api/v1/reports/monthly-summary"];
 }
 
+async function choose(label: string, option: string | RegExp) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.click(item);
+}
+
 vi.mock("../generated/api", () => ({
   useListBudgets: (params?: unknown) =>
     useQuery({
@@ -175,6 +181,24 @@ describe("budgets", () => {
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
   });
 
+  it("does not call exact negative zero or malformed remaining over budget", async () => {
+    const { BudgetProgress } = await import("../features/budgets/budget-progress");
+    const { rerender } = view(
+      <BudgetProgress
+        budget={{ ...api.summary[0], remaining: "-0.00", progress: "bad" }}
+        categoryName="Food"
+      />,
+    );
+    expect(screen.getByText("Within budget")).toBeTruthy();
+    rerender(
+      <BudgetProgress
+        budget={{ ...api.summary[0], remaining: "-oops", progress: "135.42" }}
+        categoryName="Food"
+      />,
+    );
+    expect(screen.getByText("Within budget")).toBeTruthy();
+  });
+
   it("refetches active parameterless reads and renders authoritative returned progress after update", async () => {
     const { BudgetList } = await import("../features/budgets/budget-list");
     const rendered = view(<BudgetList />);
@@ -239,8 +263,8 @@ describe("budgets", () => {
       return Promise.resolve({ data: api.budgets[0] });
     });
     const created = view(<BudgetList />);
-    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "food" } });
-    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "USD" } });
+    await choose("Category", "Food");
+    await choose("Currency", /USD — US Dollar/);
     fireEvent.change(screen.getByLabelText("Budget amount"), { target: { value: "500.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Create budget" }));
     expect(await screen.findAllByText("USD 500.00")).toHaveLength(2);
@@ -272,8 +296,8 @@ describe("budgets", () => {
   it("links amount precision error to field and blocks missing registry entries", async () => {
     const { BudgetForm } = await import("../features/budgets/budget-form");
     const valid = view(<BudgetForm initialMonth="2026-08" />);
-    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "food" } });
-    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "USD" } });
+    await choose("Category", "Food");
+    await choose("Currency", /USD — US Dollar/);
     fireEvent.change(screen.getByLabelText("Budget amount"), { target: { value: "12.345" } });
     fireEvent.click(screen.getByRole("button", { name: "Create budget" }));
     const amount = screen.getByLabelText("Budget amount");
@@ -321,8 +345,8 @@ describe("budgets", () => {
     api.create.mockRejectedValueOnce(new Error("save unavailable"));
     const { BudgetForm } = await import("../features/budgets/budget-form");
     view(<BudgetForm initialMonth="2026-08" />);
-    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "food" } });
-    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "USD" } });
+    await choose("Category", "Food");
+    await choose("Currency", /USD — US Dollar/);
     fireEvent.change(screen.getByLabelText("Budget amount"), { target: { value: "12.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Create budget" }));
     expect((await screen.findByRole("alert")).textContent).toContain("save unavailable");

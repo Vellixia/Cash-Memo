@@ -10,12 +10,33 @@ import {
   usePauseRecurringTransaction,
   useResumeRecurringTransaction,
 } from "../../generated/api";
-import { Amount } from "../../components/money/amount";
+import { MoneyAmount } from "../../components/money/amount";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
+import { useListCategories, useListWallets } from "../../generated/api";
 import { RecurringForm } from "./recurring-form";
 
 export function RecurringList() {
   const query = useListRecurringTransactions({ query: { retry: false } });
+  const wallets = useListWallets({ query: { retry: false } });
+  const categories = useListCategories({ query: { retry: false } });
   const pause = usePauseRecurringTransaction();
   const resume = useResumeRecurringTransaction();
   const remove = useDeleteRecurringTransaction();
@@ -24,6 +45,27 @@ export function RecurringList() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string>();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
+
+  function formatLocalDate(value: string): string {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return value;
+    const [, year, month, day] = match;
+    const monthName = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ][Number(month) - 1];
+    return monthName ? `${monthName} ${String(Number(day))}, ${year}` : value;
+  }
 
   async function refresh(message: string) {
     await client.invalidateQueries({ queryKey: getListRecurringTransactionsQueryKey() });
@@ -35,7 +77,9 @@ export function RecurringList() {
       if (item.status === "paused") await resume.mutateAsync({ id: item.id });
       else await pause.mutateAsync({ id: item.id });
       await refresh(
-        item.status === "paused" ? "Recurring rule resumed." : "Recurring rule paused.",
+        item.status === "paused"
+          ? "Recurring rule resumed. First cadence date on or after resume; no backfill."
+          : "Recurring rule paused. No occurrences during paused period.",
       );
     } catch (error) {
       setStatus({
@@ -69,6 +113,8 @@ export function RecurringList() {
       </div>
     );
   const items = query.data.data;
+  const walletNames = new Map(wallets.data?.data.map((item) => [item.id, item.name]));
+  const categoryNames = new Map(categories.data?.data.map((item) => [item.id, item.name]));
   return (
     <section className="management-page">
       <header className="page-heading">
@@ -90,28 +136,45 @@ export function RecurringList() {
         An upcoming recurring rule does not affect totals or history until Cashmemo generates a
         transaction on its due date.
       </p>
-      {creating ? (
-        <RecurringForm
-          onSaved={() => {
-            setCreating(false);
-          }}
-          onCancel={() => {
-            setCreating(false);
-          }}
-        />
-      ) : null}
-      {editing ? (
-        <RecurringForm
-          key={editing.id}
-          recurring={editing}
-          onSaved={() => {
-            setEditing(undefined);
-          }}
-          onCancel={() => {
-            setEditing(undefined);
-          }}
-        />
-      ) : null}
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent className="management-dialog">
+          <DialogHeader>
+            <DialogTitle>New recurring rule</DialogTitle>
+            <DialogDescription>
+              Cashmemo schedules future occurrences from this instruction.
+            </DialogDescription>
+          </DialogHeader>
+          <RecurringForm
+            embedded
+            onSaved={() => setCreating(false)}
+            onCancel={() => setCreating(false)}
+          />
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(editing)}
+        onOpenChange={(open) => {
+          if (!open) setEditing(undefined);
+        }}
+      >
+        <DialogContent className="management-dialog">
+          <DialogHeader>
+            <DialogTitle>Edit recurring rule</DialogTitle>
+            <DialogDescription>
+              Changes apply to future scheduled occurrences only.
+            </DialogDescription>
+          </DialogHeader>
+          {editing ? (
+            <RecurringForm
+              key={editing.id}
+              recurring={editing}
+              embedded
+              onSaved={() => setEditing(undefined)}
+              onCancel={() => setEditing(undefined)}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
       {status ? (
         <p
           role={status.kind === "error" ? "alert" : "status"}
@@ -134,21 +197,25 @@ export function RecurringList() {
                 <div>
                   <h2>{title}</h2>
                   <p>
-                    <span className="status-label">
+                    <Badge variant={item.status === "paused" ? "outline" : "secondary"}>
+                      <span aria-hidden="true">{item.status === "paused" ? "⏸" : "●"}</span>{" "}
                       {item.status === "paused" ? "Paused" : "Active"}
-                    </span>{" "}
+                    </Badge>{" "}
                     · {item.frequency}
                   </p>
                   <p>
-                    <Amount currency={item.currency} value={item.amount} /> · {item.direction}
+                    <MoneyAmount
+                      currency={item.currency}
+                      value={item.amount}
+                      direction={item.direction}
+                    />{" "}
+                    · {item.direction === "income" ? "↑ Income" : "↓ Expense"}
+                    <span className="muted">
+                      · Wallet: {walletNames.get(item.wallet_id) ?? "Wallet"} · Category:{" "}
+                      {categoryNames.get(item.category_id) ?? "Category"}
+                    </span>
                   </p>
-                  <p className="muted">
-                    Next due:{" "}
-                    {new Date(`${item.next_due_date}T00:00:00Z`).toLocaleDateString("en-US", {
-                      dateStyle: "long",
-                      timeZone: "UTC",
-                    })}
-                  </p>
+                  <p className="muted">Next due: {formatLocalDate(item.next_due_date)}</p>
                 </div>
                 <div className="card-actions">
                   <Button
@@ -169,44 +236,48 @@ export function RecurringList() {
                   >
                     {item.status === "paused" ? "Resume" : "Pause"}
                   </Button>
-                  {deleting === item.id ? (
-                    <div className="confirm-box" role="alert">
-                      <p>Delete this recurring rule?</p>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        onClick={() => void deleteItem(item.id)}
-                        disabled={remove.isPending}
-                      >
-                        Confirm delete
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="quiet"
-                        onClick={() => {
-                          setDeleting(undefined);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="quiet"
-                      onClick={() => {
-                        setDeleting(item.id);
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="quiet"
+                    onClick={() => {
+                      setDeleting(item.id);
+                    }}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </article>
             );
           })}
         </div>
       )}
+      <AlertDialog
+        open={Boolean(deleting)}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete recurring rule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete only future scheduling instructions. Generated transactions and history stay
+              unchanged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="danger"
+              onClick={() => deleting && void deleteItem(deleting)}
+              disabled={remove.isPending}
+              aria-busy={remove.isPending}
+            >
+              {remove.isPending ? "Deleting…" : "Confirm delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

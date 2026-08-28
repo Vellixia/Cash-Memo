@@ -10,6 +10,23 @@ import {
   useListCategories,
 } from "../../generated/api";
 import { Button } from "../../components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { BudgetForm } from "./budget-form";
 import { BudgetProgress } from "./budget-progress";
 import { invalidateBudgetQueries } from "./invalidate-budget-queries";
@@ -60,14 +77,15 @@ export function BudgetList({ initialMonth = "" }: { initialMonth?: string }) {
           />
         </label>
       </header>
-      <BudgetForm
-        key={editing?.id ?? `new-${reportMonth}`}
-        initialMonth={reportMonth}
-        budget={editing}
-        onSaved={() => {
-          setEditing(undefined);
-        }}
-      />
+      {!editing ? (
+        <BudgetForm
+          key={`new-${reportMonth}`}
+          initialMonth={reportMonth}
+          onSaved={() => {
+            setEditing(undefined);
+          }}
+        />
+      ) : null}
       {deleteError ? (
         <p role="alert" className="field-error">
           {deleteError}
@@ -110,38 +128,15 @@ export function BudgetList({ initialMonth = "" }: { initialMonth?: string }) {
                     >
                       Edit
                     </Button>
-                    {deleting === item.id ? (
-                      <div className="confirm-box" role="alert">
-                        <p>Delete this monthly budget?</p>
-                        <Button
-                          type="button"
-                          variant="danger"
-                          disabled={remove.isPending}
-                          onClick={() => void deleteItem(item)}
-                        >
-                          Confirm delete
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="quiet"
-                          onClick={() => {
-                            setDeleting(undefined);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="quiet"
-                        onClick={() => {
-                          setDeleting(item.id);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="quiet"
+                      onClick={() => {
+                        setDeleting(item.id);
+                      }}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -154,6 +149,59 @@ export function BudgetList({ initialMonth = "" }: { initialMonth?: string }) {
           <p>Create one above. Progress appears after server refresh.</p>
         </div>
       )}
+      <Dialog
+        open={Boolean(editing)}
+        onOpenChange={(open) => {
+          if (!open) setEditing(undefined);
+        }}
+      >
+        <DialogContent className="management-dialog">
+          <DialogHeader>
+            <DialogTitle>Edit budget</DialogTitle>
+            <DialogDescription>Changes refresh totals from Cashmemo after save.</DialogDescription>
+          </DialogHeader>
+          {editing ? (
+            <BudgetForm
+              key={editing.id}
+              budget={editing}
+              embedded
+              onSaved={() => setEditing(undefined)}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={Boolean(deleting)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleting(undefined);
+            setDeleteError(undefined);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete monthly budget?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes only budget target and keeps transactions and history unchanged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="danger"
+              onClick={() => {
+                const item = budgets.data?.data.find((value) => value.id === deleting);
+                if (item) void deleteItem(item);
+              }}
+              disabled={remove.isPending}
+              aria-busy={remove.isPending}
+            >
+              {remove.isPending ? "Deleting…" : "Confirm delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

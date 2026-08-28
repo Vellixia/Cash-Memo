@@ -12,6 +12,13 @@ import {
 import { Button } from "../../components/ui/button";
 import { FormField } from "../../components/ui/form-field";
 import { Input } from "../../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { invalidateBudgetQueries } from "./invalidate-budget-queries";
 
 function requestError(error: unknown): string {
@@ -25,10 +32,12 @@ function requestError(error: unknown): string {
 export function BudgetForm({
   initialMonth = "",
   budget,
+  embedded = false,
   onSaved,
 }: {
   initialMonth?: string;
   budget?: BudgetContract;
+  embedded?: boolean;
   onSaved?: () => void;
 }) {
   const [month, setMonth] = useState(budget?.month ?? initialMonth);
@@ -43,6 +52,7 @@ export function BudgetForm({
   const update = useUpdateBudget();
   const client = useQueryClient();
   const exponent = currencies.data?.data.find((item) => item.code === currency)?.exponent;
+  const selectedCategory = categories.data?.data.find((category) => category.id === categoryId);
 
   async function submit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -105,8 +115,12 @@ export function BudgetForm({
     );
 
   return (
-    <form className="dialog budget-form" onSubmit={(event) => void submit(event)} noValidate>
-      <h2>{budget ? "Edit budget" : "New budget"}</h2>
+    <form
+      className={`${embedded ? "" : "dialog "}budget-form`}
+      onSubmit={(event) => void submit(event)}
+      noValidate
+    >
+      {!embedded ? <h2>{budget ? "Edit budget" : "New budget"}</h2> : null}
       <FormField label="Month" htmlFor="budget-month" error={fieldErrors.month}>
         <Input
           id="budget-month"
@@ -119,42 +133,62 @@ export function BudgetForm({
         />
       </FormField>
       <FormField label="Category" htmlFor="budget-category" error={fieldErrors.category}>
-        <select
-          id="budget-category"
-          className="input"
+        <Select
           value={categoryId}
-          onChange={(event) => {
-            setCategoryId(event.target.value);
+          onValueChange={(value) => {
+            if (value !== null) setCategoryId(value);
           }}
-          required
         >
-          <option value="">Choose expense category</option>
-          {categories.data.data
-            .filter((category) => category.kind === "expense" && !category.archived_at)
-            .map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-        </select>
+          <SelectTrigger
+            id="budget-category"
+            aria-invalid={Boolean(fieldErrors.category)}
+            aria-describedby={fieldErrors.category ? "budget-category-error" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="Choose expense category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.data.data
+              .filter(
+                (category) =>
+                  category.kind === "expense" &&
+                  (!category.archived_at || category.id === budget?.category_id),
+              )
+              .map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                  {category.archived_at ? " (archived historical category)" : ""}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
       </FormField>
+      {budget && selectedCategory?.archived_at ? (
+        <p className="muted">Archived category retained for historical budget reference.</p>
+      ) : null}
       <FormField label="Currency" htmlFor="budget-currency" error={fieldErrors.currency}>
-        <select
-          id="budget-currency"
-          className="input"
+        <Select
           value={currency}
-          onChange={(event) => {
-            setCurrency(event.target.value);
+          onValueChange={(value) => {
+            if (value !== null) setCurrency(value);
           }}
-          required
         >
-          <option value="">Choose currency</option>
-          {currencies.data.data.map((item) => (
-            <option key={item.code} value={item.code}>
-              {item.code} — {item.display_name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            id="budget-currency"
+            aria-invalid={Boolean(fieldErrors.currency)}
+            aria-describedby={fieldErrors.currency ? "budget-currency-error" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="Choose currency" />
+          </SelectTrigger>
+          <SelectContent>
+            {currencies.data.data.map((item) => (
+              <SelectItem key={item.code} value={item.code}>
+                {item.code} — {item.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </FormField>
       <FormField label="Budget amount" htmlFor="budget-amount" error={fieldErrors.amount}>
         <Input

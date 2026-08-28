@@ -14,15 +14,28 @@ import {
 import { Button } from "../../components/ui/button";
 import { FormField } from "../../components/ui/form-field";
 import { Input } from "../../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 
 const frequencies = ["daily", "weekly", "monthly", "yearly"] as const;
+type Frequency = (typeof frequencies)[number];
+function isFrequency(value: string): value is Frequency {
+  return frequencies.includes(value as Frequency);
+}
 
 export function RecurringForm({
   recurring,
+  embedded = false,
   onSaved,
   onCancel,
 }: {
   recurring?: RecurringTransaction;
+  embedded?: boolean;
   onSaved?: () => void;
   onCancel?: () => void;
 }) {
@@ -109,62 +122,90 @@ export function RecurringForm({
     );
 
   return (
-    <form className="dialog recurring-form" onSubmit={(event) => void submit(event)} noValidate>
-      <h2>{recurring ? "Edit recurring rule" : "New recurring rule"}</h2>
+    <form
+      className={`${embedded ? "" : "dialog "}recurring-form`}
+      onSubmit={(event) => void submit(event)}
+      noValidate
+    >
+      {!embedded ? <h2>{recurring ? "Edit recurring rule" : "New recurring rule"}</h2> : null}
       <p className="muted">
         Cashmemo server calculates the next due date from your timezone and cadence. Upcoming rules
         are not transactions.
       </p>
+      {recurring ? (
+        <p className="notice">
+          Changes apply to future scheduled occurrences only. Existing generated transactions stay
+          unchanged. Paused periods generate no occurrences; resume starts on the first cadence date
+          on or after resume with no backfill.
+        </p>
+      ) : null}
       <FormField label="Wallet" htmlFor="recurring-wallet" error={fieldErrors.wallet}>
-        <select
-          id="recurring-wallet"
-          className="input"
+        <Select
           value={walletId}
-          onChange={(event) => {
-            setWalletId(event.target.value);
+          onValueChange={(value) => {
+            if (value !== null) setWalletId(value);
           }}
         >
-          <option value="">Choose wallet</option>
-          {wallets.data.data
-            .filter((item) => !item.archived_at)
-            .map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} — {item.currency}
-              </option>
-            ))}
-        </select>
+          <SelectTrigger
+            id="recurring-wallet"
+            aria-invalid={Boolean(fieldErrors.wallet)}
+            aria-describedby={fieldErrors.wallet ? "recurring-wallet-error" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="Choose wallet" />
+          </SelectTrigger>
+          <SelectContent>
+            {wallets.data.data
+              .filter((item) => !item.archived_at)
+              .map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name} — {item.currency}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
       </FormField>
       <FormField label="Category" htmlFor="recurring-category" error={fieldErrors.category}>
-        <select
-          id="recurring-category"
-          className="input"
+        <Select
           value={categoryId}
-          onChange={(event) => {
-            setCategoryId(event.target.value);
+          onValueChange={(value) => {
+            if (value !== null) setCategoryId(value);
           }}
         >
-          <option value="">Choose category</option>
-          {categories.data.data
-            .filter((item) => !item.archived_at)
-            .map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-        </select>
+          <SelectTrigger
+            id="recurring-category"
+            aria-invalid={Boolean(fieldErrors.category)}
+            aria-describedby={fieldErrors.category ? "recurring-category-error" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="Choose category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.data.data
+              .filter((item) => !item.archived_at)
+              .map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
       </FormField>
       <FormField label="Direction" htmlFor="recurring-direction">
-        <select
-          id="recurring-direction"
-          className="input"
+        <Select
           value={direction}
-          onChange={(event) => {
-            setDirection(event.target.value as RecurringTransaction["direction"]);
+          onValueChange={(value) => {
+            if (value === "expense" || value === "income") setDirection(value);
           }}
         >
-          <option value="expense">Expense</option>
-          <option value="income">Income</option>
-        </select>
+          <SelectTrigger id="recurring-direction" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="expense">Expense</SelectItem>
+            <SelectItem value="income">Income</SelectItem>
+          </SelectContent>
+        </Select>
       </FormField>
       <FormField label="Amount" htmlFor="recurring-amount" error={fieldErrors.amount}>
         <Input
@@ -177,21 +218,24 @@ export function RecurringForm({
         />
       </FormField>
       <FormField label="Frequency" htmlFor="recurring-frequency">
-        <select
-          id="recurring-frequency"
-          className="input"
+        <Select
           value={frequency}
-          onChange={(event) => {
-            setFrequency(event.target.value as RecurringTransaction["frequency"]);
+          onValueChange={(value) => {
+            if (value !== null && isFrequency(value)) setFrequency(value);
           }}
         >
-          {frequencies.map((value) => (
-            <option key={value} value={value}>
-              {value[0].toUpperCase()}
-              {value.slice(1)}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger id="recurring-frequency" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {frequencies.map((value) => (
+              <SelectItem key={value} value={value}>
+                {value[0].toUpperCase()}
+                {value.slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </FormField>
       <FormField label="Start date" htmlFor="recurring-start" error={fieldErrors.startDate}>
         <Input
