@@ -176,6 +176,27 @@ fn smtp_security_mode_requires_explicit_plaintext_for_mailpit() {
     assert_eq!(SmtpSecurity::default(), SmtpSecurity::StartTls);
 }
 
+/// Compile-time anchor for the web restricted-mode inference.
+///
+/// `resolveGateAccess()` in `apps/web/components/auth-gate.tsx` infers `DELETION_ONLY` from the
+/// `403` that `GET /api/v1/auth/sessions/current` returns for any session whose access is not
+/// `Full`. That inference is only sound while `Full` and `DeletionOnly` are the ONLY variants of
+/// `SessionAccess`. The exhaustive `match` below has no wildcard arm on purpose: adding a third
+/// variant must fail to compile here so the web gate is revisited in the same change.
+#[test]
+fn session_access_has_exactly_two_variants_for_the_web_403_inference() {
+    for access in [SessionAccess::Full, SessionAccess::DeletionOnly] {
+        let wire_value = match access {
+            SessionAccess::Full => "FULL",
+            SessionAccess::DeletionOnly => "DELETION_ONLY",
+        };
+        assert_eq!(
+            serde_json::to_value(access).unwrap(),
+            Value::String(wire_value.to_owned())
+        );
+    }
+}
+
 #[test]
 fn delivered_links_carry_tokens_only_in_the_url_fragment() {
     let origin = Url::parse("https://cashmemo.example/").unwrap();

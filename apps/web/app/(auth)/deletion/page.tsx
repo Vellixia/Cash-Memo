@@ -54,14 +54,21 @@ function DeletionPanel() {
   if (query.isPending || query.isError) {
     return (
       <main className="public-page">
-        <p role="status">
-          {query.isPending ? "Loading deletion status…" : "Returning to sign in…"}
-        </p>
+        {query.isPending ? (
+          <p role="status">Loading deletion status…</p>
+        ) : (
+          <p role="alert">Returning to sign in…</p>
+        )}
       </main>
     );
   }
 
   const pending = deletion ? deletionActionsForStatus(deletion.status).canCancel : false;
+  // Only the server's own credential rejection may tell the user their password was wrong; a 500 or
+  // a dropped connection must not push them into retrying and burning their rate-limit budget.
+  const cancelRejectedPassword =
+    (cancel.error as { response?: { status?: number } } | null | undefined)?.response?.status ===
+    401;
 
   return (
     <main className="public-page">
@@ -89,7 +96,9 @@ function DeletionPanel() {
           {cancel.isError ? (
             <Alert variant="destructive" className="border-destructive/30 bg-destructive/8">
               <AlertDescription className="text-destructive">
-                Password was not accepted. Deletion is still scheduled.
+                {cancelRejectedPassword
+                  ? "Password was not accepted. Deletion is still scheduled."
+                  : "Could not cancel deletion. Deletion is still scheduled."}
               </AlertDescription>
             </Alert>
           ) : null}

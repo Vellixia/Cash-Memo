@@ -67,18 +67,24 @@ describe("token page response policy", () => {
 
   it("keeps fragment token pages free of third-party content", async () => {
     const fs = await import("node:fs/promises");
-    const sources = await Promise.all(
-      [
-        "app/layout.tsx",
-        "app/(public)/layout.tsx",
-        "app/(public)/verify-email/page.tsx",
-        "app/(public)/reset-password/page.tsx",
-        "features/auth/forms.tsx",
-      ].map((path) => fs.readFile(path, "utf8")),
-    );
+    // Every file a token page actually renders, including the stylesheet and the UI primitives.
+    const tokenPageFiles = [
+      "app/layout.tsx",
+      "app/globals.css",
+      "app/(public)/layout.tsx",
+      "app/(public)/verify-email/page.tsx",
+      "app/(public)/reset-password/page.tsx",
+      "features/auth/forms.tsx",
+      "components/ui/card.tsx",
+      "components/ui/alert.tsx",
+      "components/ui/field.tsx",
+      "components/ui/input.tsx",
+      "components/ui/button.tsx",
+    ];
+    const sources = await Promise.all(tokenPageFiles.map((path) => fs.readFile(path, "utf8")));
 
-    for (const source of sources) {
-      expect(source).not.toMatch(/https?:\/\/(?!localhost)/);
+    for (const [index, source] of sources.entries()) {
+      expect(source, tokenPageFiles[index]).not.toMatch(/https?:\/\/(?!localhost)/);
     }
   });
 

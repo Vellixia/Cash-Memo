@@ -105,7 +105,7 @@ Both generated files are left in the formatting the CLI emitted, matching the Ta
 | Surface | Previous consumers | Status after Task 15 |
 | --- | --- | --- |
 | `components/ui/form-field.tsx` | auth forms, onboarding, wallets, categories, budgets, recurring, transactions, settings | no longer used by auth or the deletion screen; still used by Tasks 16–23 surfaces, so the file stays |
-| `.auth-form` CSS block in `app/globals.css` | auth forms only | now dead CSS; removal deferred because `globals.css` is Task 14/16 territory and `.dialog`, which shares the rule, still has many consumers |
+| `.auth-form` and `.auth-links` CSS blocks in `app/globals.css` | `.auth-form`: auth forms only; `.auth-links`: the five public auth pages | both now dead CSS; removal deferred because `globals.css` is Task 14/16 territory and `.dialog`, which shares the `.auth-form` rule, still has many consumers |
 | Raw `<label>` + `<input>` in `app/(auth)/deletion/page.tsx` | deletion screen | replaced by `Field`/`FieldLabel` + `Input` |
 | `.dialog .deletion-card` markup on the deletion screen | deletion screen | replaced by `Card`; the CSS classes remain for onboarding/settings/forms consumers |
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "../features/auth/use-session";
 import {
@@ -26,7 +26,13 @@ export type GateDecision =
  */
 const RESTRICTED_SESSION_STATUS = 403;
 
-/** Returns the access level a gate may trust, from the session body or the restricted status. */
+/**
+ * Returns the access level a gate may trust, from the session body or the restricted status.
+ *
+ * The `403` inference is sound only while `Full` and `DeletionOnly` are the only `SessionAccess`
+ * variants. `session_access_has_exactly_two_variants_for_the_web_403_inference` in
+ * `apps/api/tests/auth.rs` is the compile-time anchor that fails if a third variant is added.
+ */
 export function resolveGateAccess({
   status,
   access,
@@ -104,23 +110,38 @@ export function AuthGate({
 
   // A gate redirects at most once: clearing the cache refetches the session it just read.
   const redirected = useRef(false);
+  const rendersRestrictedMode = decision.kind === "render" && allow === "deletion-only";
+  const [restrictedCacheCleared, setRestrictedCacheCleared] = useState(false);
 
   useEffect(() => {
-    if (!redirect || redirected.current) return;
-    redirected.current = true;
-    if (redirect.clearPrivateCache) clearSessionState(client);
-    // Only a genuinely safe, non-destructive path is worth returning to after sign-in.
-    router.replace(
-      redirect.destination === "/login" && isSafeReturnPath(pathname)
-        ? `/login?returnTo=${encodeURIComponent(pathname)}`
-        : redirect.destination,
-    );
-  }, [client, pathname, redirect, router]);
+    if (redirect) {
+      if (redirected.current) return;
+      redirected.current = true;
+      if (redirect.clearPrivateCache) clearSessionState(client);
+      // Only a genuinely safe, non-destructive path is worth returning to after sign-in.
+      router.replace(
+        redirect.destination === "/login" && isSafeReturnPath(pathname)
+          ? `/login?returnTo=${encodeURIComponent(pathname)}`
+          : redirect.destination,
+      );
+      return;
+    }
+    // Defense in depth: entering restricted mode clears private query state even when the caller
+    // that routed here already did, so no path can mount `/deletion` over a warm financial cache.
+    if (rendersRestrictedMode && !restrictedCacheCleared) {
+      clearSessionState(client);
+      setRestrictedCacheCleared(true);
+    }
+  }, [client, pathname, redirect, rendersRestrictedMode, restrictedCacheCleared, router]);
 
-  if (decision.kind !== "render") {
+  // Restricted children are held back for one commit while that clear happens. Clearing after they
+  // mount would discard their in-flight queries, and a removed in-flight query never refetches.
+  const restrictedCacheReady = !rendersRestrictedMode || restrictedCacheCleared;
+
+  if (decision.kind !== "render" || !restrictedCacheReady) {
     return (
       <main className="loading-state" aria-live="polite">
-        {decision.kind === "loading" ? "Checking session…" : "Redirecting…"}
+        {decision.kind === "redirect" ? "Redirecting…" : "Checking session…"}
       </main>
     );
   }

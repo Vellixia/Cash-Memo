@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
   pathname: "/app",
   verify: vi.fn(),
+  verifyPending: false,
   resend: vi.fn(),
   consumeReset: vi.fn(),
   requestReset: vi.fn(),
@@ -32,6 +33,19 @@ const api = vi.hoisted(() => ({
     error: undefined as { response?: { status?: number } } | undefined,
   },
   financialMounts: 0,
+  deletionQuery: {
+    data: undefined as { data: { status: string; deletion_due_at: string | null } } | undefined,
+    isPending: false,
+    isError: false,
+    error: undefined as { response?: { status?: number } } | undefined,
+  },
+  cancelState: {
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+    error: undefined as { response?: { status?: number } } | undefined,
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -44,7 +58,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("../generated/api", () => ({
-  useVerifyEmail: () => ({ mutateAsync: api.verify, isPending: false }),
+  useVerifyEmail: () => ({ mutateAsync: api.verify, isPending: api.verifyPending }),
   useResendVerification: () => ({ mutateAsync: api.resend, isPending: false }),
   useConsumePasswordReset: () => ({ mutateAsync: api.consumeReset, isPending: false }),
   useRequestPasswordReset: () => ({ mutateAsync: api.requestReset, isPending: false }),
@@ -54,6 +68,9 @@ vi.mock("../generated/api", () => ({
   useCurrentSession: () => api.session,
   currentSession: vi.fn(),
   getCurrentSessionQueryKey: () => ["/api/v1/auth/session"],
+  useGetAccountDeletion: () => api.deletionQuery,
+  useCancelAccountDeletion: () => api.cancelState,
+  getGetAccountDeletionQueryKey: () => ["/api/v1/account/deletion"],
 }));
 
 const {
@@ -68,6 +85,7 @@ const {
 } = await import("../features/auth/forms");
 const { AuthGate, resolveGateAccess, resolveGateDecision } =
   await import("../components/auth-gate");
+const { default: DeletionPage } = await import("../app/(auth)/deletion/page");
 
 function setHash(hash: string) {
   window.history.replaceState(null, "", `/verify-email${hash}`);
@@ -88,7 +106,21 @@ beforeEach(() => {
   api.searchParams = new URLSearchParams();
   api.pathname = "/app";
   api.financialMounts = 0;
+  api.verifyPending = false;
   api.session = { data: undefined, isPending: false, isError: false, error: undefined };
+  api.deletionQuery = {
+    data: { data: { status: "pending_deletion", deletion_due_at: "2026-09-04T00:00:00Z" } },
+    isPending: false,
+    isError: false,
+    error: undefined,
+  };
+  api.cancelState = {
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+    error: undefined,
+  };
   api.verify.mockReset().mockResolvedValue({ data: undefined });
   api.resend.mockReset().mockResolvedValue({ data: { accepted: true } });
   api.consumeReset.mockReset().mockResolvedValue({ data: undefined });
@@ -462,6 +494,28 @@ describe("restricted-mode routing", () => {
     expect(api.routes).toEqual([]);
   });
 
+  it("clears private cache exactly once when a gate resolves a deletion-only session", async () => {
+    api.pathname = "/deletion";
+    api.session = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 403 } },
+    };
+
+    const { clearSpy } = renderWithClient(
+      <AuthGate allow="deletion-only">
+        <p>deletion controls</p>
+      </AuthGate>,
+    );
+
+    expect(await screen.findByText("deletion controls")).toBeTruthy();
+    await waitFor(() => {
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(api.routes).toEqual([]);
+  });
+
   it("sends a restricted session away from the financial shell without mounting it", async () => {
     api.pathname = "/app";
     api.session = {
@@ -508,5 +562,71 @@ describe("restricted-mode routing", () => {
       expect(api.routes).toEqual(["/login?returnTo=%2Fapp%2Fwallets"]);
     });
     expect(screen.queryByText("private balances")).toBeNull();
+  });
+});
+
+describe("pending submission state", () => {
+  it("shows the pending label and blocks a second single-use token submission", () => {
+    setHash("#token=fragment-token");
+    api.verifyPending = true;
+    renderWithClient(<VerifyEmailForm />);
+
+    const pendingButton = screen.getByRole("button", { name: "Verifying…" });
+    expect((pendingButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Verify email" })).toBeNull();
+  });
+});
+
+describe("restricted deletion screen", () => {
+  function renderDeletionScreen() {
+    api.pathname = "/deletion";
+    api.session = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 403 } },
+    };
+    return renderWithClient(<DeletionPage />);
+  }
+
+  it("blames the password only when the server rejected the password", async () => {
+    api.cancelState = { ...api.cancelState, isError: true, error: { response: { status: 401 } } };
+    renderDeletionScreen();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch("Password was not accepted");
+    expect(alert.textContent).toMatch("Deletion is still scheduled");
+  });
+
+  it("stays neutral when cancellation fails for any other reason", async () => {
+    api.cancelState = { ...api.cancelState, isError: true, error: { response: { status: 500 } } };
+    renderDeletionScreen();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch("Could not cancel deletion. Deletion is still scheduled.");
+    expect(alert.textContent).not.toMatch("Password was not accepted");
+  });
+
+  it("stays neutral when cancellation fails without any response status", async () => {
+    api.cancelState = { ...api.cancelState, isError: true, error: undefined };
+    renderDeletionScreen();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch("Could not cancel deletion. Deletion is still scheduled.");
+    expect(alert.textContent).not.toMatch("Password was not accepted");
+  });
+
+  it("announces a failed deletion-status load assertively, not politely", async () => {
+    api.deletionQuery = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 401 } },
+    };
+    renderDeletionScreen();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch("Returning to sign in…");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

@@ -31,13 +31,9 @@ pub struct PasswordVerificationHook {
 }
 
 #[cfg(debug_assertions)]
-impl Default for PasswordVerificationHook {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(debug_assertions)]
+// A synchronization hook owns a `Barrier` sized for its exact test rendezvous, so it has no
+// meaningful default; `new()` is the only correct constructor.
+#[allow(clippy::new_without_default)]
 impl PasswordVerificationHook {
     pub fn new() -> Self {
         Self {
