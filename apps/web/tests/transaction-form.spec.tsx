@@ -186,6 +186,7 @@ describe("transaction entry", () => {
     expect(call.data.note).toBe("Historical correction");
     expect(call.data.wallet_id).toBeUndefined();
     expect(call.data.category_id).toBeUndefined();
+    expect(call.data.direction).toBeUndefined();
   });
 
   it("maps Rust occurred_local field error to datetime control", async () => {

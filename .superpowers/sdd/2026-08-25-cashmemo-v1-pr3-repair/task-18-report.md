@@ -111,3 +111,16 @@ Added three regression groups before changing implementation:
 - Existing Base UI tests emit unwrapped-`act` warnings; no fix-round test failure remains.
 - Unrelated dirty `.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, `.serena/` remain untouched and
   unstaged. No Orval/generated API files changed.
+
+## Fix round 2: archived direction revalidation
+
+Date: 2026-08-28. Review found update `common` still sent unchanged `direction`; backend can
+revalidate an archived category as active even when note is the only edit.
+
+RED test extended archived note-only update assertion: `direction` was observed as `"expense"`.
+GREEN separates create/update payloads and conditionally includes update `direction` only when it
+differs from transaction read state. Create still always sends direction; deliberate direction
+changes retain existing direction-compatible active-category behavior.
+
+Round 2 gates: focused transaction/history/accessibility `26 passed`; lint, typecheck, and build
+passed. Signed fix commit: `b9325a4` (superseded by signed round-2 commit in handoff).

@@ -209,7 +209,6 @@ export function TransactionForm({
     }
     const common = {
       amount: values.amount.trim(),
-      direction: values.direction,
       note: values.note.trim() || null,
     };
     const occurredLocalChanged = form.formState.dirtyFields.occurred_at === true;
@@ -224,6 +223,7 @@ export function TransactionForm({
       ...common,
       wallet_id: values.wallet_id,
       category_id: values.category_id,
+      direction: values.direction,
       occurred_local: values.occurred_at,
     };
     try {
