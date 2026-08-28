@@ -19,7 +19,7 @@ import {
 import type { TransactionContract } from "../../generated/api/model/transactionContract";
 import { TransactionFilters, readHistoryFilters } from "./filters";
 import { serializeHistoryFilters } from "./history-params";
-import { invalidateTransactionScopes } from "./query-keys";
+import { invalidateTransactionScopes, parseCashmemoTimezone } from "./query-keys";
 
 export { serializeHistoryFilters } from "./history-params";
 
@@ -72,7 +72,7 @@ function TransactionRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem render={<Link href={`/app/transactions/${transaction.id}/edit`} />}>Edit</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onTrash(transaction)}>Move to Trash</DropdownMenuItem>
+          <DropdownMenuItem disabled={!timezone} onClick={() => onTrash(transaction)}>Move to Trash</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </article>
@@ -95,11 +95,11 @@ export function TransactionHistory() {
   const [restoringUndo, setRestoringUndo] = useState(false);
   const queryClient = useQueryClient();
   const onboarding = useGetOnboarding({ query: { retry: 1 } });
-  const timezone = onboarding.data?.data.timezone ?? undefined;
+  const timezone = parseCashmemoTimezone(onboarding.data?.data.timezone);
   const timezonePending = onboarding.isPending || (!timezone && !onboarding.isError);
   const transactions = useListTransactions(
     { ...serializeHistoryFilters(filters), q: query || undefined, cursor, limit: "50" },
-    { query: { retry: 1 } },
+    { query: { retry: cursor === undefined ? 1 : false } },
   );
   const trash = useTrashTransaction();
   const restore = useRestoreTransaction();
@@ -131,6 +131,10 @@ export function TransactionHistory() {
   }, [cursor, transactions.data]);
 
   async function remove(transaction: TransactionContract) {
+    if (!timezone) {
+      setStatus({ kind: "error", text: "Cashmemo timezone is unavailable. Retry onboarding before changing transactions." });
+      return;
+    }
     try {
       await trash.mutateAsync({ transactionId: transaction.id });
       setItems((current) => current.filter((item) => item.id !== transaction.id));
@@ -146,6 +150,10 @@ export function TransactionHistory() {
   async function undoDelete(requested?: TransactionContract) {
     const item = requested ?? undo;
     if (!item || restoring.current) return;
+    if (!timezone) {
+      setStatus({ kind: "error", text: "Cashmemo timezone is unavailable. Retry onboarding before restoring transactions." });
+      return;
+    }
     restoring.current = true;
     setRestoringUndo(true);
     try {

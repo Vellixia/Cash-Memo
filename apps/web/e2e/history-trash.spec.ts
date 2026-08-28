@@ -22,6 +22,10 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
 
   const historyRequests: string[] = [];
   let firstPage: { items?: unknown[]; next_cursor?: string | null } | undefined;
+  let cursorAttempts = 0;
+  const loadedPageMemo = `Loaded ${user.email}`;
+  let walletId: string | undefined;
+  let categoryId: string | undefined;
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (url.pathname === "/api/v1/transactions") historyRequests.push(request.url());
@@ -38,10 +42,26 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
       return;
     }
     if (url.searchParams.get("cursor") === "synthetic-next" && firstPage) {
+      cursorAttempts += 1;
+      if (cursorAttempts === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "cursor unavailable" }),
+        });
+        return;
+      }
+      const firstItem = firstPage.items?.[0];
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ ...firstPage, items: [], next_cursor: null }),
+        body: JSON.stringify({
+          ...firstPage,
+          items: firstItem && typeof firstItem === "object"
+            ? [{ ...firstItem, id: `loaded-${user.email}`, note: loadedPageMemo }]
+            : [],
+          next_cursor: null,
+        }),
       });
       return;
     }
@@ -53,6 +73,11 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
     const payload = await response.json() as { items?: unknown[]; next_cursor?: string | null };
     if (!url.searchParams.has("cursor")) {
       firstPage = payload;
+      const firstItem = payload.items?.[0];
+      if (firstItem && typeof firstItem === "object") {
+        walletId = "wallet_id" in firstItem && typeof firstItem.wallet_id === "string" ? firstItem.wallet_id : undefined;
+        categoryId = "category_id" in firstItem && typeof firstItem.category_id === "string" ? firstItem.category_id : undefined;
+      }
       payload.next_cursor = "synthetic-next";
     }
     await route.fulfill({ response, json: payload });
@@ -66,7 +91,22 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
   const firstPageMemo = page.getByText(originalNote, { exact: true });
   await page.getByRole("button", { name: "Load more" }).click();
   await expect(firstPageMemo).toBeVisible();
-  await page.getByLabel("Search").fill(originalNote);
+  await expect(page.locator("div.field-error[role='alert']")).toContainText("Could not load more transactions");
+  await expect.poll(() => historyRequests.filter((value) => new URL(value).searchParams.get("cursor") === "synthetic-next")).toHaveLength(1);
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText(loadedPageMemo, { exact: true })).toBeVisible();
+  await expect.poll(() => historyRequests.filter((value) => new URL(value).searchParams.get("cursor") === "synthetic-next")).toHaveLength(2);
+  if (!walletId || !categoryId) throw new Error("synthetic transaction filter IDs missing");
+  await page.getByRole("textbox", { name: "Wallet" }).fill(walletId);
+  await expect(page).toHaveURL(new RegExp(`[?&]wallet=${walletId}(?:&|$)`));
+  await expect.poll(() => historyRequests.some((value) => new URL(value).searchParams.get("wallet_id") === walletId)).toBe(true);
+  await page.getByRole("textbox", { name: "Category" }).fill(categoryId);
+  await expect(page).toHaveURL(new RegExp(`[?&]category=${categoryId}(?:&|$)`));
+  await expect.poll(() => historyRequests.some((value) => new URL(value).searchParams.get("category_id") === categoryId)).toBe(true);
+  await page.getByRole("textbox", { name: "Wallet" }).fill("");
+  await page.getByRole("textbox", { name: "Category" }).fill("");
+  await expect(page).toHaveURL(/type=expense(?:$|&)/);
+  await page.getByRole("textbox", { name: "Search" }).fill(originalNote);
   await expect(page).not.toHaveURL(/q=/);
   await expect(page.getByText(originalNote, { exact: true })).toBeVisible();
   await expect(page.getByText(`Other ${user.email}`, { exact: true })).toHaveCount(0);

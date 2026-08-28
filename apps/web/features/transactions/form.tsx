@@ -28,7 +28,7 @@ import type { TransactionContract } from "../../generated/api/model/transactionC
 import type { CreateTransactionRequest } from "../../generated/api/model/createTransactionRequest";
 import type { UpdateTransactionRequest } from "../../generated/api/model/updateTransactionRequest";
 import { transactionSchema, type TransactionFormValues } from "../../lib/validation/transaction";
-import { invalidateTransactionScopes } from "./query-keys";
+import { invalidateTransactionScopes, parseCashmemoTimezone } from "./query-keys";
 
 type DateTimePart = "year" | "month" | "day" | "hour" | "minute";
 
@@ -94,7 +94,8 @@ export function TransactionForm({
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
-  const timezone = defaults.data?.data.timezone ?? "UTC";
+  const configuredTimezone = parseCashmemoTimezone(defaults.data?.data.timezone);
+  const timezone = configuredTimezone;
   const walletRegistry = (wallets.data?.data ?? []).map(({ id, name, currency, archived_at }) => ({
     id,
     name,
@@ -115,8 +116,8 @@ export function TransactionForm({
   ];
   const currencyList = currencies.data?.data ?? [];
   const initialOccurredAt = transaction
-    ? formatUtcForTimezone(transaction.occurred_at, timezone)
-    : formatCurrentLocalMinute(timezone);
+    ? timezone ? formatUtcForTimezone(transaction.occurred_at, timezone) : ""
+    : timezone ? formatCurrentLocalMinute(timezone) : "";
   const exponentRef = useRef<number | undefined>(undefined);
   const form = useForm<TransactionFormValues>({
     resolver: async (values, context, options) =>
@@ -183,8 +184,8 @@ export function TransactionForm({
     if (form.getFieldState("occurred_at").isDirty) return;
     form.resetField("occurred_at", {
       defaultValue: transaction
-        ? formatUtcForTimezone(transaction.occurred_at, timezone)
-        : formatCurrentLocalMinute(timezone),
+        ? timezone ? formatUtcForTimezone(transaction.occurred_at, timezone) : ""
+        : timezone ? formatCurrentLocalMinute(timezone) : "",
     });
     void form.trigger("occurred_at");
   }, [form, timezone, transaction]);
@@ -200,6 +201,10 @@ export function TransactionForm({
 
   async function submit(values: TransactionFormValues) {
     setStatus(undefined);
+    if (!configuredTimezone) {
+      setStatus({ kind: "error", text: "Cashmemo timezone is unavailable. Retry options before saving." });
+      return;
+    }
     if (exponent === undefined) {
       form.setError("amount", {
         type: "currency",
@@ -232,7 +237,7 @@ export function TransactionForm({
         await invalidateTransactionScopes(queryClient, {
           previous: transaction,
           next: { ...transaction, ...response.data },
-          timezone,
+          timezone: configuredTimezone,
         });
         setStatus({ kind: "success", text: "Transaction saved." });
       } else {
@@ -243,14 +248,14 @@ export function TransactionForm({
             category_id: response.data.category_id,
             occurred_at: response.data.occurred_at,
           },
-          timezone,
+          timezone: configuredTimezone,
         });
         setStatus({ kind: "success", text: "Transaction saved." });
         form.reset({
           ...values,
           amount: "",
           note: "",
-          occurred_at: formatCurrentLocalMinute(timezone),
+          occurred_at: formatCurrentLocalMinute(configuredTimezone),
         });
       }
       onSuccess?.();
@@ -271,7 +276,7 @@ export function TransactionForm({
   const occurredError = form.formState.errors.occurred_at?.message;
   const noteError = form.formState.errors.note?.message;
   const submitDisabled =
-    pending || optionsPending || optionsError || exponent === undefined || !form.formState.isValid;
+    pending || optionsPending || optionsError || !configuredTimezone || exponent === undefined || !form.formState.isValid;
 
   return (
     <section className="management-page">

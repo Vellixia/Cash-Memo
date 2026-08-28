@@ -17,7 +17,19 @@ interface Scope {
   occurred_at: string;
 }
 
-function month(occurredAt: string, timezone: string) {
+export type CashmemoTimezone = string & { readonly __cashmemoTimezone: unique symbol };
+
+export function parseCashmemoTimezone(value: string | null | undefined): CashmemoTimezone | undefined {
+  if (!value) return undefined;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value }).format();
+    return value as CashmemoTimezone;
+  } catch {
+    return undefined;
+  }
+}
+
+function month(occurredAt: string, timezone: CashmemoTimezone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
@@ -30,7 +42,7 @@ function month(occurredAt: string, timezone: string) {
   return `${values.year}-${values.month}`;
 }
 
-function keys(scope: Scope, timezone: string) {
+function keys(scope: Scope, timezone: CashmemoTimezone) {
   const scopeMonth = month(scope.occurred_at, timezone);
   return [
     getListTransactionsQueryKey({ wallet_id: scope.wallet_id }),
@@ -47,11 +59,13 @@ function keys(scope: Scope, timezone: string) {
 
 export async function invalidateTransactionScopes(
   client: QueryClient,
-  { previous, next, timezone = "UTC" }: { previous?: Scope; next?: Scope; timezone?: string },
+  { previous, next, timezone }: { previous?: Scope; next?: Scope; timezone: CashmemoTimezone },
 ) {
+  const validTimezone = parseCashmemoTimezone(timezone);
+  if (!validTimezone) throw new Error("Cashmemo timezone is required before invalidation");
   const scopes = [previous, next].filter((scope): scope is Scope => Boolean(scope));
   const queryKeys = scopes
-    .flatMap((scope) => keys(scope, timezone))
+    .flatMap((scope) => keys(scope, validTimezone))
     .filter(
       (queryKey, index, keysForScopes) =>
         keysForScopes.findIndex((value) => JSON.stringify(value) === JSON.stringify(queryKey)) ===

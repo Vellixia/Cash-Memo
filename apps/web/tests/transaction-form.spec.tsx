@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatUtcForTimezone, TransactionForm } from "../features/transactions/form";
-import { invalidateTransactionScopes } from "../features/transactions/query-keys";
+import { invalidateTransactionScopes, parseCashmemoTimezone } from "../features/transactions/query-keys";
 import { transactionSchema } from "../lib/validation/transaction";
 
 const mocks = vi.hoisted(() => ({
@@ -149,7 +149,7 @@ describe("transaction entry", () => {
       category_name: "Food", direction: "expense", note: null, currency: "USD", occurred_at: "2026-08-31T16:30:00Z",
     } as Parameters<typeof TransactionForm>[0]["transaction"];
     const view = renderForm(transaction);
-    expect(screen.getByLabelText<HTMLInputElement>("Occurred at").value).toBe("2026-08-31T16:30");
+    expect(screen.getByLabelText<HTMLInputElement>("Occurred at").value).toBe("");
     mocks.defaultsState = { data: { last_used_wallet_id: "wallet-2", timezone: "Asia/Jakarta" }, isPending: false, isError: false };
     view.rerender(<QueryClientProvider client={view.client}><TransactionForm transaction={transaction} /></QueryClientProvider>);
     await waitFor(() => expect(screen.getByLabelText<HTMLInputElement>("Occurred at").value).toBe("2026-08-31T23:30"));
@@ -215,10 +215,12 @@ describe("transaction entry", () => {
   it("invalidates report month from configured timezone, not UTC month", async () => {
     const client = new QueryClient();
     const spy = vi.spyOn(client, "invalidateQueries").mockResolvedValue(undefined);
+    const timezone = parseCashmemoTimezone("Asia/Jakarta");
+    if (!timezone) throw new Error("configured timezone was rejected");
     await invalidateTransactionScopes(client, {
       previous: { wallet_id: "wallet", category_id: "category", occurred_at: "2026-08-31T17:00:00Z" },
       next: { wallet_id: "wallet", category_id: "category", occurred_at: "2026-09-30T17:00:00Z" },
-      timezone: "Asia/Jakarta",
+      timezone,
     });
     const keys = spy.mock.calls.map(([query]) => query?.queryKey as unknown[]);
     expect(keys).toContainEqual(["/api/v1/reports/monthly-summary", { month: "2026-09" }]);

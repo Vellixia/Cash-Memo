@@ -82,7 +82,7 @@ vi.mock("../generated/api", () => ({
   getGetMonthlySummaryQueryKey: (params?: unknown) => ["/api/v1/reports/monthly-summary", params],
 }));
 import { TransactionHistory, serializeHistoryFilters } from "../features/transactions/history";
-import { invalidateTransactionScopes } from "../features/transactions/query-keys";
+import { invalidateTransactionScopes, parseCashmemoTimezone } from "../features/transactions/query-keys";
 
 function renderHistory() {
   const client = new QueryClient();
@@ -162,13 +162,33 @@ describe("transaction history", () => {
   it("invalidates broad history plus targeted financial and Trash keys", async () => {
     const invalidations: unknown[] = [];
     const client = { invalidateQueries: vi.fn(async ({ queryKey }: { queryKey: unknown }) => { invalidations.push(queryKey); }) } as never;
+    const timezone = parseCashmemoTimezone("Asia/Jakarta");
+    if (!timezone) throw new Error("configured timezone was rejected");
     await invalidateTransactionScopes(client, {
       previous: { wallet_id: "w", category_id: "c", occurred_at: "2026-08-20T00:00:00Z" },
-      timezone: "Asia/Jakarta",
+      timezone,
     });
     expect(invalidations).toContainEqual(["/api/v1/transactions"]);
     expect(invalidations).toContainEqual(["/api/v1/transactions/trash"]);
     expect(invalidations).toContainEqual(["/api/v1/transactions", { wallet_id: "w" }]);
+  });
+  it("requires validated timezone before calculating financial month scopes", async () => {
+    const invalidations: unknown[] = [];
+    const client = { invalidateQueries: vi.fn(async ({ queryKey }: { queryKey: unknown }) => { invalidations.push(queryKey); }) } as never;
+    await expect(invalidateTransactionScopes(client, {
+      previous: { wallet_id: "w", category_id: "c", occurred_at: "2026-01-31T17:00:00Z" },
+    } as never)).rejects.toThrow(/timezone/i);
+    expect(invalidations).toEqual([]);
+    const timezone = parseCashmemoTimezone("Asia/Jakarta");
+    if (!timezone) throw new Error("configured timezone was rejected");
+    await invalidateTransactionScopes(client, {
+      previous: { wallet_id: "w", category_id: "c", occurred_at: "2026-01-31T17:00:00Z" },
+      timezone,
+    });
+    expect(invalidations).toContainEqual([
+      "/api/v1/transactions",
+      { from: "2026-02-01", to: "2026-02-28" },
+    ]);
   });
   it("does not render financial dates until authenticated timezone is ready", () => {
     mocks.timezoneState = "pending";

@@ -174,3 +174,59 @@ the preceding fresh-service E2E web-server build had already completed successfu
 - Round-1 implementation and verification: `633325a` (signed; Good signature from
   `andres (personal-mac) <andresholivin01@gmail.com>`).
 - This report SHA is recorded by the signed report follow-up commit immediately after this change.
+
+## Round 2/5 repair follow-up
+
+### RED evidence
+
+The new timezone-boundary test was added first and observed RED: omitting timezone resolved and
+calculated a month using the implicit runtime zone/UTC fallback instead of rejecting before any
+invalidation. The test then proves `Asia/Jakarta` moves `2026-01-31T17:00:00Z` into the February
+local-month query bounds. Browser assertions were added for a first opaque-cursor failure, retained
+first-page rows, retrying only that cursor, successful append, and UI-driven wallet/category
+filters.
+
+### Implementation
+
+- `CashmemoTimezone` is now a validated branded boundary. `parseCashmemoTimezone` accepts only an
+  IANA timezone recognized by `Intl`; `invalidateTransactionScopes` requires it and rejects before
+  calculating month keys when absent/invalid. No UTC fallback remains in transaction form date
+  presentation, history/Trash dates, or financial invalidation.
+- History/Trash mutation callers parse authenticated onboarding timezone and gate actions until it
+  is ready. Transaction form save is disabled and rejected with a retryable status until validated
+  defaults arrive; successful create/update invalidation receives the branded timezone.
+- Cursor-page queries disable automatic retry (`retry: false` once an opaque cursor exists), so a
+  failed page retains rows and exposes explicit Retry for that exact cursor. Successful retry
+  appends deduplicated rows.
+- Chromium E2E now injects one 503 cursor failure, checks retained rows, counts exactly one failed
+  cursor request then one retry, verifies an appended synthetic row, fills wallet/category through
+  visible controls, and asserts both structured URL keys and API `wallet_id`/`category_id` transport.
+
+### Round 2 GREEN and audits
+
+- `/Users/andresholivin/.nvm/versions/node/v24.14.0/bin` + `pnpm toolchain:check` → Node
+  `24.14.0`, pnpm `11.13.1`.
+- `cd apps/web && pnpm vitest run tests/history.spec.tsx tests/trash.spec.tsx tests/transaction-form.spec.tsx` → `25/25`.
+- `cd apps/web && pnpm vitest run` → `16 files`, `149/149`.
+- `cd apps/web && pnpm lint` → exit 0.
+- `cd apps/web && pnpm typecheck` → exit 0.
+- `cd apps/web && pnpm exec playwright test e2e/history-trash.spec.ts --project=chromium` →
+  Chromium `1 passed` in `32.8s`, fresh named Postgres/Mailpit/API services with cleanup.
+- Fresh-service Playwright web-server build completed successfully; no generated API, server,
+  production, or unrelated instruction paths changed.
+
+### Round 2 concerns
+
+The E2E API bridge required forwarding intercepted requests to the configured API origin; direct
+`route.continue()` would bypass the existing bridge and return Next 404s. The synthetic cursor
+route is test-only interception and does not alter production behavior. The form’s empty occurred
+at value while timezone is pending is intentional: it prevents displaying a browser/UTC-derived
+financial time and keeps save disabled until authenticated configuration is ready. Existing dirty
+`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, and `.serena/` remain untouched and unstaged.
+
+## Round 2 final verification
+
+The final round-2 Chromium run passed `1` test in `32.8s` with fresh named services. Full Vitest
+remained `149/149`; focused history/Trash/form was `25/25`; lint, serial typecheck, and pinned
+toolchain check all passed. Build completed inside the Playwright web-server startup. Changes are
+ready in the final signed round-2 implementation commit containing this report.

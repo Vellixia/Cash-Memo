@@ -23,7 +23,7 @@ import {
   useRestoreTransaction,
 } from "../../generated/api";
 import type { TransactionContract } from "../../generated/api/model/transactionContract";
-import { invalidateTransactionLifecycleScopes, invalidateTransactionScopes } from "./query-keys";
+import { invalidateTransactionLifecycleScopes, invalidateTransactionScopes, parseCashmemoTimezone } from "./query-keys";
 
 function errorText(error: unknown) {
   return (error as { message?: string }).message ?? "Request unavailable. Try again.";
@@ -38,7 +38,7 @@ export function TransactionTrash() {
   const queryClient = useQueryClient();
   const list = useListTrashedTransactions(undefined, { query: { retry: 1 } });
   const onboarding = useGetOnboarding({ query: { retry: 1 } });
-  const timezone = onboarding.data?.data.timezone ?? undefined;
+  const timezone = parseCashmemoTimezone(onboarding.data?.data.timezone);
   const timezonePending = onboarding.isPending || (!timezone && !onboarding.isError);
   const restore = useRestoreTransaction();
   const remove = usePermanentlyDeleteTransaction();
@@ -51,6 +51,10 @@ export function TransactionTrash() {
 
   async function restoreItem(item: TransactionContract) {
     if (restoring.current.has(item.id)) return;
+    if (!timezone) {
+      setStatus({ kind: "error", text: "Cashmemo timezone is unavailable. Retry onboarding before restoring transactions." });
+      return;
+    }
     restoring.current.add(item.id);
     setPendingAction({ type: "restore", id: item.id });
     try {
