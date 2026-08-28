@@ -3,7 +3,7 @@
 Date: 2026-08-28
 Branch: `rewrite/cashmemo-v1`
 Base SHA: `2442f6d79bf27e8165a37225e018ecbf1e3cdc41`
-Implementation commit: pending signed commit (updated after commit)
+Implementation commit: `cbbe35c` (signed; final SHA updated below)
 
 ## Scope and files
 
@@ -104,4 +104,4 @@ remain covered by existing global CSS and focused component tests.
 
 ## Final commit
 
-Updated after signed commit: pending.
+Updated after signed commit: `cbbe35c` (signed commit; verify with `git log --show-signature -1`).
