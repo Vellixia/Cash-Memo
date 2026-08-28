@@ -9,10 +9,12 @@ const mocks = vi.hoisted(() => {
     access: string | undefined;
     isPending: boolean;
     isError: boolean;
+    errorStatus?: number;
   } = {
     access: "FULL",
     isPending: false,
     isError: false,
+    errorStatus: undefined,
   };
 
   return {
@@ -32,7 +34,9 @@ vi.mock("../features/auth/use-session", () => ({
     data: mocks.session.access ? { data: { access: mocks.session.access } } : undefined,
     isPending: mocks.session.isPending,
     isError: mocks.session.isError,
-    error: null,
+    error: mocks.session.errorStatus
+      ? { response: { status: mocks.session.errorStatus } }
+      : null,
   }),
 }));
 
@@ -154,6 +158,7 @@ describe("app shell navigation", () => {
     mocks.session.access = "FULL";
     mocks.session.isPending = false;
     mocks.session.isError = false;
+    mocks.session.errorStatus = undefined;
   });
 
   afterEach(cleanup);
@@ -283,8 +288,16 @@ describe("app shell navigation", () => {
     expect(restricted.filter((file) => file.startsWith("components/app-shell/"))).toEqual([]);
   });
 
+  it("keeps the app layout free of static shell imports until full access is confirmed", () => {
+    const layout = reachableModules(resolve(webRoot, "app/(auth)/app/layout.tsx"));
+    expect(layout).toContain("components/auth-gate.tsx");
+    expect(layout.filter((file) => file.startsWith("components/app-shell/"))).toEqual([]);
+  });
+
   it("never mounts the shell for a deletion-only session", async () => {
-    mocks.session.access = "DELETION_ONLY";
+    mocks.session.access = undefined;
+    mocks.session.isError = true;
+    mocks.session.errorStatus = 403;
     renderWithQuery(
       <AppLayout>
         <p>financial content</p>

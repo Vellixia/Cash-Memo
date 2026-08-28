@@ -184,3 +184,11 @@ No regeneration/version change was needed. Partial generated files were audited 
 | `apps/web/e2e/support/auth.ts` | onboarding helper had to drop the obsolete visible category step and select the combobox timezone option by accessible role |
 | `apps/web/e2e/auth-onboarding.spec.ts` | desktop label/focus assumptions changed with `Transactions` rename and route-driven Add placement; focused mobile `More` sheet verification added |
 | `docs/verification/v1-pr3-ui-primitive-inventory.md` | brief step 12/13 controller requirement |
+
+## Follow-up Fix Round 1 (2026-08-28)
+
+| Surface | Change | Why |
+| --- | --- | --- |
+| `/app` auth layout import boundary | added `apps/web/components/full-access-app-shell.tsx` wrapper with `next/dynamic` shell load | restricted `/app` sessions must redirect before `AppShell` code imports or mounts |
+| onboarding currency registry pending/error UX | explicit loading `status`, retryable error `alert`, disabled input until registry recovers | pending/error registry state is not user validation; client must wait for authoritative server registry |
+| focused regressions | added `/app` layout module-graph test plus onboarding currency pending/error/recovery tests | preserves restricted-shell isolation and durable onboarding accessibility after repair |

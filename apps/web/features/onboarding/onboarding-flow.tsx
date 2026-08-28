@@ -66,11 +66,15 @@ export function OnboardingFlow() {
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const redirected = useRef(false);
   const timezoneOptions = getTimezoneOptions();
+  const currencyRegistryPending = currencies.isPending;
+  const currencyRegistryError = currencies.isError;
+  const currencyRegistryReady = !currencyRegistryPending && !currencyRegistryError;
   const currencyList = currencies.data?.data ?? [];
-  const currencyCodes = currencyList.map((item) => item.code);
+  const currencyCodes = currencyRegistryReady ? currencyList.map((item) => item.code) : [];
   const timezoneMatches = timezoneOptions.includes(timezone.trim());
   const currencyValue = currency.trim().toUpperCase();
-  const currencyMatches = matchesCurrency(currencyValue, currencyCodes);
+  const currencyMatches = currencyRegistryReady && matchesCurrency(currencyValue, currencyCodes);
+  const showCurrencyValidation = currencyRegistryReady && !currencyMatches && status?.kind === "error";
 
   useEffect(() => {
     if (!onboarding.state) return;
@@ -149,6 +153,11 @@ export function OnboardingFlow() {
     setStatus(undefined);
     if (!timezoneMatches) {
       setStatus({ kind: "error", text: "Choose an exact IANA timezone from the list." });
+      return;
+    }
+    if (currencyRegistryPending) return;
+    if (currencyRegistryError) {
+      setStatus({ kind: "error", text: "Supported currencies are unavailable. Retry the registry." });
       return;
     }
     if (!currencyMatches) {
@@ -251,20 +260,53 @@ export function OnboardingFlow() {
                   value={currency}
                   onChange={(event) => {
                     setCurrency(event.target.value.toUpperCase());
+                    setStatus(undefined);
                   }}
+                  disabled={currencyRegistryPending || currencyRegistryError}
                   autoComplete="off"
                   placeholder="USD"
                   aria-describedby={
-                    currencyMatches ? currencyHelpId : `${currencyHelpId} ${currencyErrorId}`
+                    currencyRegistryPending
+                      ? currencyHelpId
+                      : currencyRegistryError
+                        ? currencyErrorId
+                        : showCurrencyValidation
+                          ? `${currencyHelpId} ${currencyErrorId}`
+                          : currencyHelpId
                   }
-                  aria-invalid={!currencyMatches}
+                  aria-invalid={showCurrencyValidation ? true : undefined}
                 />
-                <FieldDescription id={currencyHelpId}>
-                  Enter one supported currency code: {currencyCodes.join(", ")}.
-                </FieldDescription>
-                {!currencyMatches ? (
-                  <FieldError id={currencyErrorId}>Choose a supported currency code.</FieldError>
-                ) : null}
+                {currencyRegistryPending ? (
+                  <FieldDescription id={currencyHelpId} role="status">
+                    Loading supported currencies.
+                  </FieldDescription>
+                ) : currencyRegistryError ? (
+                  <div className="onboarding-stack">
+                    <Alert variant="destructive" id={currencyErrorId}>
+                      <AlertTitle>Could not load supported currencies.</AlertTitle>
+                      <AlertDescription>Retry the registry before choosing a default currency.</AlertDescription>
+                    </Alert>
+                    <Button
+                      type="button"
+                      variant="quiet"
+                      onClick={() => {
+                        setStatus(undefined);
+                        void currencies.refetch();
+                      }}
+                    >
+                      Retry currency registry
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <FieldDescription id={currencyHelpId}>
+                      Enter one supported currency code: {currencyCodes.join(", ")}.
+                    </FieldDescription>
+                    {showCurrencyValidation ? (
+                      <FieldError id={currencyErrorId}>Choose a supported currency code.</FieldError>
+                    ) : null}
+                  </>
+                )}
               </FieldContent>
             </Field>
           </section>
@@ -287,7 +329,11 @@ export function OnboardingFlow() {
               type="button"
               onClick={() => void savePreferences()}
               disabled={
-                onboarding.isMutating || currencies.isPending || currencies.isError || !timezoneMatches || !currencyMatches
+                onboarding.isMutating ||
+                currencyRegistryPending ||
+                currencyRegistryError ||
+                !timezoneMatches ||
+                !currencyMatches
               }
               className="onboarding-primary"
             >

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     queryState: "success",
+    currencyState: "success",
     state,
     currencies: [
       { code: "USD", display_name: "US Dollar", exponent: 2 },
@@ -37,6 +38,7 @@ const mocks = vi.hoisted(() => {
     }),
     invalidate: vi.fn().mockResolvedValue(undefined),
     refetch: vi.fn().mockResolvedValue(undefined),
+    retryCurrencies: vi.fn().mockResolvedValue(undefined),
     routes: [] as string[],
   };
 });
@@ -50,7 +52,12 @@ vi.mock("../generated/api", () => ({
     isError: mocks.queryState === "error",
     refetch: mocks.refetch,
   }),
-  useListCurrencies: () => ({ data: { data: mocks.currencies }, isPending: false, isError: false }),
+  useListCurrencies: () => ({
+    data: mocks.currencyState === "success" ? { data: mocks.currencies } : undefined,
+    isPending: mocks.currencyState === "loading",
+    isError: mocks.currencyState === "error",
+    refetch: mocks.retryCurrencies,
+  }),
   useUpdatePreferences: () => ({ mutateAsync: mocks.save, isPending: false }),
   useCreateWallet: () => ({ mutateAsync: mocks.walletCreate, isPending: false }),
   useUpdateWallet: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -91,6 +98,7 @@ describe("derived onboarding", () => {
   beforeEach(() => {
     cleanup();
     mocks.queryState = "success";
+    mocks.currencyState = "success";
     mocks.state = contract({ default_currency_configured: false, default_currency_code: null });
     mocks.save.mockReset().mockResolvedValue({ data: {} });
     mocks.walletCreate.mockReset().mockResolvedValue({
@@ -105,6 +113,7 @@ describe("derived onboarding", () => {
     });
     mocks.invalidate.mockClear();
     mocks.refetch.mockClear();
+    mocks.retryCurrencies.mockClear();
     mocks.routes.length = 0;
   });
 
@@ -223,6 +232,49 @@ describe("derived onboarding", () => {
     fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "EUR" } });
     expect(save).toHaveProperty("disabled", false);
     fireEvent.click(save);
+    await waitFor(() => {
+      expect(mocks.save).toHaveBeenCalledWith({
+        data: { timezone: "America/New_York", default_currency_code: "EUR" },
+      });
+    });
+  });
+
+  it("shows an explicit currency-registry pending state and suppresses validation until ready", () => {
+    mocks.state = contract({
+      timezone: "America/New_York",
+      default_currency_configured: false,
+      default_currency_code: null,
+    });
+    mocks.currencyState = "loading";
+    renderOnboarding();
+
+    const currency = screen.getByLabelText<HTMLInputElement>("Default currency");
+    expect(currency.disabled).toBe(true);
+    expect(currency.getAttribute("aria-invalid")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Loading supported currencies.");
+    expect(screen.queryByText("Choose a supported currency code.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save currency" })).toHaveProperty("disabled", true);
+  });
+
+  it("shows a retryable currency-registry error and recovers to a successful save", async () => {
+    mocks.state = contract({
+      timezone: "America/New_York",
+      default_currency_configured: false,
+      default_currency_code: null,
+    });
+    mocks.currencyState = "error";
+    const first = renderOnboarding();
+
+    expect(screen.getByRole("alert").textContent).toContain("Could not load supported currencies.");
+    fireEvent.click(screen.getByRole("button", { name: "Retry currency registry" }));
+    expect(mocks.retryCurrencies).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    mocks.currencyState = "success";
+    renderOnboarding();
+    fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "EUR" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save currency" }));
+
     await waitFor(() => {
       expect(mocks.save).toHaveBeenCalledWith({
         data: { timezone: "America/New_York", default_currency_code: "EUR" },

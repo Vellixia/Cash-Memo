@@ -53,6 +53,7 @@ All web commands below therefore used `pnpm -C apps/web exec …` or `pnpm -C ap
 - `apps/web/app/globals.css`
 - `apps/web/components/app-shell/bottom-nav.tsx`
 - `apps/web/components/app-shell/sidebar.tsx`
+- `apps/web/components/full-access-app-shell.tsx`
 - `apps/web/components/ui/combobox.tsx`
 - `apps/web/components/ui/input-group.tsx`
 - `apps/web/components/ui/sheet.tsx`
@@ -240,6 +241,58 @@ Cause: stale E2E assumption that focus order was `brand → Overview`. Final she
   omitting `More`; repaired to five-slot nav plus sheet.
 - plan literal `pnpm --dir apps/web …` contradicted actual local pnpm invocation behavior on this
   host; equivalent pinned `pnpm -C apps/web …` form used instead.
+
+## Follow-up fix round 1 — restricted shell boundary and currency registry states
+
+New RED added for two gaps left after first recovery:
+
+```
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web exec vitest run tests/accessibility.spec.tsx tests/onboarding.spec.tsx
+FAIL tests/accessibility.spec.tsx > app shell navigation > keeps the app layout free of static shell imports until full access is confirmed
+FAIL tests/onboarding.spec.tsx > derived onboarding > shows an explicit currency-registry pending state and suppresses validation until ready
+FAIL tests/onboarding.spec.tsx > derived onboarding > shows a retryable currency-registry error and recovers to a successful save
+```
+
+Root causes:
+
+- `apps/web/app/(auth)/app/layout.tsx` statically imported `AppShell`, so the `/app` layout module
+  graph always pulled financial shell code before `AuthGate` could redirect a restricted session.
+- `onboarding-flow.tsx` treated currency-query pending/error as an empty registry, exposing invalid
+  help/error copy instead of explicit loading/error states.
+
+Implementation:
+
+- moved `/app` layout shell loading behind `components/full-access-app-shell.tsx`, which uses
+  `next/dynamic` to load `components/app-shell/app-shell.tsx` only when the full-access gate
+  renders;
+- added `/app` layout regression proving no static shell modules are reachable from the layout
+  import graph and no shell mounts during a restricted `403` redirect;
+- added explicit currency-registry pending `status`, retryable error `alert`, disabled input while
+  registry is unavailable, and guarded save-path validation until registry is ready;
+- extended onboarding tests to cover pending, error, retry, recovery, and successful save after
+  registry recovery.
+
+Fresh GREEN after the fix round:
+
+```
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web exec vitest run tests/accessibility.spec.tsx tests/onboarding.spec.tsx
+Test Files  2 passed (2)
+Tests  24 passed (24)
+
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web lint
+exit 0
+
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web typecheck
+$ next typegen && tsc --noEmit
+Generating route types...
+✓ Types generated successfully
+
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web build
+✓ Compiled successfully
+
+$ COMPOSE_PROJECT_NAME=cashmemo-pr3-task16-fix1 CASHMEMO_V1_E2E_POSTGRES_PORT=57446 CASHMEMO_V1_E2E_SMTP_PORT=1135 CASHMEMO_V1_E2E_MAILPIT_PORT=8835 PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web exec playwright test e2e/auth-onboarding.spec.ts
+3 passed (37.2s)
+```
 
 ## Self-review / concerns
 
