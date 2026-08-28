@@ -133,6 +133,13 @@ export function TransactionHistory() {
     setNextCursor(page.next_cursor ?? null);
   }, [cursor, transactions.data]);
 
+  async function retryTimezoneAndTransactions() {
+    const refreshed = await onboarding.refetch();
+    if (parseCashmemoTimezone(refreshed.data?.data.timezone)) {
+      await transactions.refetch();
+    }
+  }
+
   async function remove(transaction: TransactionContract) {
     if (!timezone) {
       setStatus({ kind: "error", text: "Cashmemo timezone is unavailable. Retry onboarding before changing transactions." });
@@ -172,8 +179,23 @@ export function TransactionHistory() {
     }
   }
 
-  if (transactions.isPending && items.length === 0) return <p className="loading-state">Loading transactions…</p>;
-  if (transactions.isError && items.length === 0)
+  if (!timezone && !transactions.data && items.length === 0) {
+    return (
+      <section>
+        <h1>Transactions</h1>
+        {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
+        {timezoneError ? (
+          <p role="alert" className="field-error">
+            Could not load timezone configuration.{" "}
+            <Button type="button" onClick={() => void retryTimezoneAndTransactions()}>Retry timezone</Button>
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (timezone && transactions.isPending && items.length === 0) return <p className="loading-state">Loading transactions…</p>;
+  if (timezone && transactions.isError && items.length === 0)
     return (
       <section>
         <h1>Transactions</h1>
@@ -190,7 +212,7 @@ export function TransactionHistory() {
       </div>
       <TransactionFilters query={query} onQueryChange={setQuery} />
       {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
-      {timezoneError ? <p role="alert" className="field-error">Could not load timezone configuration. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
+      {timezoneError ? <p role="alert" className="field-error">Could not load timezone configuration. <Button type="button" onClick={() => void retryTimezoneAndTransactions()}>Retry timezone</Button></p> : null}
       {status ? (
         <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>
           {status.text} {undo ? <Button type="button" variant="quiet" onClick={() => void undoDelete()} disabled={restoringUndo} aria-busy={restoringUndo}>Undo</Button> : null}

@@ -52,6 +52,13 @@ export function TransactionTrash() {
   const transactions = items ?? list.data?.data.items ?? [];
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
 
+  async function retryTimezoneAndList() {
+    const refreshed = await onboarding.refetch();
+    if (parseCashmemoTimezone(refreshed.data?.data.timezone)) {
+      await list.refetch();
+    }
+  }
+
   async function restoreItem(item: TransactionContract) {
     if (restoring.current.has(item.id)) return;
     if (!timezone) {
@@ -90,8 +97,23 @@ export function TransactionTrash() {
     }
   }
 
-  if (list.isPending) return <p className="loading-state">Loading Trash…</p>;
-  if (list.isError)
+  if (!timezone && !list.data && transactions.length === 0) {
+    return (
+      <section>
+        <h1>Trash</h1>
+        {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
+        {timezoneError ? (
+          <p role="alert" className="field-error">
+            Could not load timezone configuration.{" "}
+            <Button type="button" onClick={() => void retryTimezoneAndList()}>Retry timezone</Button>
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (timezone && list.isPending) return <p className="loading-state">Loading Trash…</p>;
+  if (timezone && list.isError)
     return (
       <section>
         <h1>Trash</h1>
@@ -106,7 +128,7 @@ export function TransactionTrash() {
         <div><p className="muted">Recover deleted memos before purge</p><h1>Trash</h1></div>
       </div>
       {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
-      {timezoneError ? <p role="alert" className="field-error">Could not load timezone configuration. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
+      {timezoneError ? <p role="alert" className="field-error">Could not load timezone configuration. <Button type="button" onClick={() => void retryTimezoneAndList()}>Retry timezone</Button></p> : null}
       {status ? <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>{status.text}</p> : null}
       {transactions.length === 0 ? (
         <div className="empty-state"><h2>Trash is empty</h2><p>Deleted memos will appear here until their scheduled purge.</p></div>
@@ -124,7 +146,15 @@ export function TransactionTrash() {
                 <MoneyAmount value={item.amount} currency={item.currency} direction={item.direction as "income" | "expense"} />
               </div>
               <div className="card-actions">
-                <Button type="button" onClick={() => void restoreItem(item)} disabled={pendingAction?.id === item.id} aria-busy={pendingAction?.id === item.id}>Restore</Button>
+                <Button
+                  type="button"
+                  onClick={() => void restoreItem(item)}
+                  disabled={!timezone || pendingAction?.id === item.id}
+                  aria-disabled={!timezone || undefined}
+                  aria-busy={pendingAction?.id === item.id}
+                >
+                  Restore
+                </Button>
                 <AlertDialog>
                   <AlertDialogTrigger render={<Button type="button" variant="quiet" />}>Delete forever</AlertDialogTrigger>
                   <AlertDialogContent>

@@ -276,3 +276,56 @@ and recovery when valid data returns.
 The registry intentionally follows the backend `chrono-tz 0.10.4` source rather than browser ICU
 availability, preventing browser/runtime drift and numeric-offset acceptance. Existing dirty
 `.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, and `.serena/` remain untouched and unstaged.
+
+## Round 4/5 repair follow-up
+
+### RED evidence
+
+- Added a no-DB Rust contract test that reads the frontend registry and parses every value through
+  pinned backend `chrono_tz::Tz`. Its first run failed with exactly six rejected values:
+  `Africa/PortoNovo`, `America/BlancSablon`, `America/PortauPrince`, `Asia/UstNera`,
+  `US/EastIndiana`, and `US/IndianaStarke`.
+- Added behavior tests before component changes. Focused Vitest first failed three tests: Trash
+  Restore remained enabled while timezone was pending/invalid; History list pending hid timezone
+  pending; Trash list error hid invalid-timezone retry and one-action recovery.
+- A second RED cycle asserted list failures must not render false “empty” states while timezone
+  configuration is unavailable. History and Trash both failed those assertions before the gate
+  repair.
+
+### Implementation
+
+- Moved all 520 branded Cashmemo timezone values to
+  `apps/web/features/transactions/cashmemo-timezones.json`; `timezones.ts` now consumes that file
+  directly. Corrected the six missing-hyphen names. The backend parity test reads the same JSON,
+  so every value the frontend can brand is exhaustively checked against pinned `chrono-tz 0.10.4`.
+- History and Trash give authenticated timezone state precedence when their list request is also
+  pending or failed. With no prior list data, users see timezone loading/error/retry without a false
+  list loading/error or empty state. Successfully loaded rows remain visible while timezone is
+  unavailable, but date content and financial lifecycle actions stay gated.
+- Trash Restore is natively disabled and exposes `aria-disabled` until a valid branded timezone is
+  available; mutation pending state still exposes `aria-busy`.
+- `Retry timezone` now awaits onboarding refetch, validates the returned timezone, then refetches
+  the failed History/Trash list. One action therefore recovers invalid-to-valid configuration and
+  its dependent list without an ordering race or second manual retry.
+
+### Round 4 GREEN and audits
+
+- `/Users/andresholivin/.nvm/versions/node/v24.14.0/bin` + root `pnpm toolchain:check` → Node
+  `24.14.0`, pnpm `11.13.1`.
+- `cargo test -p cashmemo-api --test timezone_registry` → `1/1`; no database required.
+- `cargo fmt --all -- --check` → exit 0.
+- `cd apps/web && pnpm vitest run tests/history.spec.tsx tests/trash.spec.tsx tests/transaction-form.spec.tsx` → `32/32`.
+- `cd apps/web && pnpm vitest run` → `16 files`, `156/156`.
+- `cd apps/web && pnpm lint` → exit 0.
+- `cd apps/web && pnpm typecheck` → exit 0.
+- `cd apps/web && pnpm build` → exit 0; all app routes compiled.
+- `cd apps/web && pnpm exec playwright test e2e/history-trash.spec.ts --project=chromium` →
+  Chromium `1 passed` in `41.0s`, fresh Postgres/Mailpit/API services.
+
+### Round 4 concerns
+
+Round 3 described the handwritten registry as 518 entries; direct extraction found 520 values.
+Round 4 preserves all 520 as the explicit product subset and tests subset compatibility, not full
+backend-to-frontend equality. The first toolchain check was invoked from `apps/web`, where that
+root-owned script does not exist; the corrected root invocation passed. Existing dirty
+`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, and `.serena/` remain untouched and unstaged.

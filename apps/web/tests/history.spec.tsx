@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   requestParams: [] as unknown[],
   toast: vi.fn(),
   timezoneState: ["ready"][0],
+  listRefetch: vi.fn().mockResolvedValue({ data: undefined }),
+  onboardingRefetch: vi.fn().mockResolvedValue({ data: undefined }),
+  retryOrder: [] as string[],
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("next/navigation", () => ({
@@ -58,9 +61,9 @@ vi.mock("../generated/api", () => ({
               },
             }
           : undefined,
-      isPending: false,
+      isPending: mocks.state === "pending",
       isError: mocks.state === "error",
-      refetch: vi.fn(),
+      refetch: mocks.listRefetch,
       queryKey: params,
     };
   },
@@ -72,7 +75,7 @@ vi.mock("../generated/api", () => ({
       : mocks.timezoneState === "invalid" ? { data: { timezone: "+05:00" } } : undefined,
     isPending: mocks.timezoneState === "pending",
     isError: mocks.timezoneState === "error",
-    refetch: vi.fn(),
+    refetch: mocks.onboardingRefetch,
   }),
   getListTransactionsQueryKey: (params?: unknown) => params ? ["/api/v1/transactions", params] : ["/api/v1/transactions"],
   getListTrashedTransactionsQueryKey: () => ["/api/v1/transactions/trash"],
@@ -95,6 +98,18 @@ function renderHistory() {
   );
 }
 describe("transaction history", () => {
+  beforeEach(() => {
+    mocks.state = "success";
+    mocks.timezoneState = "ready";
+    mocks.calls.length = 0;
+    mocks.requestParams.length = 0;
+    mocks.retryOrder.length = 0;
+    mocks.trash.mockReset().mockResolvedValue({ data: {} });
+    mocks.restore.mockReset().mockResolvedValue({ data: {} });
+    mocks.toast.mockReset();
+    mocks.listRefetch.mockReset().mockResolvedValue({ data: undefined });
+    mocks.onboardingRefetch.mockReset().mockResolvedValue({ data: undefined });
+  });
   it("serializes semantic local-day filters and excludes q, invalid, or empty values", () => {
     expect(serializeHistoryFilters({ from: "2026-01-01", to: "2026-01-31", q: "food" })).toEqual({
       from: "2026-01-01",
@@ -215,6 +230,37 @@ describe("transaction history", () => {
     mocks.timezoneState = "ready";
     view.rerender(<QueryClientProvider client={new QueryClient()}><TransactionHistory /></QueryClientProvider>);
     expect(screen.queryByText("Could not load timezone configuration.")).toBeNull();
+  });
+  it("prioritizes timezone state and one retry recovers timezone plus failed history", async () => {
+    mocks.state = "pending";
+    mocks.timezoneState = "pending";
+    const pending = renderHistory();
+    expect(screen.getByText("Loading timezone…")).toBeTruthy();
+    expect(screen.queryByText("Loading transactions…")).toBeNull();
+    expect(screen.queryByText("No transactions match these filters")).toBeNull();
+    pending.unmount();
+
+    mocks.state = "error";
+    mocks.timezoneState = "invalid";
+    mocks.onboardingRefetch.mockImplementationOnce(async () => {
+      mocks.retryOrder.push("timezone");
+      mocks.timezoneState = "ready";
+      return { data: { data: { timezone: "Asia/Jakarta" } } };
+    });
+    mocks.listRefetch.mockImplementationOnce(async () => {
+      mocks.retryOrder.push("history");
+      mocks.state = "success";
+      return { data: undefined };
+    });
+    const view = renderHistory();
+    expect(screen.getByText(/Could not load timezone configuration/)).toBeTruthy();
+    expect(screen.queryByText("Could not load transactions.")).toBeNull();
+    expect(screen.queryByText("No transactions match these filters")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry timezone" }));
+    await waitFor(() => expect(mocks.retryOrder).toEqual(["timezone", "history"]));
+    view.rerender(<QueryClientProvider client={new QueryClient()}><TransactionHistory /></QueryClientProvider>);
+    expect(screen.queryByText("Could not load timezone configuration.")).toBeNull();
+    expect(screen.queryByText("Could not load transactions.")).toBeNull();
   });
   it("keeps q ephemeral while structured filters use URL replace", () => {
     renderHistory();

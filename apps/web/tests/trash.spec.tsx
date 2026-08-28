@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const mocks = vi.hoisted(() => ({
   restore: vi.fn().mockResolvedValue({ data: {} }),
   remove: vi.fn().mockResolvedValue({}),
   timezoneState: ["ready"][0],
+  listState: ["success"][0],
+  listRefetch: vi.fn().mockResolvedValue({ data: undefined }),
+  onboardingRefetch: vi.fn().mockResolvedValue({ data: undefined }),
+  retryOrder: [] as string[],
 }));
 
 function deferred<T>() {
@@ -18,7 +22,7 @@ function deferred<T>() {
 }
 vi.mock("../generated/api", () => ({
   useListTrashedTransactions: () => ({
-    data: {
+    data: mocks.listState === "success" ? {
       data: {
         items: [
           {
@@ -37,10 +41,10 @@ vi.mock("../generated/api", () => ({
         ],
         next_cursor: null,
       },
-    },
-    isPending: false,
-    isError: false,
-    refetch: vi.fn(),
+    } : undefined,
+    isPending: mocks.listState === "pending",
+    isError: mocks.listState === "error",
+    refetch: mocks.listRefetch,
   }),
   useGetOnboarding: () => ({
     data: mocks.timezoneState === "ready"
@@ -48,7 +52,7 @@ vi.mock("../generated/api", () => ({
       : mocks.timezoneState === "invalid" ? { data: { timezone: "+05:00" } } : undefined,
     isPending: mocks.timezoneState === "pending",
     isError: mocks.timezoneState === "error",
-    refetch: vi.fn(),
+    refetch: mocks.onboardingRefetch,
   }),
   useRestoreTransaction: () => ({ mutateAsync: mocks.restore, isPending: false }),
   usePermanentlyDeleteTransaction: () => ({ mutateAsync: mocks.remove, isPending: false }),
@@ -76,6 +80,15 @@ function permanentDeleteAction() {
   return action;
 }
 describe("transaction trash", () => {
+  beforeEach(() => {
+    mocks.timezoneState = "ready";
+    mocks.listState = "success";
+    mocks.retryOrder.length = 0;
+    mocks.restore.mockReset().mockResolvedValue({ data: {} });
+    mocks.remove.mockReset().mockResolvedValue({});
+    mocks.listRefetch.mockReset().mockResolvedValue({ data: undefined });
+    mocks.onboardingRefetch.mockReset().mockResolvedValue({ data: undefined });
+  });
   it("shows lifecycle dates in configured timezone and restores transaction", async () => {
     mocks.restore.mockClear();
     renderTrash();
@@ -106,6 +119,39 @@ describe("transaction trash", () => {
     mocks.timezoneState = "ready";
     view.rerender(<QueryClientProvider client={new QueryClient()}><TransactionTrash /></QueryClientProvider>);
     expect(screen.queryByText("Could not load timezone configuration.")).toBeNull();
+  });
+  it("disables Restore until timezone is valid", () => {
+    mocks.timezoneState = "pending";
+    const pending = renderTrash();
+    expect(screen.getByRole("button", { name: "Restore" }).hasAttribute("disabled")).toBe(true);
+    pending.unmount();
+
+    mocks.timezoneState = "invalid";
+    renderTrash();
+    expect(screen.getByRole("button", { name: "Restore" }).hasAttribute("disabled")).toBe(true);
+  });
+  it("prioritizes timezone failure and one retry recovers timezone plus failed Trash", async () => {
+    mocks.listState = "error";
+    mocks.timezoneState = "invalid";
+    mocks.onboardingRefetch.mockImplementationOnce(async () => {
+      mocks.retryOrder.push("timezone");
+      mocks.timezoneState = "ready";
+      return { data: { data: { timezone: "Asia/Jakarta" } } };
+    });
+    mocks.listRefetch.mockImplementationOnce(async () => {
+      mocks.retryOrder.push("trash");
+      mocks.listState = "success";
+      return { data: undefined };
+    });
+    const view = renderTrash();
+    expect(screen.getByText(/Could not load timezone configuration/)).toBeTruthy();
+    expect(screen.queryByText("Could not load Trash.")).toBeNull();
+    expect(screen.queryByText("Trash is empty")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry timezone" }));
+    await waitFor(() => expect(mocks.retryOrder).toEqual(["timezone", "trash"]));
+    view.rerender(<QueryClientProvider client={new QueryClient()}><TransactionTrash /></QueryClientProvider>);
+    expect(screen.queryByText("Could not load timezone configuration.")).toBeNull();
+    expect(screen.queryByText("Could not load Trash.")).toBeNull();
   });
   it("needs explicit permanent-delete AlertDialog confirmation", async () => {
     mocks.remove.mockClear();
