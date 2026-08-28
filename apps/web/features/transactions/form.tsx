@@ -25,6 +25,8 @@ import {
   useUpdateTransaction,
 } from "../../generated/api";
 import type { TransactionContract } from "../../generated/api/model/transactionContract";
+import type { CreateTransactionRequest } from "../../generated/api/model/createTransactionRequest";
+import type { UpdateTransactionRequest } from "../../generated/api/model/updateTransactionRequest";
 import { transactionSchema, type TransactionFormValues } from "../../lib/validation/transaction";
 import { invalidateTransactionScopes } from "./query-keys";
 
@@ -93,7 +95,24 @@ export function TransactionForm({
   const update = useUpdateTransaction();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const timezone = defaults.data?.data.timezone ?? "UTC";
-  const walletList = (wallets.data?.data ?? []).filter((wallet) => !wallet.archived_at);
+  const walletRegistry = (wallets.data?.data ?? []).map(({ id, name, currency, archived_at }) => ({
+    id,
+    name,
+    currency,
+    archived_at: archived_at ?? null,
+  }));
+  const transactionWallet = transaction
+    ? walletRegistry.find((wallet) => wallet.id === transaction.wallet_id) ?? {
+        id: transaction.wallet_id,
+        name: transaction.wallet_name,
+        currency: transaction.currency,
+        archived_at: "historical",
+      }
+    : undefined;
+  const walletList = [
+    ...(transactionWallet?.archived_at ? [transactionWallet] : []),
+    ...walletRegistry.filter((wallet) => !wallet.archived_at),
+  ];
   const currencyList = currencies.data?.data ?? [];
   const initialOccurredAt = transaction
     ? formatUtcForTimezone(transaction.occurred_at, timezone)
@@ -117,9 +136,25 @@ export function TransactionForm({
   const selectedWallet = walletList.find((wallet) => wallet.id === walletId);
   const exponent = currencyList.find((currency) => currency.code === selectedWallet?.currency)?.exponent;
   exponentRef.current = exponent;
-  const categoryList = (categories.data?.data ?? []).filter(
-    (category) => !category.archived_at && category.kind.toLowerCase() === direction,
-  );
+  const categoryRegistry = categories.data?.data ?? [];
+  const transactionCategory = transaction
+    ? categoryRegistry.find((category) => category.id === transaction.category_id) ?? {
+        id: transaction.category_id,
+        name: transaction.category_name,
+        kind: transaction.direction,
+        archived_at: "historical",
+      }
+    : undefined;
+  const categoryList = [
+    ...(transactionCategory?.archived_at && transactionCategory.kind.toLowerCase() === direction
+      ? [transactionCategory]
+      : []),
+    ...categoryRegistry.filter(
+      (category) =>
+        !category.archived_at &&
+        category.kind.toLowerCase() === direction,
+    ),
+  ];
   const optionsPending =
     defaults.isPending || wallets.isPending || currencies.isPending || categories.isPending;
   const optionsError =
@@ -142,16 +177,16 @@ export function TransactionForm({
     }
   }, [currencies.isPending, exponent, form, walletId]);
 
-  // Entry defaults arrive after first render. Do not overwrite user edits.
+  // Entry defaults arrive after first render. Rebase RHF's default when the
+  // authoritative timezone changes, without overwriting a genuine user edit.
   useEffect(() => {
     if (form.getFieldState("occurred_at").isDirty) return;
-    form.setValue(
-      "occurred_at",
-      transaction
+    form.resetField("occurred_at", {
+      defaultValue: transaction
         ? formatUtcForTimezone(transaction.occurred_at, timezone)
         : formatCurrentLocalMinute(timezone),
-      { shouldDirty: false, shouldValidate: true },
-    );
+    });
+    void form.trigger("occurred_at");
   }, [form, timezone, transaction]);
 
   useEffect(() => {
@@ -174,31 +209,41 @@ export function TransactionForm({
     }
     const common = {
       amount: values.amount.trim(),
-      wallet_id: values.wallet_id,
-      category_id: values.category_id,
       direction: values.direction,
       note: values.note.trim() || null,
     };
     const occurredLocalChanged = form.formState.dirtyFields.occurred_at === true;
-    const data = transaction
-      ? { ...common, ...(occurredLocalChanged ? { occurred_local: values.occurred_at } : {}) }
-      : { ...common, occurred_local: values.occurred_at };
+    const updateData: UpdateTransactionRequest = {
+      ...common,
+      ...(values.wallet_id !== transaction?.wallet_id ? { wallet_id: values.wallet_id } : {}),
+      ...(values.category_id !== transaction?.category_id ? { category_id: values.category_id } : {}),
+      ...(values.direction !== transaction?.direction ? { direction: values.direction } : {}),
+      ...(occurredLocalChanged ? { occurred_local: values.occurred_at } : {}),
+    };
+    const createData: CreateTransactionRequest = {
+      ...common,
+      wallet_id: values.wallet_id,
+      category_id: values.category_id,
+      occurred_local: values.occurred_at,
+    };
     try {
       if (transaction) {
-        const response = await update.mutateAsync({ transactionId: transaction.id, data });
+        const response = await update.mutateAsync({ transactionId: transaction.id, data: updateData });
         await invalidateTransactionScopes(queryClient, {
           previous: transaction,
           next: { ...transaction, ...response.data },
+          timezone,
         });
         setStatus({ kind: "success", text: "Transaction saved." });
       } else {
-        const response = await create.mutateAsync({ data });
+        const response = await create.mutateAsync({ data: createData });
         await invalidateTransactionScopes(queryClient, {
           next: {
             wallet_id: response.data.wallet_id,
             category_id: response.data.category_id,
             occurred_at: response.data.occurred_at,
           },
+          timezone,
         });
         setStatus({ kind: "success", text: "Transaction saved." });
         form.reset({
@@ -321,8 +366,9 @@ export function TransactionForm({
                 </SelectTrigger>
                 <SelectContent>
                   {walletList.map((wallet) => (
-                    <SelectItem value={wallet.id} key={wallet.id}>
+                    <SelectItem value={wallet.id} key={wallet.id} disabled={Boolean(wallet.archived_at)}>
                       {wallet.name} — {wallet.currency}
+                      {wallet.archived_at ? " (archived)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -359,8 +405,9 @@ export function TransactionForm({
                 </SelectTrigger>
                 <SelectContent>
                   {categoryList.map((category) => (
-                    <SelectItem value={category.id} key={category.id}>
+                    <SelectItem value={category.id} key={category.id} disabled={Boolean(category.archived_at)}>
                       {category.name}
+                      {category.archived_at ? " (archived)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

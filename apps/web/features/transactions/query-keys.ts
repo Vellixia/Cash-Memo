@@ -17,12 +17,21 @@ interface Scope {
   occurred_at: string;
 }
 
-function month(occurredAt: string) {
-  return occurredAt.slice(0, 7);
+function month(occurredAt: string, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(occurredAt));
+  const values = Object.fromEntries(
+    parts.filter(({ type }) => type === "year" || type === "month").map(({ type, value }) => [type, value]),
+  ) as { year: string; month: string };
+  return `${values.year}-${values.month}`;
 }
 
-function keys(scope: Scope) {
-  const scopeMonth = month(scope.occurred_at);
+function keys(scope: Scope, timezone: string) {
+  const scopeMonth = month(scope.occurred_at, timezone);
   return [
     getListTransactionsQueryKey({ wallet_id: scope.wallet_id }),
     getListTransactionsQueryKey({ category_id: scope.category_id }),
@@ -38,11 +47,11 @@ function keys(scope: Scope) {
 
 export async function invalidateTransactionScopes(
   client: QueryClient,
-  { previous, next }: { previous?: Scope; next?: Scope },
+  { previous, next, timezone = "UTC" }: { previous?: Scope; next?: Scope; timezone?: string },
 ) {
   const scopes = [previous, next].filter((scope): scope is Scope => Boolean(scope));
   const queryKeys = scopes
-    .flatMap(keys)
+    .flatMap((scope) => keys(scope, timezone))
     .filter(
       (queryKey, index, keysForScopes) =>
         keysForScopes.findIndex((value) => JSON.stringify(value) === JSON.stringify(queryKey)) ===
