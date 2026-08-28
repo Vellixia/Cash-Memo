@@ -33,21 +33,24 @@ test("first visit registers through delivered verification link and creates firs
   expect(focusStyle.outlineStyle).not.toBe("none");
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(1);
 
+  const add = page.getByRole("link", { name: "Add" });
   const overview = page.getByRole("link", { name: "Overview" });
+  await page.keyboard.press("Tab");
+  await expect(add).toBeFocused();
+  expect((await add.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await page.keyboard.press("Tab");
   await expect(overview).toBeFocused();
   const overviewBox = await overview.boundingBox();
   expect(overviewBox?.height).toBeGreaterThanOrEqual(44);
 
-  const history = page.getByRole("link", { name: "History" });
+  const transactions = page.getByRole("link", { name: "Transactions" });
   await page.keyboard.press("Tab");
-  await expect(history).toBeFocused();
+  await expect(transactions).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/app\/transactions$/);
   await expect(page.getByRole("heading", { name: "Transactions", level: 1 })).toBeVisible();
   await expect(page.getByLabel("Search")).toBeVisible();
 
-  const add = page.getByRole("link", { name: "Add" });
   await add.click();
   await expect(page).toHaveURL(/\/app\/transactions\/new$/);
   await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
@@ -60,6 +63,21 @@ test("first visit registers through delivered verification link and creates firs
   expect((await createWallet.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await createWallet.click();
   expect((await page.getByLabel("Wallet name").boundingBox())?.height).toBeGreaterThanOrEqual(44);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app");
+  const more = page.getByRole("button", { name: "More" });
+  await expect(more).toBeVisible();
+  await more.click();
+  const moreSheet = page.getByRole("dialog");
+  await expect(moreSheet).toBeVisible();
+  await expect(moreSheet.getByRole("link", { name: "Wallets" })).toBeVisible();
+  await expect(moreSheet.getByRole("link", { name: "Categories" })).toBeVisible();
+  await expect(moreSheet.getByRole("link", { name: "Recurring" })).toBeVisible();
+  await expect(moreSheet.getByRole("link", { name: "Settings" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(moreSheet).toBeHidden();
+  await expect(more).toBeFocused();
 });
 
 test("token pages send no-referrer while unrelated public pages keep normal policy", async ({

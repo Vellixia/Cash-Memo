@@ -129,3 +129,58 @@ Both generated files are left in the formatting the CLI emitted, matching the Ta
 | `apps/web/app/globals.css` | `a:focus-visible` (and control focus) set `outline: none` with only a box-shadow ring, so the Task 14 design system failed the keyboard-focus assertion in `e2e/auth-onboarding.spec.ts`; replaced with a real `2px` outline plus the existing ring |
 | `apps/web/e2e/support/auth.ts`, `apps/web/e2e/support/mailbox.ts` | the two named E2E specs consume the shared register/verify/mailbox helpers; the fragment-token flow lives there |
 | `docs/verification/v1-pr3-ui-primitive-inventory.md` | brief step 13 (controller-authorised) |
+
+---
+
+# Cashmemo V1 PR3 Task 16 Update (Responsive shell and onboarding)
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+Base/starting SHA: `abbd48cffe7a3b30539bc7a2734bb18b07888969`
+Pinned CLI version: `4.19.0` (unchanged; `apps/web` devDependency)
+
+## Generated Foundation Added In Task 16
+
+| File | Source | Notes |
+| --- | --- | --- |
+| `apps/web/components/ui/sheet.tsx` | interrupted worker output from `pnpm exec shadcn add sheet combobox` | Base UI `@base-ui/react/dialog` substrate; adopted for mobile `More` sheet |
+| `apps/web/components/ui/combobox.tsx` | interrupted worker output from `pnpm exec shadcn add sheet combobox` | Base UI `@base-ui/react` combobox substrate; adopted for exact-IANA timezone search |
+| `apps/web/components/ui/input-group.tsx` | dependency emitted with generated combobox | required by generated `ComboboxInput` |
+| `apps/web/components/ui/textarea.tsx` | dependency emitted with generated combobox | required by generated `input-group`; no task-local behavior changes |
+
+No regeneration/version change was needed. Partial generated files were audited in place and kept.
+
+## Sidebar YAGNI Ruling
+
+| Option | Ruling | Why |
+| --- | --- | --- |
+| shadcn `sidebar.tsx` primitive | rejected for Task 16 | Cashmemo only needs one static desktop nav, one route-driven Add link, and one mobile overflow sheet. Generated Sidebar provider/menu/collapse/resizable/workspace patterns would add extra state and substrate without simplifying this information architecture. |
+| existing semantic shell nav + generated `sheet` | retained | smaller diff, exact labels/routing, no second navigation framework, and direct satisfaction of desktop/mobile parity plus restricted-shell isolation |
+
+## Substrate Audit
+
+- `sheet.tsx` is Base UI-backed via `@base-ui/react/dialog`; it adds no Radix-era or local dialog
+  implementation.
+- `combobox.tsx` is Base UI-backed and keeps searchable option semantics for exact IANA values.
+- `input-group.tsx` composes the existing Base UI-backed `Button`, `Input`, and generated
+  `Textarea`; no duplicate control substrate added.
+- No `asChild` composition added.
+- One icon system only: Lucide in shell + onboarding.
+- No shadcn Sidebar primitive generated or introduced after the YAGNI review.
+
+## Legacy Surface Retired By Task 16
+
+| Surface | Previous consumers | Status after Task 16 |
+| --- | --- | --- |
+| onboarding category-seeding step/UI | `apps/web/features/onboarding/*`, onboarding tests, onboarding E2E helper | removed from visible onboarding flow; backend reconciliation remains authoritative and invisible |
+| `History` shell vocabulary | desktop/mobile shell, focused tests, onboarding/auth E2E | renamed to `Transactions`; desktop and mobile IA now match approved vocabulary |
+| horizontally scrolling bottom-nav strip | mobile shell CSS | replaced with fixed five-slot grid plus safe-area content inset and sheet overflow |
+| onboarding timezone `datalist` | onboarding flow | replaced by generated searchable combobox with exact IANA selection |
+
+## Direct Corrections Outside The Task 16 Brief File List
+
+| File | Why |
+| --- | --- |
+| `apps/web/e2e/support/auth.ts` | onboarding helper had to drop the obsolete visible category step and select the combobox timezone option by accessible role |
+| `apps/web/e2e/auth-onboarding.spec.ts` | desktop label/focus assumptions changed with `Transactions` rename and route-driven Add placement; focused mobile `More` sheet verification added |
+| `docs/verification/v1-pr3-ui-primitive-inventory.md` | brief step 12/13 controller requirement |

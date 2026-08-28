@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { onboardingComplete, onboardingNextStep } from "../features/onboarding/use-onboarding";
+import {
+  onboardingComplete,
+  onboardingNextStep,
+  type OnboardingStep,
+} from "../features/onboarding/use-onboarding";
 import type { OnboardingContract } from "../generated/api/model/onboardingContract";
 
 const mocks = vi.hoisted(() => {
@@ -21,7 +25,6 @@ const mocks = vi.hoisted(() => {
       { code: "EUR", display_name: "Euro", exponent: 2 },
     ],
     save: vi.fn().mockResolvedValue({ data: {} }),
-    seed: vi.fn().mockResolvedValue({ data: undefined }),
     walletCreate: vi.fn().mockResolvedValue({
       data: {
         id: "wallet-1",
@@ -34,6 +37,7 @@ const mocks = vi.hoisted(() => {
     }),
     invalidate: vi.fn().mockResolvedValue(undefined),
     refetch: vi.fn().mockResolvedValue(undefined),
+    routes: [] as string[],
   };
 });
 
@@ -48,12 +52,13 @@ vi.mock("../generated/api", () => ({
   }),
   useListCurrencies: () => ({ data: { data: mocks.currencies }, isPending: false, isError: false }),
   useUpdatePreferences: () => ({ mutateAsync: mocks.save, isPending: false }),
-  useSeedOnboardingCategories: () => ({ mutateAsync: mocks.seed, isPending: false }),
   useCreateWallet: () => ({ mutateAsync: mocks.walletCreate, isPending: false }),
   useUpdateWallet: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: (path: string) => mocks.routes.push(path) }),
+}));
 
 function renderOnboarding() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -68,21 +73,26 @@ function renderOnboarding() {
   };
 }
 
+function contract(overrides: Partial<OnboardingContract>): OnboardingContract {
+  return {
+    timezone_configured: true,
+    timezone: "Asia/Jakarta",
+    default_currency_configured: true,
+    default_currency_code: "USD",
+    categories_seeded: true,
+    has_active_wallet: true,
+    ...overrides,
+  };
+}
+
 import { OnboardingFlow } from "../features/onboarding/onboarding-flow";
 
 describe("derived onboarding", () => {
   beforeEach(() => {
+    cleanup();
     mocks.queryState = "success";
-    mocks.state = {
-      timezone_configured: true,
-      timezone: "America/New_York",
-      default_currency_configured: false,
-      default_currency_code: null,
-      categories_seeded: true,
-      has_active_wallet: true,
-    };
+    mocks.state = contract({ default_currency_configured: false, default_currency_code: null });
     mocks.save.mockReset().mockResolvedValue({ data: {} });
-    mocks.seed.mockReset().mockResolvedValue({ data: undefined });
     mocks.walletCreate.mockReset().mockResolvedValue({
       data: {
         id: "wallet-1",
@@ -95,84 +105,118 @@ describe("derived onboarding", () => {
     });
     mocks.invalidate.mockClear();
     mocks.refetch.mockClear();
+    mocks.routes.length = 0;
   });
 
-  it("only completes when every backend fact is true", () => {
-    expect(
-      onboardingComplete({
-        timezone_configured: true,
-        timezone: "Asia/Jakarta",
-        default_currency_configured: true,
-        default_currency_code: "USD",
-        categories_seeded: true,
-        has_active_wallet: true,
-      }),
-    ).toBe(true);
-    expect(
-      onboardingComplete({
-        timezone_configured: true,
-        timezone: "Asia/Jakarta",
-        default_currency_configured: true,
-        default_currency_code: "USD",
-        categories_seeded: true,
-        has_active_wallet: false,
-      }),
-    ).toBe(false);
+  it("derives exactly three visible steps from backend facts and never a category step", () => {
+    const observed = new Set<OnboardingStep>();
+    for (const timezone_configured of [false, true]) {
+      for (const default_currency_configured of [false, true]) {
+        for (const categories_seeded of [false, true]) {
+          for (const has_active_wallet of [false, true]) {
+            const state = contract({
+              timezone_configured,
+              timezone: timezone_configured ? "Asia/Jakarta" : null,
+              default_currency_configured,
+              default_currency_code: default_currency_configured ? "USD" : null,
+              categories_seeded,
+              has_active_wallet,
+            });
+            const step = onboardingNextStep(state);
+            observed.add(step);
+            const expected = !timezone_configured
+              ? "timezone"
+              : !default_currency_configured
+                ? "currency"
+                : !has_active_wallet
+                  ? "wallet"
+                  : "complete";
+            expect(step).toBe(expected);
+            expect(onboardingComplete(state)).toBe(expected === "complete");
+          }
+        }
+      }
+    }
+    expect([...observed].sort()).toEqual(["complete", "currency", "timezone", "wallet"]);
   });
 
-  it("returns missing step from server facts, so interruption is safe", () => {
-    expect(
-      onboardingNextStep({
-        timezone_configured: false,
-        timezone: null,
-        default_currency_configured: true,
-        default_currency_code: "USD",
-        categories_seeded: true,
-        has_active_wallet: true,
-      }),
-    ).toBe("timezone");
-    expect(
-      onboardingNextStep({
-        timezone_configured: true,
-        timezone: "Asia/Jakarta",
-        default_currency_configured: false,
-        default_currency_code: null,
-        categories_seeded: true,
-        has_active_wallet: true,
-      }),
-    ).toBe("currency");
-    expect(
-      onboardingNextStep({
-        timezone_configured: true,
-        timezone: "Asia/Jakarta",
-        default_currency_configured: true,
-        default_currency_code: "USD",
-        categories_seeded: false,
-        has_active_wallet: true,
-      }),
-    ).toBe("categories");
-    expect(
-      onboardingNextStep({
-        timezone_configured: true,
-        timezone: "Asia/Jakarta",
-        default_currency_configured: true,
-        default_currency_code: "USD",
-        categories_seeded: true,
-        has_active_wallet: false,
-      }),
-    ).toBe("wallet");
+  it("keeps a completed account whose only wallet was archived inside the app", async () => {
+    // The backend reports `has_active_wallet` as "onboarding completed OR an active wallet exists",
+    // and reconciles category seeding itself. Neither may reopen setup on the client.
+    mocks.state = contract({ categories_seeded: false });
+    renderOnboarding();
+
+    await waitFor(() => {
+      expect(mocks.routes).toEqual(["/app"]);
+    });
+    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
   });
 
-  it("requires explicit currency choice and sends only selected registry value", async () => {
-    mocks.state = {
-      timezone_configured: true,
+  it("never renders a starter-category step", () => {
+    mocks.state = contract({ categories_seeded: false, has_active_wallet: false });
+    renderOnboarding();
+
+    expect(screen.getByRole("heading", { name: "Create wallet", level: 2 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add starter categories" })).toBeNull();
+    expect(screen.queryByText(/starter categories/i)).toBeNull();
+  });
+
+  it("offers the browser-detected zone first and stores the exact IANA value", async () => {
+    mocks.state = contract({ timezone_configured: false, timezone: null });
+    renderOnboarding();
+
+    const timezone = screen.getByLabelText<HTMLInputElement>("Reporting timezone");
+    fireEvent.keyDown(timezone, { key: "ArrowDown" });
+    const options = await screen.findAllByRole("option");
+    expect(options[0]?.textContent).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+    fireEvent.change(timezone, { target: { value: "Asia/Jakarta" } });
+    fireEvent.click(await screen.findByRole("option", { name: "Asia/Jakarta" }));
+    expect(timezone.value).toBe("Asia/Jakarta");
+
+    fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "USD" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save timezone and currency" }));
+    await waitFor(() => {
+      expect(mocks.save).toHaveBeenCalledWith({
+        data: { timezone: "Asia/Jakarta", default_currency_code: "USD" },
+      });
+    });
+  });
+
+  it("re-derives the step from the server after saving instead of advancing locally", async () => {
+    mocks.state = contract({ timezone_configured: false, timezone: null });
+    renderOnboarding();
+
+    const timezone = screen.getByLabelText<HTMLInputElement>("Reporting timezone");
+    fireEvent.keyDown(timezone, { key: "ArrowDown" });
+    fireEvent.change(timezone, { target: { value: "Asia/Jakarta" } });
+    fireEvent.click(await screen.findByRole("option", { name: "Asia/Jakarta" }));
+    fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "USD" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save timezone and currency" }));
+
+    await waitFor(() => {
+      expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ["/api/v1/onboarding"] });
+    });
+    // The mocked backend still reports an unconfigured timezone, so the step must not advance.
+    expect(screen.getByRole("heading", { name: "Confirm your timezone", level: 2 })).toBeTruthy();
+  });
+
+  it("shows the same step after a refresh or Back returns to the flow", () => {
+    mocks.state = contract({ default_currency_configured: false, default_currency_code: null });
+    const first = renderOnboarding();
+    expect(screen.getByRole("heading", { name: "Choose your default currency", level: 2 })).toBeTruthy();
+    first.unmount();
+
+    renderOnboarding();
+    expect(screen.getByRole("heading", { name: "Choose your default currency", level: 2 })).toBeTruthy();
+  });
+
+  it("requires explicit currency choice and sends only the selected registry value", async () => {
+    mocks.state = contract({
       timezone: "America/New_York",
       default_currency_configured: false,
       default_currency_code: null,
-      categories_seeded: true,
-      has_active_wallet: true,
-    };
-    mocks.save.mockClear();
+    });
     renderOnboarding();
     const save = screen.getByRole("button", { name: "Save currency" });
     expect(save).toHaveProperty("disabled", true);
@@ -186,35 +230,31 @@ describe("derived onboarding", () => {
     });
   });
 
-  it("offers searchable IANA timezone choices and persists chosen value", async () => {
-    mocks.state = {
-      timezone_configured: false,
-      timezone: null,
-      default_currency_configured: true,
-      default_currency_code: "USD",
-      categories_seeded: true,
-      has_active_wallet: true,
-    };
-    mocks.save.mockClear();
-    renderOnboarding();
-    const timezone = screen.getByLabelText("Reporting timezone");
-    fireEvent.change(timezone, { target: { value: "Asia/Jakarta" } });
-    fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "USD" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save timezone and currency" }));
-    await waitFor(() => {
-      expect(mocks.save).toHaveBeenCalledWith({
-        data: { timezone: "Asia/Jakarta", default_currency_code: "USD" },
-      });
+  it("offers a subordinate Back that reopens the saved timezone for correction", async () => {
+    mocks.state = contract({
+      timezone: "America/New_York",
+      default_currency_configured: false,
+      default_currency_code: null,
     });
-    expect(timezone.getAttribute("list")).toBe("cashmemo-timezones");
-    expect(
-      document.querySelector('datalist#cashmemo-timezones option[value="Asia/Jakarta"]'),
-    ).toBeTruthy();
+    renderOnboarding();
+
+    expect(screen.queryByLabelText("Reporting timezone")).toBeNull();
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back.getAttribute("aria-expanded")).toBe("false");
+    // Subordinate actions follow the primary action in the DOM, so the primary is reached first.
+    const primary = screen.getByRole("button", { name: "Save currency" });
+    expect(primary.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(back);
+    const timezone = await screen.findByLabelText<HTMLInputElement>("Reporting timezone");
+    expect(timezone.value).toBe("America/New_York");
+    expect(back.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("shows loading and retryable onboarding load errors", () => {
+  it("shows a stable skeleton while loading and a retryable error panel", () => {
     mocks.queryState = "loading";
     const loading = renderOnboarding();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     expect(screen.getByText("Checking setup…")).toBeTruthy();
     loading.unmount();
 
@@ -225,38 +265,25 @@ describe("derived onboarding", () => {
     expect(mocks.refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("reports failed starter seeding, retries, and refreshes onboarding plus categories", async () => {
-    mocks.state = {
-      timezone_configured: true,
-      timezone: "Asia/Jakarta",
-      default_currency_configured: true,
-      default_currency_code: "USD",
-      categories_seeded: false,
-      has_active_wallet: true,
-    };
-    mocks.seed.mockRejectedValueOnce(new Error("Temporary seed failure."));
-    renderOnboarding();
-    fireEvent.click(screen.getByRole("button", { name: "Add starter categories" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Temporary seed failure.");
-
-    fireEvent.click(screen.getByRole("button", { name: "Add starter categories" }));
-    await waitFor(() => {
-      expect(mocks.seed).toHaveBeenCalledTimes(2);
+  it("reports a failed preferences save inline without losing the entered values", async () => {
+    mocks.state = contract({
+      timezone: "America/New_York",
+      default_currency_configured: false,
+      default_currency_code: null,
     });
-    expect(screen.getByRole("status").textContent).toContain("Starter categories ready.");
-    expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ["/api/v1/onboarding"] });
-    expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ["/api/v1/categories"] });
+    mocks.save.mockRejectedValueOnce(new Error("Temporary preference failure."));
+    renderOnboarding();
+
+    fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "EUR" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save currency" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Temporary preference failure.",
+    );
+    expect(screen.getByLabelText<HTMLSelectElement>("Default currency").value).toBe("EUR");
   });
 
   it("reloads first-wallet onboarding with persisted default currency preselected", async () => {
-    mocks.state = {
-      timezone_configured: true,
-      timezone: "Asia/Jakarta",
-      default_currency_configured: true,
-      default_currency_code: "EUR",
-      categories_seeded: true,
-      has_active_wallet: false,
-    };
+    mocks.state = contract({ default_currency_code: "EUR", has_active_wallet: false });
     renderOnboarding();
 
     expect(screen.getByLabelText<HTMLSelectElement>("Currency").value).toBe("EUR");

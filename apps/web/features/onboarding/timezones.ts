@@ -1,5 +1,9 @@
+export function getDetectedTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
 export function getTimezoneOptions(): string[] {
-  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const browserTimezone = getDetectedTimezone();
   let supported: string[];
   try {
     supported =

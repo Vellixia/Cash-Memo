@@ -77,13 +77,9 @@ export async function completeOnboarding(page: Page, user: E2EUser): Promise<voi
     page.getByRole("heading", { name: "Confirm your timezone", level: 2 }),
   ).toBeVisible();
   await page.getByLabel("Reporting timezone").fill("UTC");
-  await page.getByLabel("Default currency").selectOption("USD");
+  await page.getByRole("option", { name: "UTC" }).click();
+  await page.getByLabel("Default currency").fill("USD");
   await page.getByRole("button", { name: "Save timezone and currency" }).click();
-
-  await expect(
-    page.getByRole("heading", { name: "Start with useful categories", level: 2 }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Add starter categories" }).click();
 
   await expect(page.getByRole("heading", { name: "Create wallet", level: 2 })).toBeVisible();
   await page.getByLabel("Wallet name").fill(user.walletName);
