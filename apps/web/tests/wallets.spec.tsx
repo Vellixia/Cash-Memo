@@ -5,6 +5,7 @@ import { walletSchema } from "../lib/validation/wallet";
 
 const listMocks = vi.hoisted(() => ({
   state: "success",
+  currencyState: "ready",
   wallets: [] as {
     id: string;
     name: string;
@@ -17,6 +18,7 @@ const listMocks = vi.hoisted(() => ({
   restore: vi.fn().mockResolvedValue({ data: {} }),
   remove: vi.fn().mockRejectedValue({ response: { status: 409, data: { error: { message: "has references" } } } }),
   update: vi.fn().mockResolvedValue({ data: { id: "wallet-1", name: "Cash", currency: "USD", opening_balance: "25.00", archived_at: null, balance: { amount: "27.00", as_of: "2026-08-24T00:00:00Z", currency: "USD" } } }),
+  create: vi.fn().mockResolvedValue({ data: { id: "wallet-new", name: "New", currency: "USD", opening_balance: "1.23", archived_at: null, balance: { amount: "1.23", as_of: "2026-08-24T00:00:00Z", currency: "USD" } } }),
 }));
 
 listMocks.wallets.push({
@@ -30,11 +32,11 @@ listMocks.wallets.push({
 
 vi.mock("../generated/api", () => ({
   useListCurrencies: () => ({
-    data: { data: [{ code: "USD", display_name: "US Dollar", exponent: 2 }] },
-    isPending: false,
+    data: listMocks.currencyState === "ready" ? { data: [{ code: "USD", display_name: "US Dollar", exponent: 2 }, { code: "JPY", display_name: "Japanese Yen", exponent: 0 }] } : undefined,
+    isPending: listMocks.currencyState === "pending",
     isError: false,
   }),
-  useCreateWallet: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateWallet: () => ({ mutateAsync: listMocks.create, isPending: false }),
   useUpdateWallet: () => ({ mutateAsync: listMocks.update, isPending: false }),
   getListWalletsQueryKey: () => ["/api/v1/wallets"],
   getGetWalletQueryKey: (id: string) => ["/api/v1/wallets", id],
@@ -129,6 +131,39 @@ describe("wallet UX validation", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog.className).toContain("management-dialog");
     expect(dialog.querySelector("form")?.className).not.toContain("dialog");
+  });
+
+  it("does not allow submit while currency precision registry is pending", async () => {
+    listMocks.currencyState = "pending";
+    listMocks.create.mockClear();
+    const view = render(<WalletForm defaultCurrency="USD" />);
+    const submit = screen.getByRole("button", { name: "Create wallet" });
+    expect(submit).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByLabelText("Wallet name"), { target: { value: "Cash" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "1.231" } });
+    fireEvent.click(submit);
+    expect(listMocks.create).not.toHaveBeenCalled();
+    listMocks.currencyState = "ready";
+    view.unmount();
+    listMocks.currencyState = "ready";
+  });
+
+  it("revalidates precision after switching currencies before allowing submit", async () => {
+    listMocks.currencyState = "ready";
+    listMocks.create.mockClear();
+    render(<WalletForm defaultCurrency="USD" />);
+    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>("Currency").value).toBe("USD"));
+    const name = screen.getByLabelText("Wallet name");
+    const balance = screen.getByLabelText("Opening balance");
+    fireEvent.change(name, { target: { value: "Cash" } });
+    fireEvent.change(balance, { target: { value: "1.23" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create wallet" })).toHaveProperty("disabled", false));
+    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "JPY" } });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("up to 0 decimal places"));
+    const submit = screen.getByRole("button", { name: "Create wallet" });
+    expect(submit).toHaveProperty("disabled", true);
+    fireEvent.click(submit);
+    expect(listMocks.create).not.toHaveBeenCalled();
   });
 
   it("sends exact editable opening balance and omits unchanged currency", async () => {

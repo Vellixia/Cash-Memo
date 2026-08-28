@@ -67,3 +67,22 @@ Result: `1 failed`; base `walletSchema` returned `true` for `opening_balance: "1
 - Currency is disabled in edit mode; opening balance remains enabled and is not represented as a transaction.
 - Archive/restore invalidation intentionally differs: archive includes recurring queries; restore does not.
 - One initial E2E attempt hit host `ENOSPC` while Next copied an optional sharp binary; generated `.next` output was removed and the retry passed. No tracked files were affected.
+
+## Fix round 2 (2026-08-28)
+
+### Findings addressed
+
+- Wallet form submission now requires a loaded, non-error currency registry and a matching authoritative exponent. The submit control stays disabled while registry data/precision is unavailable. Currency/exponent changes trigger full-form exact-string revalidation, preventing a stale exponent from accepting `1.231` for USD or a fractional value for exponent-zero currencies. No numeric coercion is used.
+- E2E now snapshots the actual transaction row count/content immediately after creating the transaction and rechecks it after opening-balance edit, wallet archive, and wallet restore, alongside the selected-month summary and budget invariants.
+- Detached-base behavioral RED now proves both approved editability and immutable currency: base `08571c4` fails the opening-balance-enabled assertion while currency remains disabled.
+- Browser checks assert menu-launched Dialog focus returns after Save, Escape, Cancel, and generated Close; mobile 390×844 asserts no horizontal overflow and reaches primary, form, and destructive controls. Base UI owns focus trapping/restoration; no custom focus manager was added.
+- `Show archived` now sits directly beside the category Tabs controls before the panel list. The E2E title now says “without changing history.”
+
+### Round-2 RED/GREEN evidence
+
+- Added delayed-registry and USD→zero-exponent currency-switch tests first. Pre-fix focused run: `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web exec vitest run tests/wallets.spec.tsx --reporter=dot` → expected new assertions failed (`2 failed | 11 passed`), including missing exponent-switch alert; the initial delayed test was then made deterministic by removing a post-unmount readiness assertion.
+- Against detached base `08571c4`, disposable appended test run with `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web exec vitest run tests/wallets.spec.tsx --reporter=dot` → `1 failed | 6 passed`; failure was `expected ... opening balance ... disabled false`, received `true`, while currency assertion passed. Temporary test/worktree was removed.
+- After fixes: focused wallets/categories `2 files, 24 tests passed`; full `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm -C apps/web exec vitest run --maxWorkers=1 --reporter=dot` → `16 files, 167 tests passed`.
+- `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm toolchain:check` → `Toolchain verified: node=24.14.0, pnpm=11.13.1`.
+- Node24 lint and typecheck passed; Node24 `pnpm -C apps/web build` passed with all app routes generated.
+- Node24 `pnpm -C apps/web exec playwright test e2e/wallets-categories.spec.ts --workers=1` → `2 passed (1.1m)` with fresh disposable Postgres/Mailpit/API services; cleanup: `docker-compose -f infra/v1/test-compose.yml down --remove-orphans`.

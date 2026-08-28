@@ -1,7 +1,7 @@
 import { expect, test } from "./support/test";
 import { provisionUser } from "./support/auth";
 
-test("edits opening balance without history, then archives wallet with paused recurring rule", async ({ page }) => {
+test("edits opening balance without changing history, then archives wallet with paused recurring rule", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const user = await provisionUser(page, "wallet-category");
 
@@ -19,6 +19,10 @@ test("edits opening balance without history, then archives wallet with paused re
   await page.getByRole("option", { name: "Food & Drink" }).click();
   await page.getByRole("button", { name: "Save transaction" }).click();
   await expect(page.getByRole("status")).toContainText("Transaction saved");
+  await page.goto("/app/transactions");
+  const transactionRows = page.locator("article.transaction-row");
+  await expect(transactionRows).toHaveCount(1);
+  const transactionSnapshot = await transactionRows.first().innerText();
 
   const month = new Date().toISOString().slice(0, 7);
   await page.goto(`/app/budgets?month=${month}`);
@@ -66,10 +70,26 @@ test("edits opening balance without history, then archives wallet with paused re
   await page.getByLabel("Opening balance").fill("1250.00");
   await page.getByRole("button", { name: "Save wallet" }).click();
   await expect(wallet).toContainText("USD 1,225.00");
+  await expect(wallet.getByRole("button", { name: `Actions for ${user.walletName}` })).toBeFocused();
+  await page.goto("/app/transactions");
+  await expect(transactionRows).toHaveCount(1);
+  await expect.poll(() => transactionRows.first().innerText()).toBe(transactionSnapshot);
   await page.goto(`/app?month=${month}`);
   await expect.poll(async () => `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`).toBe(financialSnapshotBefore);
 
   await page.goto("/app/wallets");
+  await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
+  await page.getByRole("menuitem", { name: "Edit wallet" }).click();
+  await page.keyboard.press("Escape");
+  await expect(wallet.getByRole("button", { name: `Actions for ${user.walletName}` })).toBeFocused();
+  await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
+  await page.getByRole("menuitem", { name: "Edit wallet" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await expect(wallet.getByRole("button", { name: `Actions for ${user.walletName}` })).toBeFocused();
+  await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
+  await page.getByRole("menuitem", { name: "Edit wallet" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await expect(wallet.getByRole("button", { name: `Actions for ${user.walletName}` })).toBeFocused();
   await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect(page.getByRole("dialog")).toContainText("pauses dependent recurring rules");
@@ -80,6 +100,9 @@ test("edits opening balance without history, then archives wallet with paused re
 
   await page.goto("/app/recurring");
   await expect(page.getByRole("article").filter({ hasText: recurringNote })).toContainText("Paused");
+  await page.goto("/app/transactions");
+  await expect(transactionRows).toHaveCount(1);
+  await expect.poll(() => transactionRows.first().innerText()).toBe(transactionSnapshot);
   await page.goto(`/app?month=${month}`);
   await expect.poll(async () => `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`).toBe(financialSnapshotBefore);
 
@@ -89,6 +112,9 @@ test("edits opening balance without history, then archives wallet with paused re
   await expect(page.getByRole("status")).toContainText("stay paused until you resume");
   await page.goto("/app/recurring");
   await expect(page.getByRole("article").filter({ hasText: recurringNote })).toContainText("Paused");
+  await page.goto("/app/transactions");
+  await expect(transactionRows).toHaveCount(1);
+  await expect.poll(() => transactionRows.first().innerText()).toBe(transactionSnapshot);
   await page.goto(`/app?month=${month}`);
   await expect.poll(async () => `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`).toBe(financialSnapshotBefore);
 });
@@ -107,7 +133,14 @@ test("category management keeps archived labels out of active choices", async ({
   await expect(incomeTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel", { name: "Income" })).toBeVisible();
   await expenseTab.click();
+  await expect(page.getByRole("button", { name: "Create category" }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.getByLabel("Show archived")).not.toBeChecked();
+  await page.getByRole("button", { name: "Create category" }).first().click();
+  await expect(page.getByLabel("Category name")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Cancel" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Create category" }).first()).toBeFocused();
   await page.getByRole("button", { name: "Create category" }).first().click();
   await page.getByLabel("Category name").fill("Temporary category");
   await page.getByRole("button", { name: "Create category" }).last().click();
@@ -123,4 +156,7 @@ test("category management keeps archived labels out of active choices", async ({
   await archivedToggle.press("Space");
   await expect(archivedToggle).toBeChecked();
   await expect(page.getByText("Temporary category")).toBeVisible();
+  await category.getByRole("button", { name: "Actions for Temporary category" }).click();
+  await expect(page.getByRole("menuitem", { name: "Delete forever" })).toBeVisible();
+  await page.keyboard.press("Escape");
 });

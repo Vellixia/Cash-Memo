@@ -59,6 +59,14 @@ export function WalletForm({
       form.setValue("currency", defaultCurrency, { shouldValidate: true });
   }, [currency, defaultCurrency, form, wallet]);
 
+  // Currency precision is authoritative server data. Re-run the exact-string
+  // validator whenever the selected currency's exponent changes so a prior
+  // currency's precision cannot leak into submission.
+  useEffect(() => {
+    if (currencies.isPending || currencies.isError || exponent === undefined) return;
+    void form.trigger();
+  }, [currencies.isError, currencies.isPending, exponent, form, currency]);
+
   async function submit(values: WalletFormValues) {
     setStatus(undefined);
     try {
@@ -88,6 +96,7 @@ export function WalletForm({
   }
 
   const pending = create.isPending || update.isPending;
+  const precisionReady = !currencies.isPending && !currencies.isError && exponent !== undefined;
   return (
     <form
       className={`${embedded ? "" : "dialog "}wallet-form`}
@@ -150,7 +159,7 @@ export function WalletForm({
           {status.text}
         </p>
       ) : null}
-      <Button type="submit" disabled={!form.formState.isValid || pending || currencies.isError}>
+      <Button type="submit" disabled={!form.formState.isValid || pending || !precisionReady}>
         {pending ? "Saving…" : (submitLabel ?? (wallet ? "Save wallet" : "Create wallet"))}
       </Button>
       {onCancel ? <Button type="button" variant="quiet" onClick={onCancel}>Cancel</Button> : null}
