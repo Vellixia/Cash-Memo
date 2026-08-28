@@ -16,6 +16,7 @@ const listMocks = vi.hoisted(() => ({
   archive: vi.fn().mockResolvedValue({ data: { paused_recurring_count: 2 } }),
   restore: vi.fn().mockResolvedValue({ data: {} }),
   remove: vi.fn().mockRejectedValue(new Error("has references")),
+  update: vi.fn().mockResolvedValue({ data: { id: "wallet-1", name: "Cash", currency: "USD", opening_balance: "25.00", archived_at: null, balance: { amount: "27.00", as_of: "2026-08-24T00:00:00Z", currency: "USD" } } }),
 }));
 
 listMocks.wallets.push({
@@ -34,8 +35,11 @@ vi.mock("../generated/api", () => ({
     isError: false,
   }),
   useCreateWallet: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useUpdateWallet: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateWallet: () => ({ mutateAsync: listMocks.update, isPending: false }),
   getListWalletsQueryKey: () => ["/api/v1/wallets"],
+  getGetWalletQueryKey: (id: string) => ["/api/v1/wallets", id],
+  getGetTransactionEntryDefaultsQueryKey: () => ["/api/v1/transactions/entry-defaults"],
+  getListRecurringTransactionsQueryKey: () => ["/api/v1/recurring-transactions"],
   useListWallets: () => ({
     data:
       listMocks.state === "success" || listMocks.state === "empty"
@@ -80,7 +84,7 @@ describe("wallet UX validation", () => {
     ).toBe(false);
   });
 
-  it("makes currency and opening balance visibly immutable while editing", () => {
+  it("keeps currency read-only while allowing opening balance edits", () => {
     render(
       <WalletForm
         wallet={{
@@ -93,9 +97,9 @@ describe("wallet UX validation", () => {
         }}
       />,
     );
-    expect(screen.getByText(/Currency and opening balance cannot be changed/)).toBeTruthy();
+    expect(screen.getByText(/Currency cannot be changed/)).toBeTruthy();
     expect(screen.getByLabelText("Currency")).toHaveProperty("disabled", true);
-    expect(screen.getByLabelText("Opening balance")).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("Opening balance")).toHaveProperty("disabled", false);
   });
 
   it("keeps over-limit wallet text visible so validation can explain rejection", async () => {
@@ -107,6 +111,16 @@ describe("wallet UX validation", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert").textContent).toContain("80 characters or fewer");
     });
+  });
+
+  it("sends exact editable opening balance and omits unchanged currency", async () => {
+    listMocks.update.mockClear();
+    render(<WalletForm wallet={{ ...listMocks.wallets[0] }} />);
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "25.00" } });
+    const save = screen.getByRole("button", { name: "Save wallet" });
+    await waitFor(() => expect(save).toHaveProperty("disabled", false));
+    fireEvent.click(save);
+    await waitFor(() => expect(listMocks.update).toHaveBeenCalledWith({ walletId: "wallet-1", data: { opening_balance: "25.00" } }));
   });
 
   it("renders loading, error, and empty wallet states", () => {
@@ -130,22 +144,25 @@ describe("wallet UX validation", () => {
     listMocks.restore.mockClear();
     listMocks.remove.mockClear();
     const initial = renderWalletList();
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
-    expect(screen.getByText(/Active recurring rules will pause/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Cash" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
+    expect(screen.getByText(/pauses dependent recurring rules/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Archive wallet" }));
     await waitFor(() => {
       expect(screen.getByText("Wallet archived. 2 recurring rules paused.")).toBeTruthy();
     });
     listMocks.wallets[0] = { ...listMocks.wallets[0], archived_at: "2026-08-24T00:00:00Z" };
     initial.unmount();
     const restored = renderWalletList();
-    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Cash" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Restore" }));
     await waitFor(() => {
       expect(screen.getByText(/Recurring rules stay paused/)).toBeTruthy();
     });
     restored.unmount();
     renderWalletList();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Cash" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete forever" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
     await waitFor(() => {
       expect(screen.getByText(/cannot be deleted while it has history/)).toBeTruthy();

@@ -20,10 +20,16 @@ function errorText(error: unknown): string {
 
 export function CategoryForm({
   category,
+  defaultKind = "expense",
   onSuccess,
+  onCancel,
+  showHeading = true,
 }: {
   category?: CategoryContract;
+  defaultKind?: "income" | "expense";
   onSuccess?: (category: CategoryContract) => void;
+  onCancel?: () => void;
+  showHeading?: boolean;
 }) {
   const create = useCreateCategory();
   const update = useUpdateCategory();
@@ -33,7 +39,7 @@ export function CategoryForm({
     mode: "onChange",
     defaultValues: {
       name: category?.name ?? "",
-      kind: category ? (category.kind as "income" | "expense") : "expense",
+      kind: category ? (category.kind as "income" | "expense") : defaultKind,
     },
   });
 
@@ -67,7 +73,7 @@ export function CategoryForm({
       }}
       noValidate
     >
-      <h2>{category ? "Rename category" : "Create category"}</h2>
+      {showHeading ? <h2>{category ? "Rename category" : "Create category"}</h2> : null}
       {category ? (
         <p className="muted">Renaming updates how this label appears across history.</p>
       ) : (
@@ -105,6 +111,7 @@ export function CategoryForm({
       <Button type="submit" disabled={!form.formState.isValid || pending}>
         {pending ? "Saving…" : category ? "Save name" : "Create category"}
       </Button>
+      {onCancel ? <Button type="button" variant="quiet" onClick={onCancel}>Cancel</Button> : null}
     </form>
   );
 }

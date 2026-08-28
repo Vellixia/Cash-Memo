@@ -23,11 +23,15 @@ export function WalletForm({
   defaultCurrency,
   submitLabel,
   onSuccess,
+  onCancel,
+  showHeading = true,
 }: {
   wallet?: WalletContract;
   defaultCurrency?: string;
   submitLabel?: string;
   onSuccess?: (wallet: WalletContract) => void;
+  onCancel?: () => void;
+  showHeading?: boolean;
 }) {
   const currencies = useListCurrencies({ query: { retry: 1 } });
   const create = useCreateWallet();
@@ -54,9 +58,16 @@ export function WalletForm({
     setStatus(undefined);
     try {
       if (wallet) {
+        const data: { name?: string; opening_balance?: string } = {};
+        if (form.formState.dirtyFields.name) data.name = values.name;
+        if (form.formState.dirtyFields.opening_balance) data.opening_balance = values.opening_balance;
+        if (Object.keys(data).length === 0) {
+          setStatus({ kind: "error", text: "Change wallet name or opening balance before saving." });
+          return;
+        }
         const response = await update.mutateAsync({
           walletId: wallet.id,
-          data: { name: values.name },
+          data,
         });
         setStatus({ kind: "success", text: "Wallet name saved." });
         onSuccess?.(response.data);
@@ -80,7 +91,7 @@ export function WalletForm({
       }}
       noValidate
     >
-      <h2>{wallet ? "Edit wallet" : "Create wallet"}</h2>
+      {showHeading ? <h2>{wallet ? "Edit wallet" : "Create wallet"}</h2> : null}
       <p className="muted">
         A wallet keeps one currency. Opening balance is starting wallet state, not a transaction.
       </p>
@@ -118,14 +129,12 @@ export function WalletForm({
         <Input
           id="wallet-opening-balance"
           inputMode="decimal"
-          disabled={Boolean(wallet)}
           {...form.register("opening_balance")}
         />
       </FormField>
       {wallet ? (
         <p className="muted" id="wallet-immutable-help">
-          Currency and opening balance cannot be changed. Create another wallet if currency is
-          wrong.
+          Currency cannot be changed. Opening balance changes wallet balance without adding history.
         </p>
       ) : null}
       {status ? (
@@ -139,6 +148,7 @@ export function WalletForm({
       <Button type="submit" disabled={!form.formState.isValid || pending || currencies.isError}>
         {pending ? "Saving…" : (submitLabel ?? (wallet ? "Save wallet" : "Create wallet"))}
       </Button>
+      {onCancel ? <Button type="button" variant="quiet" onClick={onCancel}>Cancel</Button> : null}
     </form>
   );
 }

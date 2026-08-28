@@ -21,7 +21,7 @@ rg -n '<select\b|confirm-box|button-primary|button-secondary|button-danger|butto
 | `components/ui/button.tsx` legacy wrapper | imported by auth, onboarding, wallets, categories, budgets, recurring, transactions, settings, deletion pages | replace now with Base UI-backed compat API | Task 14 |
 | `components/ui/input.tsx` legacy wrapper | imported by auth, wallets, categories, budgets, recurring, transactions, settings | replace now with Base UI-backed compat API | Task 14 |
 | `components/ui/form-field.tsx` | imported by auth, onboarding, wallets, categories, budgets, recurring, transactions, settings, tests | retain for now; still needed by current slices; future field integration deferred | Tasks 15–23 |
-| `components/ui/dialog.tsx` | current local wrapper only; no active imports in Task 14 inventory | retain for now; shadcn `dialog` intentionally deferred until first consumer task | Task 20 |
+| `components/ui/dialog.tsx` | superseded homemade wrapper | removed; generated Base UI Dialog adopted by Task 20 | Task 20 |
 | Native `<select className="input">` | onboarding, recurring form, budgets, categories, wallets, transaction form/filters, preferences | retain with compat CSS; migrate to Base UI controls later | Tasks 16–23 |
 | Native `<textarea className="input">` | transaction form | retain with compat CSS; migrate later | Task 18 |
 | Raw `.button` link/button styling | transaction history links, dashboard retry button | retain base compat class; remove variant subclasses now | Tasks 14, 19 |
@@ -64,7 +64,6 @@ rg -n '<select\b|confirm-box|button-primary|button-secondary|button-danger|butto
 ## Deferred Removes
 
 - `components/ui/form-field.tsx`
-- `components/ui/dialog.tsx`
 - native selects / textarea
 - confirm-box patterns
 - `.button` link compatibility class
@@ -272,4 +271,28 @@ substrate or Radix-era primitive introduced.
 - Existing Task 16 Sheet reused for mobile filter drafts and one Apply/Clear commit.
 - DropdownMenu and AlertDialog are generated Base UI primitives; no raw menus/dialogs added.
 - Compact rows delegate exact display to `MoneyAmount`; direction and Future/Trash states are text and badges.
+- No Orval-generated files edited.
+
+# Cashmemo V1 PR3 Task 20 Update (Wallet and category management)
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+Pinned CLI version: `4.19.0`
+
+## Generated Foundation Added In Task 20
+
+| File | Source | Notes |
+| --- | --- | --- |
+| `apps/web/components/ui/dialog.tsx` | `pnpm -C apps/web exec shadcn add dialog` | Generated Base UI Dialog; wallet/category forms and restrained archive confirmations |
+| `apps/web/components/ui/tabs.tsx` | `pnpm -C apps/web exec shadcn add dialog tabs` | Generated Base UI Tabs; one Expense/Income category level |
+
+The CLI prompted on existing `button.tsx`; answer was no, preserving Task 14 Button. Homemade
+Dialog wrapper is superseded. DropdownMenu, AlertDialog, Badge, and MoneyAmount remain shared.
+
+## Task 20 Substrate Audit
+
+- Wallet/category actions use generated Base UI DropdownMenu, Dialog, AlertDialog, and Tabs.
+- Opening-balance edits send exact strings and invalidate wallet scopes only; currency stays read-only.
+- Archive invalidates dependent entry-default and recurring queries; restore never resumes rules.
+- Server remains authoritative for hard-delete conflicts; no client eligibility inference added.
 - No Orval-generated files edited.

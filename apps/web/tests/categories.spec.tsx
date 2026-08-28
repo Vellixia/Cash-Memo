@@ -30,6 +30,7 @@ listMocks.categories.push(
 
 vi.mock("../generated/api", () => ({
   getListCategoriesQueryKey: () => ["/api/v1/categories"],
+  getListRecurringTransactionsQueryKey: () => ["/api/v1/recurring-transactions"],
   useListCategories: () => ({
     data:
       listMocks.state === "success" || listMocks.state === "empty"
@@ -105,7 +106,7 @@ describe("category UX validation", () => {
     error.unmount();
     listMocks.state = "empty";
     renderCategoryList();
-    expect(screen.getByText("No expense categories")).toBeTruthy();
+    expect(screen.getByText("No active expense categories")).toBeTruthy();
     listMocks.state = "success";
     renderCategoryList();
     expect(screen.getByText("Food & Drink")).toBeTruthy();
@@ -118,7 +119,8 @@ describe("category UX validation", () => {
       { id: "seeded", name: "Food & Drink", kind: "expense", archived_at: null },
     ];
     const initial = renderCategoryList();
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Food & Drink" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
     expect(screen.getByRole("heading", { name: "Rename category" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "Meals" } });
     const save = screen.getByRole("button", { name: "Save name" });
@@ -133,21 +135,26 @@ describe("category UX validation", () => {
       });
     });
     expect(screen.queryByRole("heading", { name: "Rename category" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Food & Drink" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive category" }));
     await waitFor(() => {
-      expect(screen.getByText(/Category archived. 1 recurring rule paused/)).toBeTruthy();
+      expect(screen.getByText("Category archived. 1 recurring rule paused.")).toBeTruthy();
     });
     listMocks.categories[0] = { ...listMocks.categories[0], archived_at: "2026-08-24T00:00:00Z" };
     initial.unmount();
     const restored = renderCategoryList();
-    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.click(screen.getByLabelText("Show archived"));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Food & Drink" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Restore" }));
     await waitFor(() => {
       expect(screen.getByText(/Recurring rules stay paused/)).toBeTruthy();
     });
     restored.unmount();
     renderCategoryList();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByLabelText("Show archived"));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Food & Drink" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete forever" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
     await waitFor(() => {
       expect(screen.getByText(/cannot be deleted while it has references/)).toBeTruthy();
@@ -161,11 +168,29 @@ describe("category UX validation", () => {
     listMocks.remove.mockResolvedValueOnce({ data: undefined });
     renderCategoryList();
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Travel" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete forever" }));
     expect(screen.getByText(/Delete category forever/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain("Category deleted.");
     });
+  });
+
+  it("keeps archived categories behind one toggle and switches kind with Tabs", () => {
+    listMocks.state = "success";
+    listMocks.categories = [
+      { id: "active", name: "Meals", kind: "expense", archived_at: null },
+      { id: "old", name: "Old Meals", kind: "expense", archived_at: "2026-08-24T00:00:00Z" },
+      { id: "salary", name: "Salary", kind: "income", archived_at: null },
+    ];
+    renderCategoryList();
+    expect(screen.getByText("Meals")).toBeTruthy();
+    expect(screen.queryByText("Old Meals")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Show archived"));
+    expect(screen.getByText("Old Meals")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    expect(screen.getByText("Salary")).toBeTruthy();
+    expect(screen.queryByText("Meals")).toBeNull();
   });
 });
