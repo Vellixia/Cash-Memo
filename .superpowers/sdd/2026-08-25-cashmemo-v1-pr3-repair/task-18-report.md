@@ -1,0 +1,53 @@
+# Task 18 Report: Route-driven transaction form and timezone round trip
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+Base: `42f8d89983c1f2759b84ac0cbd30146138adda18`
+
+## Scope and files
+
+Implemented one create/edit form with canonical routes:
+
+- `/app/transactions/new`
+- `/app/transactions/{id}/edit`
+
+Changed transaction form/validation, route consumers, focused Vitest/Playwright coverage, transaction history edit link, and E2E helpers. Added generated Base UI Select and RadioGroup; reused Task 16 Textarea. Removed old `/app/transactions/{id}` detail-as-edit page. Updated primitive inventory.
+
+## RED and generator audit
+
+The pre-Task-18 transaction suite passed while asserting legacy native selects and browser-local `occurred_at` behavior; it did not cover the approved local-minute contract. New RED assertions cover configured-zone formatting, `occurred_local`, RHF dirty update semantics, Rust field errors, direction/category filtering, wallet precision, note length, and routes.
+
+Pinned checks: Node 22.19.0 in this shell (project brief pins Node 24.14.0), pnpm 11.13.1, shadcn 4.19.0. Generator command: `pnpm exec shadcn add select radio-group --yes`. `textarea.tsx` was reused unchanged from Task 16. No Orval/generated API files edited.
+
+## Timezone and form behavior
+
+- `formatUtcForTimezone` uses `Intl.DateTimeFormat(..., { timeZone, hourCycle: "h23" }).formatToParts()` to produce exact `YYYY-MM-DDTHH:mm`.
+- Create sends displayed local minute as `occurred_local`; no browser timezone conversion or `new Date(local).toISOString()`.
+- Edit initializes from canonical UTC `occurred_at` in configured profile timezone. RHF `dirtyFields.occurred_at` controls omission: untouched/returned-to-original datetime omits `occurred_local`; changed datetime sends exact minute.
+- Rust `fields.occurred_local` 422 maps to datetime field error and linked control.
+- Entry-default timezone is authoritative; defaults pending/error blocks save. Active-wallet selection is deterministic (sole active first, else active last-used, else explicit).
+- Wallet changes preserve amount text; selected currency exponent revalidates amount and reports error without mutation.
+
+## UX hierarchy, routes, accessibility
+
+Order: Expense/Income segmented RadioGroup, prominent exact amount, wallet/currency Select, direction-compatible category Select, local datetime, note, actions. Note validation allows 501 characters to remain visible and reports the 500-character error. Inputs have visible labels, linked errors, pending/error/retry states, disabled duplicate-submit protection, keyboard-capable controls, and mobile/desktop action layout. History Edit links and browser helper use `/edit`; no modal fork.
+
+## GREEN evidence
+
+- `pnpm exec vitest run --reporter=dot`: 16 files, 140 tests passed.
+- Focused: `tests/transaction-form.spec.tsx`, `tests/history.spec.tsx`, `tests/accessibility.spec.tsx`: 3 files, 23 tests passed.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed with `--max-warnings 0`.
+- `pnpm build`: passed; route output includes `/app/transactions/new` and `/app/transactions/[id]/edit`, excludes old detail route.
+- Added real Playwright mismatch test: browser `America/Los_Angeles`, profile `Asia/Jakarta`, local input `2026-08-31T23:30`, expected UTC `2026-08-31T16:30:00Z`, reopen display `2026-08-31T23:30`. Full Playwright execution requires named disposable API/Postgres/SMTP services and was not run in this shell.
+
+## Responsive/a11y review
+
+375/1280 CSS review: form uses full-width controls, 44px targets, wrapped actions, and no modal-only dependency. Keyboard focus remains visible through existing design-system focus rules. RTL assertions verify labels, role alerts, linked `aria-describedby`, route-driven form landmark, and selected wallet semantics. Vitest emits one existing unwrapped-act warning in segmented-direction test; no test failure.
+
+## Self-review and concerns
+
+- Confirmed no unrelated `.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, or `.serena/` content was read/edited/staged.
+- Shell reports Node 22.19.0, while brief pins Node 24.14.0; pnpm and generated CLI match pinned versions.
+- Real cross-timezone Playwright run remains environment-dependent and should be run with fresh named services before release.
+- Final signed commit SHA is returned in task handoff after commit creation.

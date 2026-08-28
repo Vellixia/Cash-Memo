@@ -1,9 +1,9 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { Button } from "../../../../../components/ui/button";
-import { useGetTransaction } from "../../../../../generated/api";
-import { TransactionForm } from "../../../../../features/transactions/form";
+import { Button } from "../../../../../../components/ui/button";
+import { useGetTransaction } from "../../../../../../generated/api";
+import { TransactionForm } from "../../../../../../features/transactions/form";
 
 export default function EditTransactionPage() {
   const params = useParams<{ id: string }>();

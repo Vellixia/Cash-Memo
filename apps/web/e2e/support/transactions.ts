@@ -10,9 +10,10 @@ export interface TransactionInput {
 export async function createTransaction(page: Page, input: TransactionInput): Promise<string> {
   await page.goto("/app/transactions/new");
   await page.getByLabel("Amount").fill(input.amount);
-  await page.getByLabel("Direction").selectOption(input.direction);
-  await expect(page.getByLabel("Wallet")).not.toHaveValue("");
-  await page.getByLabel("Category").selectOption({ label: input.category });
+  await page.getByRole("radio", { name: input.direction === "income" ? "Income" : "Expense" }).click();
+  await expect(page.getByRole("combobox", { name: "Wallet" })).not.toHaveText("Choose wallet");
+  await page.getByRole("combobox", { name: "Category" }).click();
+  await page.getByRole("option", { name: input.category, exact: true }).click();
   await page.getByLabel("Note").fill(input.note);
   const delivered = page.waitForResponse(
     (response) =>

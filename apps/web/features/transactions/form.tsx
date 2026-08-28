@@ -2,11 +2,20 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { Button } from "../../components/ui/button";
 import { FormField } from "../../components/ui/form-field";
 import { Input } from "../../components/ui/input";
+import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "../../components/ui/select";
+import { Textarea } from "../../components/ui/textarea";
 import {
   useCreateTransaction,
   useGetTransactionEntryDefaults,
@@ -19,17 +28,53 @@ import type { TransactionContract } from "../../generated/api/model/transactionC
 import { transactionSchema, type TransactionFormValues } from "../../lib/validation/transaction";
 import { invalidateTransactionScopes } from "./query-keys";
 
-function localDateTime(value = new Date()) {
-  const offset = value.getTimezoneOffset() * 60_000;
-  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+type DateTimePart = "year" | "month" | "day" | "hour" | "minute";
+
+/** Format canonical UTC instants as Cashmemo local wall-clock minutes. */
+export function formatUtcForTimezone(value: string | Date, timeZone: string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter(({ type }) => ["year", "month", "day", "hour", "minute"].includes(type))
+      .map(({ type, value: partValue }) => [type, partValue]),
+  ) as Record<DateTimePart, string>;
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+}
+
+export function formatCurrentLocalMinute(timeZone: string): string {
+  return formatUtcForTimezone(new Date(), timeZone);
 }
 
 function errorText(error: unknown) {
   const value = error as {
-    response?: { data?: { error?: { message?: string } } };
+    response?: { data?: { error?: { message?: string; fields?: Record<string, unknown> | null } } };
     message?: string;
   };
   return value.response?.data?.error?.message ?? value.message ?? "Request unavailable. Try again.";
+}
+
+function fieldErrorText(error: unknown, field: string): string | undefined {
+  const value = error as {
+    response?: { data?: { error?: { fields?: Record<string, unknown> | null } } };
+  };
+  const fieldValue = value.response?.data?.error?.fields?.[field];
+  if (typeof fieldValue === "string") return fieldValue;
+  if (Array.isArray(fieldValue) && typeof fieldValue[0] === "string") return fieldValue[0];
+  if (fieldValue && typeof fieldValue === "object" && "message" in fieldValue) {
+    const message = (fieldValue as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return undefined;
 }
 
 export function TransactionForm({
@@ -47,15 +92,16 @@ export function TransactionForm({
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
+  const timezone = defaults.data?.data.timezone ?? "UTC";
   const walletList = (wallets.data?.data ?? []).filter((wallet) => !wallet.archived_at);
   const currencyList = currencies.data?.data ?? [];
-  const [walletForPrecision, setWalletForPrecision] = useState(transaction?.wallet_id ?? "");
-  const selectedWallet = walletList.find((wallet) => wallet.id === walletForPrecision);
-  const exponent =
-    currencyList.find((currency) => currency.code === selectedWallet?.currency)?.exponent ?? 4;
-  const resolver = useMemo(() => zodResolver(transactionSchema(exponent)), [exponent]);
+  const initialOccurredAt = transaction
+    ? formatUtcForTimezone(transaction.occurred_at, timezone)
+    : formatCurrentLocalMinute(timezone);
+  const exponentRef = useRef<number | undefined>(undefined);
   const form = useForm<TransactionFormValues>({
-    resolver,
+    resolver: async (values, context, options) =>
+      zodResolver(transactionSchema(exponentRef.current ?? 2))(values, context, options),
     mode: "onChange",
     defaultValues: {
       amount: transaction?.amount ?? "",
@@ -63,72 +109,125 @@ export function TransactionForm({
       category_id: transaction?.category_id ?? "",
       direction: transaction?.direction === "income" ? "income" : "expense",
       note: transaction?.note ?? "",
-      occurred_at: transaction ? localDateTime(new Date(transaction.occurred_at)) : localDateTime(),
+      occurred_at: initialOccurredAt,
     },
   });
   const direction = form.watch("direction");
   const walletId = form.watch("wallet_id");
+  const selectedWallet = walletList.find((wallet) => wallet.id === walletId);
+  const exponent = currencyList.find((currency) => currency.code === selectedWallet?.currency)?.exponent;
+  exponentRef.current = exponent;
   const categoryList = (categories.data?.data ?? []).filter(
-    (category) => !category.archived_at && category.kind === direction,
+    (category) => !category.archived_at && category.kind.toLowerCase() === direction,
   );
+  const optionsPending =
+    defaults.isPending || wallets.isPending || currencies.isPending || categories.isPending;
+  const optionsError =
+    defaults.isError || wallets.isError || currencies.isError || categories.isError;
 
+  // Resolver depends on selected wallet currency precision. Keep exact amount text intact while
+  // re-validating against newly selected wallet.
   useEffect(() => {
-    setWalletForPrecision(walletId);
-  }, [walletId]);
+    exponentRef.current = exponent;
+    if (walletId && exponent === undefined && !currencies.isPending) {
+      form.setError("amount", {
+        type: "currency",
+        message: "Currency precision unavailable. Retry the currency registry.",
+      });
+    } else if (form.getFieldState("amount").error?.type === "currency") {
+      form.clearErrors("amount");
+      void form.trigger("amount");
+    } else {
+      void form.trigger("amount");
+    }
+  }, [currencies.isPending, exponent, form, walletId]);
 
+  // Entry defaults arrive after first render. Do not overwrite user edits.
   useEffect(() => {
-    void form.trigger("amount");
-  }, [exponent, form, walletId]);
+    if (form.getFieldState("occurred_at").isDirty) return;
+    form.setValue(
+      "occurred_at",
+      transaction
+        ? formatUtcForTimezone(transaction.occurred_at, timezone)
+        : formatCurrentLocalMinute(timezone),
+      { shouldDirty: false, shouldValidate: true },
+    );
+  }, [form, timezone, transaction]);
 
   useEffect(() => {
     if (transaction || form.getValues("wallet_id") || walletList.length === 0) return;
-    const serverWallet = walletList.find(
+    const lastUsed = walletList.find(
       (wallet) => wallet.id === defaults.data?.data.last_used_wallet_id,
     );
-    const fallback = serverWallet ?? (walletList.length === 1 ? walletList[0] : undefined);
+    const fallback = walletList.length === 1 ? walletList[0] : lastUsed;
     if (fallback) form.setValue("wallet_id", fallback.id, { shouldValidate: true });
   }, [defaults.data?.data.last_used_wallet_id, form, transaction, walletList]);
 
   async function submit(values: TransactionFormValues) {
     setStatus(undefined);
-    const data = {
+    if (exponent === undefined) {
+      form.setError("amount", {
+        type: "currency",
+        message: "Currency precision unavailable. Retry the currency registry.",
+      });
+      return;
+    }
+    const common = {
       amount: values.amount.trim(),
       wallet_id: values.wallet_id,
       category_id: values.category_id,
       direction: values.direction,
-      note: values.note || null,
-      occurred_at:
-        transaction && values.occurred_at === localDateTime(new Date(transaction.occurred_at))
-          ? transaction.occurred_at
-          : new Date(values.occurred_at).toISOString(),
+      note: values.note.trim() || null,
     };
+    const occurredLocalChanged = form.formState.dirtyFields.occurred_at === true;
+    const data = transaction
+      ? { ...common, ...(occurredLocalChanged ? { occurred_local: values.occurred_at } : {}) }
+      : { ...common, occurred_local: values.occurred_at };
     try {
       if (transaction) {
-        await update.mutateAsync({ transactionId: transaction.id, data });
+        const response = await update.mutateAsync({ transactionId: transaction.id, data });
         await invalidateTransactionScopes(queryClient, {
           previous: transaction,
-          next: { ...transaction, ...data },
+          next: { ...transaction, ...response.data },
         });
         setStatus({ kind: "success", text: "Transaction saved." });
       } else {
-        await create.mutateAsync({ data });
+        const response = await create.mutateAsync({ data });
         await invalidateTransactionScopes(queryClient, {
           next: {
-            wallet_id: data.wallet_id,
-            category_id: data.category_id,
-            occurred_at: data.occurred_at,
+            wallet_id: response.data.wallet_id,
+            category_id: response.data.category_id,
+            occurred_at: response.data.occurred_at,
           },
         });
         setStatus({ kind: "success", text: "Transaction saved." });
-        form.reset({ ...values, amount: "", note: "", occurred_at: localDateTime() });
+        form.reset({
+          ...values,
+          amount: "",
+          note: "",
+          occurred_at: formatCurrentLocalMinute(timezone),
+        });
       }
       onSuccess?.();
     } catch (error) {
+      const occurredLocalError = fieldErrorText(error, "occurred_local");
+      if (occurredLocalError) {
+        form.setError("occurred_at", { type: "server", message: occurredLocalError });
+      }
       setStatus({ kind: "error", text: errorText(error) });
     }
   }
 
   const pending = create.isPending || update.isPending;
+  const amountError = form.formState.errors.amount?.message;
+  const directionError = form.formState.errors.direction?.message;
+  const walletError = form.formState.errors.wallet_id?.message;
+  const categoryError = form.formState.errors.category_id?.message;
+  const occurredError = form.formState.errors.occurred_at?.message;
+  const noteError = form.formState.errors.note?.message;
+  const submitDisabled =
+    pending || optionsPending || optionsError || exponent === undefined || !form.formState.isValid;
+
   return (
     <section className="management-page">
       <div className="page-heading">
@@ -142,91 +241,147 @@ export function TransactionForm({
         onSubmit={(event) => void form.handleSubmit(submit)(event)}
         noValidate
       >
-        <FormField
-          label="Amount"
-          htmlFor="transaction-amount"
-          error={form.formState.errors.amount?.message}
-        >
+        {optionsPending ? <p role="status">Loading transaction options…</p> : null}
+        {optionsError ? (
+          <div role="alert" className="field-error">
+            <p>Could not load transaction options.</p>
+            <Button
+              type="button"
+              variant="quiet"
+              onClick={() => {
+                if (defaults.isError) void defaults.refetch();
+                if (wallets.isError) void wallets.refetch();
+                if (currencies.isError) void currencies.refetch();
+                if (categories.isError) void categories.refetch();
+              }}
+            >
+              Retry options
+            </Button>
+          </div>
+        ) : null}
+        <FormField label="Amount" htmlFor="transaction-amount" error={amountError}>
           <Input
             id="transaction-amount"
+            className="transaction-amount"
             autoFocus
             inputMode="decimal"
             {...form.register("amount")}
           />
         </FormField>
-        <FormField
-          label="Direction"
-          htmlFor="transaction-direction"
-          error={form.formState.errors.direction?.message}
-        >
-          <select
-            id="transaction-direction"
-            className="input"
-            {...form.register("direction", {
-              onChange: () => {
-                form.setValue("category_id", "", { shouldValidate: true });
-              },
-            })}
+        <div className="form-field">
+          <label id="transaction-direction-label">Direction</label>
+          <RadioGroup
+            aria-labelledby="transaction-direction-label"
+            value={direction}
+            onValueChange={(value) => {
+              form.setValue("direction", value as TransactionFormValues["direction"], {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+              form.setValue("category_id", "", { shouldDirty: true, shouldValidate: true });
+            }}
+            className="transaction-direction"
           >
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-          </select>
-        </FormField>
-        <FormField
-          label="Wallet"
-          htmlFor="transaction-wallet"
-          error={form.formState.errors.wallet_id?.message}
-        >
-          <select
-            id="transaction-wallet"
-            className="input"
-            disabled={wallets.isPending}
-            {...form.register("wallet_id")}
-          >
-            <option value="">Choose wallet</option>
-            {walletList.map((wallet) => (
-              <option value={wallet.id} key={wallet.id}>
-                {wallet.name} — {wallet.currency}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <FormField
-          label="Category"
-          htmlFor="transaction-category"
-          error={form.formState.errors.category_id?.message}
-        >
-          <select
-            id="transaction-category"
-            className="input"
-            disabled={categories.isPending}
-            {...form.register("category_id")}
-          >
-            <option value="">Choose category</option>
-            {categoryList.map((category) => (
-              <option value={category.id} key={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <FormField
-          label="Occurred at"
-          htmlFor="transaction-occurred-at"
-          error={form.formState.errors.occurred_at?.message}
-        >
+            <label htmlFor="transaction-direction-expense">
+              <RadioGroupItem id="transaction-direction-expense" value="expense" />
+              Expense
+            </label>
+            <label htmlFor="transaction-direction-income">
+              <RadioGroupItem id="transaction-direction-income" value="income" />
+              Income
+            </label>
+          </RadioGroup>
+          {directionError ? (
+            <p className="field-error" id="transaction-direction-error" role="alert">
+              {directionError}
+            </p>
+          ) : null}
+        </div>
+        <Controller
+          control={form.control}
+          name="wallet_id"
+          render={({ field }) => (
+            <div className="form-field">
+              <label htmlFor="transaction-wallet">Wallet</label>
+              <Select
+                value={field.value || null}
+                onValueChange={(value) => field.onChange(value ?? "")}
+                disabled={wallets.isPending}
+              >
+                <SelectTrigger
+                  id="transaction-wallet"
+                  className="min-h-11 w-full"
+                  aria-describedby={walletError ? "transaction-wallet-error" : undefined}
+                  aria-invalid={walletError ? true : undefined}
+                  onBlur={field.onBlur}
+                >
+                  <span data-slot="select-value">
+                    {selectedWallet ? `${selectedWallet.name} — ${selectedWallet.currency}` : "Choose wallet"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {walletList.map((wallet) => (
+                    <SelectItem value={wallet.id} key={wallet.id}>
+                      {wallet.name} — {wallet.currency}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {walletError ? (
+                <p className="field-error" id="transaction-wallet-error" role="alert">
+                  {walletError}
+                </p>
+              ) : null}
+            </div>
+          )}
+        />
+        <Controller
+          control={form.control}
+          name="category_id"
+          render={({ field }) => (
+            <div className="form-field">
+              <label htmlFor="transaction-category">Category</label>
+              <Select
+                value={field.value || null}
+                onValueChange={(value) => field.onChange(value ?? "")}
+                disabled={categories.isPending}
+              >
+                <SelectTrigger
+                  id="transaction-category"
+                  className="min-h-11 w-full"
+                  aria-describedby={categoryError ? "transaction-category-error" : undefined}
+                  aria-invalid={categoryError ? true : undefined}
+                  onBlur={field.onBlur}
+                >
+                  <span data-slot="select-value">
+                    {categoryList.find((category) => category.id === field.value)?.name ?? "Choose category"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryList.map((category) => (
+                    <SelectItem value={category.id} key={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {categoryError ? (
+                <p className="field-error" id="transaction-category-error" role="alert">
+                  {categoryError}
+                </p>
+              ) : null}
+            </div>
+          )}
+        />
+        <FormField label="Occurred at" htmlFor="transaction-occurred-at" error={occurredError}>
           <Input
             id="transaction-occurred-at"
             type="datetime-local"
             {...form.register("occurred_at")}
           />
         </FormField>
-        <FormField
-          label="Note"
-          htmlFor="transaction-note"
-          error={form.formState.errors.note?.message}
-        >
-          <textarea id="transaction-note" className="input" rows={3} {...form.register("note")} />
+        <FormField label="Note" htmlFor="transaction-note" error={noteError}>
+          <Textarea id="transaction-note" rows={3} {...form.register("note")} />
         </FormField>
         {status ? (
           <p
@@ -236,18 +391,14 @@ export function TransactionForm({
             {status.text}
           </p>
         ) : null}
-        <Button
-          type="submit"
-          disabled={
-            pending ||
-            wallets.isError ||
-            categories.isError ||
-            currencies.isPending ||
-            currencies.isError
-          }
-        >
-          {pending ? "Saving…" : transaction ? "Save transaction" : "Save transaction"}
-        </Button>
+        <div className="card-actions transaction-actions">
+          <Button type="submit" disabled={submitDisabled}>
+            {pending ? "Saving…" : "Save transaction"}
+          </Button>
+          <Link className="button quiet" href="/app/transactions">
+            Cancel
+          </Link>
+        </div>
       </form>
     </section>
   );

@@ -71,13 +71,17 @@ export async function login(
   await expect(page).toHaveURL(expectedDestination);
 }
 
-export async function completeOnboarding(page: Page, user: E2EUser): Promise<void> {
+export async function completeOnboarding(
+  page: Page,
+  user: E2EUser,
+  timezone = "UTC",
+): Promise<void> {
   await page.goto("/onboarding");
   await expect(
     page.getByRole("heading", { name: "Confirm your timezone", level: 2 }),
   ).toBeVisible();
-  await page.getByLabel("Reporting timezone").fill("UTC");
-  await page.getByRole("option", { name: "UTC" }).click();
+  await page.getByLabel("Reporting timezone").fill(timezone);
+  await page.getByRole("option", { name: timezone, exact: true }).click();
   await page.getByLabel("Default currency").fill("USD");
   await page.getByRole("button", { name: "Save timezone and currency" }).click();
 
@@ -90,9 +94,13 @@ export async function completeOnboarding(page: Page, user: E2EUser): Promise<voi
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
 }
 
-export async function provisionUser(page: Page, label: string): Promise<E2EUser> {
+export async function provisionUser(
+  page: Page,
+  label: string,
+  timezone = "UTC",
+): Promise<E2EUser> {
   const user = isolatedUser(label);
   await registerVerifyAndLogin(page, user);
-  await completeOnboarding(page, user);
+  await completeOnboarding(page, user, timezone);
   return user;
 }

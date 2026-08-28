@@ -151,7 +151,7 @@ export function TransactionHistory() {
                 <p className="muted">{transaction.note ?? "No note"}</p>
               </div>
               <div className="card-actions">
-                <Link className="button quiet" href={`/app/transactions/${transaction.id}`}>
+                <Link className="button quiet" href={`/app/transactions/${transaction.id}/edit`}>
                   Edit
                 </Link>
                 {confirming === transaction.id ? (

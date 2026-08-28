@@ -221,3 +221,31 @@ Pinned CLI version: `4.19.0`
 | Category composition | proportional bars consume server `share_percent` only; displayed percentage stays canonical string | avoids client financial math |
 | Loading/error/empty | stable Skeleton regions plus local endpoint errors; no-activity and no-budget copy remain distinct | preserves successful sibling sections |
 | Money | canonical signed decimal digits grouped as strings; direction is explicit text and accessible label | no rounding/recalculation or color-only meaning |
+
+# Cashmemo V1 PR3 Task 18 Update (Route-driven transaction form and timezone round trip)
+
+Date: 2026-08-28
+Branch: `rewrite/cashmemo-v1`
+
+## Generated Foundation Added In Task 18
+
+| File | Source | Notes |
+| --- | --- | --- |
+| `apps/web/components/ui/select.tsx` | `pnpm exec shadcn add select radio-group --yes` | Generated Base UI `@base-ui/react/select` primitive; first consumers are transaction wallet/category controls |
+| `apps/web/components/ui/radio-group.tsx` | `pnpm exec shadcn add select radio-group --yes` | Generated Base UI `@base-ui/react/radio` + `@base-ui/react/radio-group`; first consumer is transaction direction control |
+| `apps/web/components/ui/textarea.tsx` | Task 16 generated foundation | Reused unchanged; no regeneration |
+
+## Task 18 Substrate Audit
+
+- Transaction form uses one Base UI Select substrate for wallet/category and one Base UI RadioGroup substrate for direction.
+- Existing Base UI Textarea remains single implementation; no native transaction textarea/select fork remains.
+- No Orval-generated files edited.
+
+## Legacy Surface Retired By Task 18
+
+| Surface | Status after Task 18 |
+| --- | --- |
+| Native transaction wallet/category selects | replaced by Base UI Select with keyboard options and linked field errors |
+| Native transaction direction select | replaced by accessible Expense/Income segmented RadioGroup |
+| Browser-timezone `occurred_at` payload conversion | removed; create writes `occurred_local`, untouched edit omits it |
+| `/app/transactions/{id}` detail-as-edit route | removed; canonical edit is `/app/transactions/{id}/edit` |

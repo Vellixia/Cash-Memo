@@ -346,7 +346,7 @@ describe("accessibility contract", () => {
 
     const amount = screen.getByLabelText("Amount");
     await waitFor(() => {
-      expect(screen.getByLabelText<HTMLSelectElement>("Wallet").value).toBe("wallet-1");
+      expect(screen.getByRole("combobox", { name: "Wallet" }).textContent).toContain("Cash");
     });
     const transactionForm = amount.closest("form");
     expect(transactionForm).toBeTruthy();

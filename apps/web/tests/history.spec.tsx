@@ -104,7 +104,7 @@ describe("transaction history", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
     expect(mocks.requestParams.at(-1)).toMatchObject({ cursor: "next" });
     expect(screen.getAllByRole("link", { name: "Edit" })[0].getAttribute("href")).toBe(
-      "/app/transactions/transaction-new",
+      "/app/transactions/transaction-new/edit",
     );
   });
   it("has recoverable error", () => {
