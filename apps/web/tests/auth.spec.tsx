@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import {
   getPostLoginPath,
@@ -44,7 +44,8 @@ const api = vi.hoisted(() => ({
     isPending: false,
     isError: false,
     isSuccess: false,
-    error: undefined as { response?: { status?: number } } | undefined,
+    error: undefined as
+      { response?: { status?: number; data?: { error?: { code?: string } } } } | undefined,
   },
 }));
 
@@ -91,9 +92,12 @@ function setHash(hash: string) {
   window.history.replaceState(null, "", `/verify-email${hash}`);
 }
 
+let activeClearSpy: { mock: { calls: unknown[] } } | undefined;
+
 function renderWithClient(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const clearSpy = vi.spyOn(client, "clear");
+  activeClearSpy = clearSpy;
   return {
     client,
     clearSpy,
@@ -465,7 +469,7 @@ describe("restricted-mode routing", () => {
       error: undefined,
     };
 
-    renderWithClient(
+    const { clearSpy } = renderWithClient(
       <AuthGate>
         <p>private balances</p>
       </AuthGate>,
@@ -473,6 +477,8 @@ describe("restricted-mode routing", () => {
 
     expect(await screen.findByText("private balances")).toBeTruthy();
     expect(api.routes).toEqual([]);
+    // A full-access gate must never take the restricted clear/hold path.
+    expect(clearSpy).not.toHaveBeenCalled();
   });
 
   it("keeps the deletion screen reachable only for deletion-only sessions", async () => {
@@ -514,6 +520,35 @@ describe("restricted-mode routing", () => {
       expect(clearSpy).toHaveBeenCalledTimes(1);
     });
     expect(api.routes).toEqual([]);
+  });
+
+  it("clears private cache before the restricted children ever mount", async () => {
+    api.pathname = "/deletion";
+    api.session = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { response: { status: 403 } },
+    };
+    let clearCallsAtChildMount: number | undefined;
+
+    function RestrictedChild() {
+      useEffect(() => {
+        clearCallsAtChildMount ??= activeClearSpy?.mock.calls.length;
+      }, []);
+      return <p>deletion controls</p>;
+    }
+
+    renderWithClient(
+      <AuthGate allow="deletion-only">
+        <RestrictedChild />
+      </AuthGate>,
+    );
+
+    expect(await screen.findByText("deletion controls")).toBeTruthy();
+    // Ordering, not just count: a clear that lands after the child mounts would discard the
+    // child's in-flight queries, and a removed in-flight query never refetches.
+    expect(clearCallsAtChildMount).toBe(1);
   });
 
   it("sends a restricted session away from the financial shell without mounting it", async () => {
@@ -589,22 +624,51 @@ describe("restricted deletion screen", () => {
     return renderWithClient(<DeletionPage />);
   }
 
-  it("blames the password only when the server rejected the password", async () => {
-    api.cancelState = { ...api.cancelState, isError: true, error: { response: { status: 401 } } };
-    renderDeletionScreen();
+  it("blames the password only for an authoritative INVALID_CREDENTIALS rejection", async () => {
+    api.cancelState = {
+      ...api.cancelState,
+      isError: true,
+      error: { response: { status: 401, data: { error: { code: "INVALID_CREDENTIALS" } } } },
+    };
+    const { clearSpy } = renderDeletionScreen();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch("Password was not accepted");
     expect(alert.textContent).toMatch("Deletion is still scheduled");
+    expect(api.routes).toEqual([]);
+    // Only the restricted gate's own clear; a rejected password must not clear anything further.
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns an expired or revoked session to sign in instead of blaming the password", async () => {
+    api.cancelState = {
+      ...api.cancelState,
+      isError: true,
+      error: { response: { status: 401, data: { error: { code: "UNAUTHORIZED" } } } },
+    };
+    const { clearSpy } = renderDeletionScreen();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch("Returning to sign in…");
+    expect(alert.textContent).not.toMatch("Password was not accepted");
+    await waitFor(() => {
+      expect(api.routes).toEqual(["/login"]);
+    });
+    expect(clearSpy).toHaveBeenCalled();
   });
 
   it("stays neutral when cancellation fails for any other reason", async () => {
-    api.cancelState = { ...api.cancelState, isError: true, error: { response: { status: 500 } } };
+    api.cancelState = {
+      ...api.cancelState,
+      isError: true,
+      error: { response: { status: 500, data: { error: { code: "INTERNAL" } } } },
+    };
     renderDeletionScreen();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch("Could not cancel deletion. Deletion is still scheduled.");
     expect(alert.textContent).not.toMatch("Password was not accepted");
+    expect(api.routes).toEqual([]);
   });
 
   it("stays neutral when cancellation fails without any response status", async () => {

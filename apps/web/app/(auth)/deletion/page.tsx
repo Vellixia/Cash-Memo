@@ -44,14 +44,25 @@ function DeletionPanel() {
       void client.invalidateQueries({ queryKey: getGetAccountDeletionQueryKey() });
   }, [cancel.isSuccess, client]);
 
-  useEffect(() => {
-    if (query.isError) {
-      clearSessionState(client);
-      router.replace(getDeletionErrorDestination(query.error));
-    }
-  }, [client, query.error, query.isError, router]);
+  // The cancel route answers 401 for BOTH a rejected password (`INVALID_CREDENTIALS`, raised by the
+  // handler) and a missing/expired/revoked cookie (`UNAUTHORIZED`, raised by the session extractor
+  // before the credential check). Only the first may blame the password; the second must return the
+  // user to sign in instead of leaving them retyping a correct password on the grace-period screen.
+  const cancelErrorCode = (
+    cancel.error as { response?: { data?: { error?: { code?: string } } } } | null | undefined
+  )?.response?.data?.error?.code;
+  const cancelRejectedPassword = cancelErrorCode === "INVALID_CREDENTIALS";
+  const cancelLostSession = cancel.isError && cancelErrorCode === "UNAUTHORIZED";
+  const sessionEnded = query.isError || cancelLostSession;
 
-  if (query.isPending || query.isError) {
+  useEffect(() => {
+    if (sessionEnded) {
+      clearSessionState(client);
+      router.replace(getDeletionErrorDestination(query.error ?? cancel.error));
+    }
+  }, [cancel.error, client, query.error, router, sessionEnded]);
+
+  if (query.isPending || sessionEnded) {
     return (
       <main className="public-page">
         {query.isPending ? (
@@ -64,11 +75,6 @@ function DeletionPanel() {
   }
 
   const pending = deletion ? deletionActionsForStatus(deletion.status).canCancel : false;
-  // Only the server's own credential rejection may tell the user their password was wrong; a 500 or
-  // a dropped connection must not push them into retrying and burning their rate-limit budget.
-  const cancelRejectedPassword =
-    (cancel.error as { response?: { status?: number } } | null | undefined)?.response?.status ===
-    401;
 
   return (
     <main className="public-page">
