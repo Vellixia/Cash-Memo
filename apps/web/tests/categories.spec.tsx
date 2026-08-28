@@ -20,7 +20,7 @@ const listMocks = vi.hoisted(() => ({
     },
   }),
   restore: vi.fn().mockResolvedValue({ data: {} }),
-  remove: vi.fn().mockRejectedValue(new Error("has references")),
+  remove: vi.fn().mockRejectedValue({ response: { status: 409, data: { error: { message: "has references" } } } }),
 }));
 
 listMocks.categories.push(
@@ -113,6 +113,27 @@ describe("category UX validation", () => {
     expect(screen.getByText("Travel")).toBeTruthy();
   });
 
+  it("exposes matching tabpanels for keyboard and assistive technology", () => {
+    listMocks.state = "success";
+    listMocks.categories = [{ id: "seeded", name: "Food", kind: "expense", archived_at: null }];
+    renderCategoryList();
+    expect(screen.getByRole("tabpanel", { name: "Expense" })).toBeTruthy();
+    const expenseTab = screen.getByRole("tab", { name: "Expense" });
+    expect(expenseTab.getAttribute("aria-controls")).toBe(screen.getByRole("tabpanel", { name: "Expense" }).id);
+    fireEvent.click(screen.getByRole("tab", { name: "Income" }));
+    expect(screen.getByRole("tabpanel", { name: "Income" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Income" }).getAttribute("aria-controls")).toBe(screen.getByRole("tabpanel", { name: "Income" }).id);
+  });
+
+  it("keeps embedded category forms from adding a second dialog surface", () => {
+    listMocks.state = "success";
+    listMocks.categories = [{ id: "seeded", name: "Food", kind: "expense", archived_at: null }];
+    renderCategoryList();
+    fireEvent.click(screen.getByRole("button", { name: "Create category" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.querySelector("form")?.className).not.toContain("dialog");
+  });
+
   it("supports rename, archive/restore, and explicit hard-delete conflict feedback", async () => {
     listMocks.state = "success";
     listMocks.categories = [
@@ -175,6 +196,24 @@ describe("category UX validation", () => {
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain("Category deleted.");
     });
+  });
+
+  it("keeps archive failures inside consequence dialog and maps server failures", async () => {
+    listMocks.state = "success";
+    listMocks.categories = [{ id: "seeded", name: "Food", kind: "expense", archived_at: null }];
+    listMocks.archive.mockRejectedValueOnce(new Error("offline"));
+    renderCategoryList();
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Food" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive category" }));
+    await waitFor(() => expect(screen.getByRole("dialog").textContent).toContain("offline"));
+    listMocks.remove.mockRejectedValueOnce({ response: { status: 500, data: { error: { message: "server unavailable" } } } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Food" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete forever" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
+    await waitFor(() => expect(screen.getByRole("article").textContent).toContain("Could not delete category"));
+    expect(screen.getByRole("article").textContent).not.toContain("while it has references");
   });
 
   it("keeps archived categories behind one toggle and switches kind with Tabs", () => {

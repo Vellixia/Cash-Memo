@@ -34,6 +34,7 @@ export function WalletList() {
   const [editing, setEditing] = useState<WalletContract>();
   const [formOpen, setFormOpen] = useState(false);
   const [archiving, setArchiving] = useState<WalletContract>();
+  const [archiveError, setArchiveError] = useState<string>();
   const [deleting, setDeleting] = useState<WalletContract>();
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
@@ -47,6 +48,7 @@ export function WalletList() {
   }
   async function archiveWallet(wallet: WalletContract) {
     setStatus(undefined);
+    setArchiveError(undefined);
     try {
       const response = await archive.mutateAsync({ walletId: wallet.id });
       await Promise.all([
@@ -57,7 +59,7 @@ export function WalletList() {
       const count = response.data.paused_recurring_count;
       setArchiving(undefined);
       setStatus({ kind: "success", text: count > 0 ? `Wallet archived. ${String(count)} recurring ${count === 1 ? "rule" : "rules"} paused.` : "Wallet archived." });
-    } catch (error) { setStatus({ kind: "error", text: errorText(error) }); }
+    } catch (error) { setArchiveError(errorText(error)); }
   }
   async function restoreWallet(wallet: WalletContract) {
     setStatus(undefined);
@@ -80,7 +82,10 @@ export function WalletList() {
       setStatus({ kind: "success", text: "Wallet deleted." });
     } catch (error) {
       setDeleting(undefined);
-      const message = `Wallet cannot be deleted while it has history. ${errorText(error)}`;
+      const statusCode = (error as { response?: { status?: number } }).response?.status;
+      const message = statusCode === 409
+        ? `Wallet cannot be deleted while it has history. ${errorText(error)}`
+        : `Could not delete wallet. ${errorText(error)}`;
       setDeleteErrors((current) => ({ ...current, [wallet.id]: message }));
     }
   }
@@ -95,18 +100,18 @@ export function WalletList() {
     <Dialog open={formOpen} onOpenChange={setFormOpen}>
       <DialogContent className="management-dialog">
         <DialogHeader><DialogTitle>{editing ? "Edit wallet" : "Create wallet"}</DialogTitle><DialogDescription>Wallet currency stays fixed after creation. Opening balance changes current wallet state only.</DialogDescription></DialogHeader>
-        <WalletForm wallet={editing} showHeading={false} onCancel={() => setFormOpen(false)} onSuccess={() => { setFormOpen(false); setEditing(undefined); void invalidateWallet(editing?.id); }} />
+        <WalletForm wallet={editing} embedded showHeading={false} onCancel={() => setFormOpen(false)} onSuccess={() => { setFormOpen(false); setEditing(undefined); void invalidateWallet(editing?.id); }} />
       </DialogContent>
     </Dialog>
     {list.length === 0 ? <div className="empty-state"><h2>No wallets yet</h2><p>Create your first wallet to start tracking money.</p><Button type="button" onClick={() => { setEditing(undefined); setFormOpen(true); }}>Create wallet</Button></div> : <div className="card-list">{list.map((wallet) => {
       const archived = Boolean(wallet.archived_at);
       return <article className={`management-card management-row ${archived ? "is-archived" : ""}`} key={wallet.id}>
         <div><h2>{wallet.name}</h2><p className="muted"><MoneyAmount value={wallet.balance.amount} currency={wallet.currency} /> · {wallet.currency}</p><p className="muted"><span className="status-label">{archived ? "Archived" : "Active"}</span> · Opening balance {wallet.opening_balance}</p>{deleteErrors[wallet.id] ? <p role="alert" className="field-error">{deleteErrors[wallet.id]}</p> : null}</div>
-        <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="quiet" aria-label={`Actions for ${wallet.name}`}>Actions</Button>} /><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => { setEditing(wallet); setFormOpen(true); }}>Edit wallet</DropdownMenuItem>{archived ? <DropdownMenuItem onClick={() => void restoreWallet(wallet)} disabled={restore.isPending}>Restore</DropdownMenuItem> : <DropdownMenuItem onClick={() => setArchiving(wallet)}>Archive</DropdownMenuItem>}<DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => setDeleting(wallet)}>Delete forever</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+        <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="quiet" aria-label={`Actions for ${wallet.name}`}>Actions</Button>} /><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => { setEditing(wallet); setFormOpen(true); }}>Edit wallet</DropdownMenuItem>{archived ? <DropdownMenuItem onClick={() => void restoreWallet(wallet)} disabled={restore.isPending}>Restore</DropdownMenuItem> : <DropdownMenuItem onClick={() => { setArchiveError(undefined); setArchiving(wallet); }}>Archive</DropdownMenuItem>}<DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => setDeleting(wallet)}>Delete forever</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </article>;
     })}</div>}
-    <Dialog open={Boolean(archiving)} onOpenChange={(open) => { if (!open) setArchiving(undefined); }}>
-      <DialogContent><DialogHeader><DialogTitle>Archive {archiving?.name}?</DialogTitle><DialogDescription>Archiving keeps history, removes wallet from new entries, and pauses dependent recurring rules. Restore will not resume those rules.</DialogDescription></DialogHeader><div className="dialog-actions"><Button type="button" variant="quiet" onClick={() => setArchiving(undefined)}>Cancel</Button><Button type="button" variant="danger" onClick={() => archiving && void archiveWallet(archiving)} disabled={archive.isPending}>{archive.isPending ? "Archiving…" : "Archive wallet"}</Button></div></DialogContent>
+    <Dialog open={Boolean(archiving)} onOpenChange={(open) => { if (!open) { setArchiving(undefined); setArchiveError(undefined); } }}>
+      <DialogContent><DialogHeader><DialogTitle>Archive {archiving?.name}?</DialogTitle><DialogDescription>Archiving keeps history, removes wallet from new entries, and pauses dependent recurring rules. Restore will not resume those rules.</DialogDescription></DialogHeader>{archiveError ? <p role="alert" className="field-error">Could not archive wallet. {archiveError}</p> : null}<div className="dialog-actions"><Button type="button" variant="quiet" onClick={() => setArchiving(undefined)}>Cancel</Button><Button type="button" variant="danger" onClick={() => archiving && void archiveWallet(archiving)} disabled={archive.isPending}>{archive.isPending ? "Archiving…" : "Archive wallet"}</Button></div></DialogContent>
     </Dialog>
     <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => { if (!open) setDeleting(undefined); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete wallet forever?</AlertDialogTitle><AlertDialogDescription>Delete {deleting?.name} permanently? This is allowed only when no history references this wallet. The server decides whether deletion can proceed.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction variant="danger" onClick={() => deleting && void deleteWallet(deleting)} disabled={remove.isPending} aria-busy={remove.isPending}>{remove.isPending ? "Deleting…" : "Delete forever"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </section>;

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCreateWallet, useListCurrencies, useUpdateWallet } from "../../generated/api";
 import type { WalletContract } from "../../generated/api/model/walletContract";
 import { Button } from "../../components/ui/button";
@@ -25,6 +25,7 @@ export function WalletForm({
   onSuccess,
   onCancel,
   showHeading = true,
+  embedded = false,
 }: {
   wallet?: WalletContract;
   defaultCurrency?: string;
@@ -32,13 +33,15 @@ export function WalletForm({
   onSuccess?: (wallet: WalletContract) => void;
   onCancel?: () => void;
   showHeading?: boolean;
+  embedded?: boolean;
 }) {
   const currencies = useListCurrencies({ query: { retry: 1 } });
   const create = useCreateWallet();
   const update = useUpdateWallet();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
+  const exponentRef = useRef<number | undefined>(undefined);
   const form = useForm<WalletFormValues>({
-    resolver: zodResolver(walletSchema),
+    resolver: (values, context, options) => zodResolver(walletSchema(exponentRef.current))(values, context, options),
     mode: "onChange",
     defaultValues: {
       name: wallet?.name ?? "",
@@ -48,6 +51,8 @@ export function WalletForm({
   });
   const currency = form.watch("currency");
   const currencyList = currencies.data?.data ?? [];
+  const exponent = currencyList.find((item) => item.code === currency)?.exponent;
+  exponentRef.current = exponent;
 
   useEffect(() => {
     if (!wallet && !currency && defaultCurrency)
@@ -85,7 +90,7 @@ export function WalletForm({
   const pending = create.isPending || update.isPending;
   return (
     <form
-      className="dialog wallet-form"
+      className={`${embedded ? "" : "dialog "}wallet-form`}
       onSubmit={(event) => {
         void form.handleSubmit(submit)(event);
       }}

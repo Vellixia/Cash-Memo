@@ -295,4 +295,7 @@ Dialog wrapper is superseded. DropdownMenu, AlertDialog, Badge, and MoneyAmount 
 - Opening-balance edits send exact strings and invalidate wallet scopes only; currency stays read-only.
 - Archive invalidates dependent entry-default and recurring queries; restore never resumes rules.
 - Server remains authoritative for hard-delete conflicts; no client eligibility inference added.
+- Embedded management forms deliberately omit the standalone `.dialog` surface so generated Dialog
+  owns the single border/background/shadow/padding surface; archive errors remain inside their
+  consequence Dialog focus trap and category panels pair generated Tabs triggers with tabpanels.
 - No Orval-generated files edited.

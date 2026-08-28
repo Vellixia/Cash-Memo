@@ -15,7 +15,7 @@ const listMocks = vi.hoisted(() => ({
   }[],
   archive: vi.fn().mockResolvedValue({ data: { paused_recurring_count: 2 } }),
   restore: vi.fn().mockResolvedValue({ data: {} }),
-  remove: vi.fn().mockRejectedValue(new Error("has references")),
+  remove: vi.fn().mockRejectedValue({ response: { status: 409, data: { error: { message: "has references" } } } }),
   update: vi.fn().mockResolvedValue({ data: { id: "wallet-1", name: "Cash", currency: "USD", opening_balance: "25.00", archived_at: null, balance: { amount: "27.00", as_of: "2026-08-24T00:00:00Z", currency: "USD" } } }),
 }));
 
@@ -69,19 +69,28 @@ function renderWalletList() {
 describe("wallet UX validation", () => {
   it("trims Unicode names without truncating exact 80-character input", () => {
     const name = `  ${"🪨".repeat(80)}  `;
-    const parsed = walletSchema.safeParse({ name, currency: "USD", opening_balance: "0.00" });
+    const parsed = walletSchema(2).safeParse({ name, currency: "USD", opening_balance: "0.00" });
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.name).toBe("🪨".repeat(80));
   });
 
   it("rejects empty and 81-character names", () => {
     expect(
-      walletSchema.safeParse({ name: "   ", currency: "USD", opening_balance: "0" }).success,
+      walletSchema(2).safeParse({ name: "   ", currency: "USD", opening_balance: "0" }).success,
     ).toBe(false);
     expect(
-      walletSchema.safeParse({ name: "a".repeat(81), currency: "USD", opening_balance: "0" })
+      walletSchema(2).safeParse({ name: "a".repeat(81), currency: "USD", opening_balance: "0" })
         .success,
     ).toBe(false);
+  });
+
+  it("validates opening balance as a non-negative exact string at currency exponent", () => {
+    expect(walletSchema(2).safeParse({ name: "Cash", currency: "USD", opening_balance: "1.2300" }).success).toBe(true);
+    expect(walletSchema(2).safeParse({ name: "Cash", currency: "USD", opening_balance: "1.231" }).success).toBe(false);
+    expect(walletSchema(0).safeParse({ name: "Yen", currency: "JPY", opening_balance: "100" }).success).toBe(true);
+    expect(walletSchema(0).safeParse({ name: "Yen", currency: "JPY", opening_balance: "100.0" }).success).toBe(true);
+    expect(walletSchema(0).safeParse({ name: "Yen", currency: "JPY", opening_balance: "100.1" }).success).toBe(false);
+    expect(walletSchema(2).safeParse({ name: "Cash", currency: "USD", opening_balance: "-1" }).success).toBe(false);
   });
 
   it("keeps currency read-only while allowing opening balance edits", () => {
@@ -113,6 +122,15 @@ describe("wallet UX validation", () => {
     });
   });
 
+  it("keeps embedded wallet forms from adding a second dialog surface", async () => {
+    listMocks.state = "success";
+    renderWalletList();
+    fireEvent.click(screen.getAllByRole("button", { name: "Create wallet" })[0]);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("management-dialog");
+    expect(dialog.querySelector("form")?.className).not.toContain("dialog");
+  });
+
   it("sends exact editable opening balance and omits unchanged currency", async () => {
     listMocks.update.mockClear();
     render(<WalletForm wallet={{ ...listMocks.wallets[0] }} />);
@@ -140,6 +158,7 @@ describe("wallet UX validation", () => {
 
   it("confirms archive, displays server pause count, restores, and reports delete conflict", async () => {
     listMocks.state = "success";
+    listMocks.wallets[0] = { ...listMocks.wallets[0], archived_at: null };
     listMocks.archive.mockClear();
     listMocks.restore.mockClear();
     listMocks.remove.mockClear();
@@ -168,5 +187,28 @@ describe("wallet UX validation", () => {
       expect(screen.getByText(/cannot be deleted while it has history/)).toBeTruthy();
     });
     listMocks.wallets[0] = { ...listMocks.wallets[0], archived_at: null };
+  });
+
+  it("keeps archive failures inside consequence dialog", async () => {
+    listMocks.state = "success";
+    listMocks.wallets[0] = { ...listMocks.wallets[0], archived_at: null };
+    listMocks.archive.mockRejectedValueOnce(new Error("offline"));
+    renderWalletList();
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Cash" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive wallet" }));
+    await waitFor(() => expect(screen.getByRole("dialog").textContent).toContain("offline"));
+    expect(screen.getByRole("dialog").querySelector('[role="alert"]')).toBeTruthy();
+  });
+
+  it("maps non-conflict delete failure to generic retained-row error", async () => {
+    listMocks.state = "success";
+    listMocks.remove.mockRejectedValueOnce({ response: { status: 500, data: { error: { message: "server unavailable" } } } });
+    renderWalletList();
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Cash" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete forever" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete forever" }));
+    await waitFor(() => expect(screen.getByRole("article").textContent).toContain("Could not delete wallet"));
+    expect(screen.getByRole("article").textContent).not.toContain("while it has history");
   });
 });

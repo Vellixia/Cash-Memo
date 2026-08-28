@@ -24,12 +24,14 @@ export function CategoryForm({
   onSuccess,
   onCancel,
   showHeading = true,
+  embedded = false,
 }: {
   category?: CategoryContract;
   defaultKind?: "income" | "expense";
   onSuccess?: (category: CategoryContract) => void;
   onCancel?: () => void;
   showHeading?: boolean;
+  embedded?: boolean;
 }) {
   const create = useCreateCategory();
   const update = useUpdateCategory();
@@ -67,7 +69,7 @@ export function CategoryForm({
   const pending = create.isPending || update.isPending;
   return (
     <form
-      className="dialog category-form"
+      className={`${embedded ? "" : "dialog "}category-form`}
       onSubmit={(event) => {
         void form.handleSubmit(submit)(event);
       }}

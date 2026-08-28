@@ -8,22 +8,66 @@ test("edits opening balance without history, then archives wallet with paused re
   await page.goto("/app/transactions");
   await expect(page.getByRole("heading", { name: "Transactions", level: 1 })).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText("Loading timezone…");
-  const historyBefore = await page.getByRole("main").innerText();
+
+  // Create real financial activity first; opening-balance changes must not rewrite it.
+  await page.goto("/app/transactions/new");
+  await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
+  await page.getByLabel("Amount").fill("25.00");
+  await page.getByLabel("Wallet").click();
+  await page.getByRole("option", { name: `${user.walletName} — USD` }).click();
+  await page.getByLabel("Category").click();
+  await page.getByRole("option", { name: "Food & Drink" }).click();
+  await page.getByRole("button", { name: "Save transaction" }).click();
+  await expect(page.getByRole("status")).toContainText("Transaction saved");
+
+  const month = new Date().toISOString().slice(0, 7);
+  await page.goto(`/app/budgets?month=${month}`);
+  await expect(page.getByRole("heading", { name: "Budgets", level: 1 })).toBeVisible();
+  const budgetCategory = page.getByLabel("Category");
+  const foodOption = budgetCategory.locator("option", { hasText: "Food & Drink" });
+  await expect(foodOption).toBeAttached();
+  const foodValue = await foodOption.getAttribute("value");
+  await budgetCategory.selectOption({ value: foodValue ?? "" });
+  await expect(page.getByLabel("Category")).not.toHaveValue("");
+  await page.getByLabel("Currency").selectOption("USD");
+  await page.getByLabel("Budget amount").fill("100.00");
+  await page.getByRole("button", { name: "Create budget" }).click();
+  await expect(page.getByRole("status")).toContainText("Budget saved");
+
+  await page.goto("/app/recurring");
+  await page.getByRole("button", { name: "New recurring rule" }).click();
+  await page.getByLabel("Wallet").selectOption({ label: `${user.walletName} — USD` });
+  await page.getByLabel("Category").selectOption({ label: "Food & Drink" });
+  await page.getByLabel("Amount").fill("15.00");
+  await page.getByLabel("Frequency").selectOption("weekly");
+  await page.getByLabel("Start date").fill(new Date().toISOString().slice(0, 10));
+  const recurringNote = `Wallet archive rule ${user.email}`;
+  await page.getByLabel("Note").fill(recurringNote);
+  await page.getByRole("button", { name: "Create recurring rule" }).click();
+  const recurringCard = page.getByRole("article").filter({ hasText: recurringNote });
+  await expect(recurringCard).toContainText("Active");
+
+  await page.goto(`/app?month=${month}`);
+  const monthlySummary = page.locator('section[aria-labelledby="monthly-heading"]');
+  const budgetSnapshot = page.locator('section[aria-labelledby="budget-heading"]');
+  await expect(monthlySummary).toContainText("Expense");
+  await expect(monthlySummary).toContainText("25.00");
+  await expect(budgetSnapshot).toContainText("100.00");
+  const financialSnapshotBefore = `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`;
 
   await page.goto("/app/wallets");
   const wallet = page.getByRole("article").filter({ hasText: user.walletName });
-  await expect(wallet).toContainText("USD 1,000.00");
+  await expect(wallet).toContainText("USD 975.00");
   await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
   await page.getByRole("menuitem", { name: "Edit wallet" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByLabel("Wallet name")).toBeFocused();
   await expect(page.getByLabel("Currency")).toBeDisabled();
   await page.getByLabel("Opening balance").fill("1250.00");
   await page.getByRole("button", { name: "Save wallet" }).click();
-  await expect(wallet).toContainText("USD 1,250.00");
-
-  await page.goto("/app/transactions");
-  await expect(page.getByRole("main")).not.toContainText("Loading timezone…");
-  await expect.poll(() => page.getByRole("main").innerText()).toBe(historyBefore);
+  await expect(wallet).toContainText("USD 1,225.00");
+  await page.goto(`/app?month=${month}`);
+  await expect.poll(async () => `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`).toBe(financialSnapshotBefore);
 
   await page.goto("/app/wallets");
   await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
@@ -34,15 +78,35 @@ test("edits opening balance without history, then archives wallet with paused re
   await expect(page).toHaveURL(/\/app\/wallets$/);
   await expect(wallet).toContainText("Archived");
 
+  await page.goto("/app/recurring");
+  await expect(page.getByRole("article").filter({ hasText: recurringNote })).toContainText("Paused");
+  await page.goto(`/app?month=${month}`);
+  await expect.poll(async () => `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`).toBe(financialSnapshotBefore);
+
+  await page.goto("/app/wallets");
   await wallet.getByRole("button", { name: `Actions for ${user.walletName}` }).click();
   await page.getByRole("menuitem", { name: "Restore" }).click();
   await expect(page.getByRole("status")).toContainText("stay paused until you resume");
+  await page.goto("/app/recurring");
+  await expect(page.getByRole("article").filter({ hasText: recurringNote })).toContainText("Paused");
+  await page.goto(`/app?month=${month}`);
+  await expect.poll(async () => `${await monthlySummary.innerText()}\n${await budgetSnapshot.innerText()}`).toBe(financialSnapshotBefore);
 });
 
 test("category management keeps archived labels out of active choices", async ({ page }) => {
   await provisionUser(page, "category-filter");
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app/categories");
   await expect(page.getByRole("tab", { name: "Expense" })).toHaveAttribute("aria-selected", "true");
+  const expenseTab = page.getByRole("tab", { name: "Expense" });
+  await expenseTab.focus();
+  await expenseTab.press("ArrowRight");
+  const incomeTab = page.getByRole("tab", { name: "Income" });
+  await expect(incomeTab).toBeFocused();
+  await incomeTab.press("Enter");
+  await expect(incomeTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "Income" })).toBeVisible();
+  await expenseTab.click();
   await expect(page.getByLabel("Show archived")).not.toBeChecked();
   await page.getByRole("button", { name: "Create category" }).first().click();
   await page.getByLabel("Category name").fill("Temporary category");
@@ -54,6 +118,9 @@ test("category management keeps archived labels out of active choices", async ({
   await page.getByRole("button", { name: "Archive category" }).click();
   await expect(page.getByRole("status")).toContainText("Category archived");
   await expect(page.getByText("Temporary category")).toBeHidden();
-  await page.getByLabel("Show archived").check();
+  const archivedToggle = page.getByLabel("Show archived");
+  await archivedToggle.focus();
+  await archivedToggle.press("Space");
+  await expect(archivedToggle).toBeChecked();
   await expect(page.getByText("Temporary category")).toBeVisible();
 });
