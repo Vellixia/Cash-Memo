@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const mocks = vi.hoisted(() => ({
   restore: vi.fn().mockResolvedValue({ data: {} }),
   remove: vi.fn().mockResolvedValue({}),
+  timezoneState: ["ready"][0],
 }));
 
 function deferred<T>() {
@@ -29,7 +30,8 @@ vi.mock("../generated/api", () => ({
             category_id: "c",
             category_name: "Food",
             direction: "expense",
-            occurred_at: "2026-08-20T00:00:00Z",
+            occurred_at: "2026-08-19T17:00:00Z",
+            deleted_at: "2026-08-19T18:00:00Z",
             purge_after: "2026-09-19T00:00:00Z",
           },
         ],
@@ -40,7 +42,12 @@ vi.mock("../generated/api", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-  useGetOnboarding: () => ({ data: { data: { timezone: "Asia/Jakarta" } } }),
+  useGetOnboarding: () => ({
+    data: mocks.timezoneState === "ready" ? { data: { timezone: "Asia/Jakarta" } } : undefined,
+    isPending: mocks.timezoneState === "pending",
+    isError: mocks.timezoneState === "error",
+    refetch: vi.fn(),
+  }),
   useRestoreTransaction: () => ({ mutateAsync: mocks.restore, isPending: false }),
   usePermanentlyDeleteTransaction: () => ({ mutateAsync: mocks.remove, isPending: false }),
   getListTransactionsQueryKey: () => ["/api/v1/transactions"],
@@ -70,11 +77,24 @@ describe("transaction trash", () => {
   it("shows lifecycle dates in configured timezone and restores transaction", async () => {
     mocks.restore.mockClear();
     renderTrash();
+    expect(screen.getByText(/Deleted Aug 20, 2026/)).toBeTruthy();
+    expect(screen.getByText("Scheduled for automatic deletion after Sep 19, 2026.")).toBeTruthy();
     expect(screen.getByText(/Scheduled for automatic deletion after/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() => {
       expect(mocks.restore).toHaveBeenCalledWith({ transactionId: "gone" });
     });
+  });
+  it("gates lifecycle dates while timezone is pending or failed", () => {
+    mocks.timezoneState = "pending";
+    renderTrash();
+    expect(screen.getByText("Loading timezone…")).toBeTruthy();
+    expect(screen.queryByText(/Scheduled for automatic deletion after/)).toBeNull();
+    mocks.timezoneState = "error";
+    renderTrash();
+    expect(screen.getAllByRole("alert").at(-1)?.textContent).toContain("Could not load timezone");
+    expect(screen.getByRole("button", { name: "Retry timezone" })).toBeTruthy();
+    mocks.timezoneState = "ready";
   });
   it("needs explicit permanent-delete AlertDialog confirmation", async () => {
     mocks.remove.mockClear();

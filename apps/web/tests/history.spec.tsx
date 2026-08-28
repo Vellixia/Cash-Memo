@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   restore: vi.fn().mockResolvedValue({ data: {} }),
   calls: [] as unknown[],
   requestParams: [] as unknown[],
+  toast: vi.fn(),
+  timezoneState: ["ready"][0],
 }));
+vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: (url: unknown) => mocks.calls.push(url),
@@ -63,8 +66,13 @@ vi.mock("../generated/api", () => ({
   },
   useTrashTransaction: () => ({ mutateAsync: mocks.trash, isPending: false }),
   useRestoreTransaction: () => ({ mutateAsync: mocks.restore, isPending: false }),
-  useGetOnboarding: () => ({ data: { data: { timezone: "Asia/Jakarta" } } }),
-  getListTransactionsQueryKey: () => ["/api/v1/transactions"],
+  useGetOnboarding: () => ({
+    data: mocks.timezoneState === "ready" ? { data: { timezone: "Asia/Jakarta" } } : undefined,
+    isPending: mocks.timezoneState === "pending",
+    isError: mocks.timezoneState === "error",
+    refetch: vi.fn(),
+  }),
+  getListTransactionsQueryKey: (params?: unknown) => params ? ["/api/v1/transactions", params] : ["/api/v1/transactions"],
   getListTrashedTransactionsQueryKey: () => ["/api/v1/transactions/trash"],
   getGetWalletQueryKey: (id: string) => ["/api/v1/wallets", id],
   getListWalletsQueryKey: () => ["/api/v1/wallets"],
@@ -74,6 +82,7 @@ vi.mock("../generated/api", () => ({
   getGetMonthlySummaryQueryKey: (params?: unknown) => ["/api/v1/reports/monthly-summary", params],
 }));
 import { TransactionHistory, serializeHistoryFilters } from "../features/transactions/history";
+import { invalidateTransactionScopes } from "../features/transactions/query-keys";
 
 function renderHistory() {
   const client = new QueryClient();
@@ -134,6 +143,39 @@ describe("transaction history", () => {
       expect(mocks.restore).toHaveBeenCalledWith({ transactionId: "transaction-new" });
       expect(mocks.restore).toHaveBeenCalledTimes(1);
     });
+  });
+  it("wires Sonner Undo to stable server restore callback and guards duplicate clicks", async () => {
+    mocks.toast.mockClear();
+    mocks.trash.mockClear();
+    mocks.restore.mockClear();
+    renderHistory();
+    fireEvent.click(screen.getAllByRole("button", { name: /Actions for/ })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to Trash" }));
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalled());
+    const options = mocks.toast.mock.calls.at(-1)?.[1] as { action?: { onClick?: () => void } } | undefined;
+    const onClick = options?.action?.onClick;
+    if (!onClick) throw new Error("Sonner Undo callback missing");
+    onClick();
+    onClick();
+    await waitFor(() => expect(mocks.restore).toHaveBeenCalledTimes(1));
+  });
+  it("invalidates broad history plus targeted financial and Trash keys", async () => {
+    const invalidations: unknown[] = [];
+    const client = { invalidateQueries: vi.fn(async ({ queryKey }: { queryKey: unknown }) => { invalidations.push(queryKey); }) } as never;
+    await invalidateTransactionScopes(client, {
+      previous: { wallet_id: "w", category_id: "c", occurred_at: "2026-08-20T00:00:00Z" },
+      timezone: "Asia/Jakarta",
+    });
+    expect(invalidations).toContainEqual(["/api/v1/transactions"]);
+    expect(invalidations).toContainEqual(["/api/v1/transactions/trash"]);
+    expect(invalidations).toContainEqual(["/api/v1/transactions", { wallet_id: "w" }]);
+  });
+  it("does not render financial dates until authenticated timezone is ready", () => {
+    mocks.timezoneState = "pending";
+    renderHistory();
+    expect(screen.getByText("Loading timezone…")).toBeTruthy();
+    expect(screen.queryByRole("time")).toBeNull();
+    mocks.timezoneState = "ready";
   });
   it("keeps q ephemeral while structured filters use URL replace", () => {
     renderHistory();

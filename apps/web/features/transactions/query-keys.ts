@@ -58,6 +58,7 @@ export async function invalidateTransactionScopes(
         index,
     );
   await Promise.all([
+    client.invalidateQueries({ queryKey: getListTransactionsQueryKey() }),
     ...queryKeys.map((queryKey) => client.invalidateQueries({ queryKey })),
     client.invalidateQueries({ queryKey: getListTrashedTransactionsQueryKey() }),
   ]);

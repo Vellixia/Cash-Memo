@@ -1,5 +1,6 @@
 import { expect, test } from "./support/test";
 import { provisionUser } from "./support/auth";
+import { apiUrl } from "./support/api";
 import { createTransaction } from "./support/transactions";
 
 test("filters, edits, trashes, and restores one memo", async ({ page }) => {
@@ -19,7 +20,52 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
     note: `Other ${user.email}`,
   });
 
-  await page.goto("/app/transactions");
+  const historyRequests: string[] = [];
+  let firstPage: { items?: unknown[]; next_cursor?: string | null } | undefined;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/v1/transactions") historyRequests.push(request.url());
+  });
+  await page.route("**/api/v1/transactions**", async (route) => {
+    const url = new URL(route.request().url());
+    const response = await route.fetch({ url: apiUrl(`${url.pathname}${url.search}`) });
+    if (url.pathname !== "/api/v1/transactions") {
+      await route.fulfill({ response });
+      return;
+    }
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ response });
+      return;
+    }
+    if (url.searchParams.get("cursor") === "synthetic-next" && firstPage) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...firstPage, items: [], next_cursor: null }),
+      });
+      return;
+    }
+    const contentType = response.headers()["content-type"] ?? "";
+    if (!contentType.includes("application/json")) {
+      await route.fulfill({ response });
+      return;
+    }
+    const payload = await response.json() as { items?: unknown[]; next_cursor?: string | null };
+    if (!url.searchParams.has("cursor")) {
+      firstPage = payload;
+      payload.next_cursor = "synthetic-next";
+    }
+    await route.fulfill({ response, json: payload });
+  });
+  await page.goto("/app/transactions?from=2020-01-01&to=2099-12-31&type=expense");
+  await expect.poll(() => historyRequests.some((value) => {
+    const url = new URL(value);
+    return url.searchParams.get("from") === "2020-01-01" && url.searchParams.get("to") === "2099-12-31";
+  })).toBe(true);
+  await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
+  const firstPageMemo = page.getByText(originalNote, { exact: true });
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(firstPageMemo).toBeVisible();
   await page.getByLabel("Search").fill(originalNote);
   await expect(page).not.toHaveURL(/q=/);
   await expect(page.getByText(originalNote, { exact: true })).toBeVisible();
@@ -42,9 +88,25 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
   await expect(page.getByRole("status")).toContainText("moved to Trash");
   await expect(editedCard).toHaveCount(0);
 
+  const sonnerUndo = page.locator("[data-sonner-toast]").getByRole("button", { name: "Undo" });
+  await expect(sonnerUndo).toBeVisible();
+  await sonnerUndo.click();
+  await expect(page.getByRole("status")).toContainText("Transaction restored");
+
+  const restoredCard = page.getByRole("article").filter({ hasText: editedNote });
+  await restoredCard.getByRole("button", { name: /Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Move to Trash" }).click();
+  await expect(page.getByRole("status")).toContainText("moved to Trash");
+
   await page.goto("/app/transactions/trash");
   const trashedCard = page.getByRole("article").filter({ hasText: "USD 23.50" });
   await expect(trashedCard).toBeVisible();
+  await page.route("**/api/v1/transactions/*/restore", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "restore unavailable" }) });
+  });
+  await trashedCard.getByRole("button", { name: "Restore" }).click();
+  await expect(page.locator("p[role='alert']")).toContainText("503");
+  await page.unroute("**/api/v1/transactions/*/restore");
   await trashedCard.getByRole("button", { name: "Restore" }).click();
   await expect(page.getByRole("status")).toContainText("Transaction restored");
   await expect(trashedCard).toHaveCount(0);
@@ -52,4 +114,15 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
   await page.goto("/app/transactions");
   await page.getByLabel("Search").fill(editedNote);
   await expect(page.getByText(editedNote, { exact: true })).toBeVisible();
+  const finalCard = page.getByRole("article").filter({ hasText: editedNote });
+  await finalCard.getByRole("button", { name: /Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Move to Trash" }).click();
+  await page.goto("/app/transactions/trash");
+  const foreverCard = page.getByRole("article").filter({ hasText: "USD 23.50" });
+  await foreverCard.getByRole("button", { name: "Delete forever" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("cannot be undone");
+  await dialog.getByRole("button", { name: "Delete forever" }).click();
+  await expect(page.getByRole("status")).toContainText("permanently deleted");
+  await expect(foreverCard).toHaveCount(0);
 });

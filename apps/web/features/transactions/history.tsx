@@ -45,7 +45,7 @@ function TransactionRow({
   onTrash,
 }: {
   transaction: TransactionContract;
-  timezone: string;
+  timezone?: string;
   onTrash: (transaction: TransactionContract) => void;
 }) {
   const direction = transaction.direction === "income" ? "Income" : "Expense";
@@ -63,7 +63,7 @@ function TransactionRow({
         </div>
         <div className="transaction-row-value">
           <MoneyAmount value={transaction.amount} currency={transaction.currency} direction={transaction.direction as "income" | "expense"} context={context} />
-          <time dateTime={transaction.occurred_at}>{formatDate(transaction.occurred_at, timezone)}</time>
+          {timezone ? <time dateTime={transaction.occurred_at}>{formatDate(transaction.occurred_at, timezone)}</time> : null}
         </div>
       </Link>
       <DropdownMenu>
@@ -92,9 +92,11 @@ export function TransactionHistory() {
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
   const loadedPage = useRef<string | undefined>(undefined);
   const restoring = useRef(false);
+  const [restoringUndo, setRestoringUndo] = useState(false);
   const queryClient = useQueryClient();
   const onboarding = useGetOnboarding({ query: { retry: 1 } });
-  const timezone = onboarding.data?.data.timezone ?? "UTC";
+  const timezone = onboarding.data?.data.timezone ?? undefined;
+  const timezonePending = onboarding.isPending || (!timezone && !onboarding.isError);
   const transactions = useListTransactions(
     { ...serializeHistoryFilters(filters), q: query || undefined, cursor, limit: "50" },
     { query: { retry: 1 } },
@@ -134,17 +136,18 @@ export function TransactionHistory() {
       setItems((current) => current.filter((item) => item.id !== transaction.id));
       setUndo(transaction);
       setStatus({ kind: "success", text: "Transaction moved to Trash." });
-      toast("Transaction moved to Trash.", { action: { label: "Undo", onClick: () => void undoDelete() } });
+      toast("Transaction moved to Trash.", { action: { label: "Undo", onClick: () => void undoDelete(transaction) } });
       await invalidateTransactionScopes(queryClient, { previous: transaction, timezone });
     } catch (error) {
       setStatus({ kind: "error", text: errorText(error) });
     }
   }
 
-  async function undoDelete() {
-    if (!undo || restoring.current) return;
-    const item = undo;
+  async function undoDelete(requested?: TransactionContract) {
+    const item = requested ?? undo;
+    if (!item || restoring.current) return;
     restoring.current = true;
+    setRestoringUndo(true);
     try {
       await restore.mutateAsync({ transactionId: item.id });
       await invalidateTransactionScopes(queryClient, { next: item, timezone });
@@ -154,6 +157,7 @@ export function TransactionHistory() {
       setStatus({ kind: "error", text: errorText(error) });
     } finally {
       restoring.current = false;
+      setRestoringUndo(false);
     }
   }
 
@@ -174,9 +178,11 @@ export function TransactionHistory() {
         <Link className="button" href="/app/transactions/new">New transaction</Link>
       </div>
       <TransactionFilters query={query} onQueryChange={setQuery} />
+      {timezonePending ? <p role="status" className="muted">Loading timezone…</p> : null}
+      {onboarding.isError ? <p role="alert" className="field-error">Could not load timezone. <Button type="button" onClick={() => void onboarding.refetch()}>Retry timezone</Button></p> : null}
       {status ? (
         <p role={status.kind === "error" ? "alert" : "status"} className={status.kind === "error" ? "field-error" : "success"}>
-          {status.text} {undo ? <Button type="button" variant="quiet" onClick={() => void undoDelete()} disabled={restoring.current}>Undo</Button> : null}
+          {status.text} {undo ? <Button type="button" variant="quiet" onClick={() => void undoDelete()} disabled={restoringUndo} aria-busy={restoringUndo}>Undo</Button> : null}
         </p>
       ) : null}
       {items.length === 0 ? (
