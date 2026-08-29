@@ -104,3 +104,54 @@ Additional fresh checks:
 - `pnpm --dir apps/web typecheck`: exit 0.
 - `pnpm --dir apps/web build`: production build exit 0.
 - `pnpm toolchain:check`: Node 24.14.0 / pnpm 11.13.1 verified.
+
+## Fix round 2: generated-transaction immutability
+
+The prior manual `POST /api/v1/transactions` fixture was rejected with a focused RED
+probe requiring recurrence linkage:
+
+```text
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir apps/web exec playwright test e2e/budgets-recurring.spec.ts
+  ✘  1 [chromium] › e2e/budgets-recurring.spec.ts:36:1 › updates a server-owned budget and pauses then resumes a recurring rule (8.1s)
+Error: ordinary transaction must be generated
+expect(received).toBeTruthy()
+Received: undefined
+apps/web/e2e/budgets-recurring.spec.ts:51:96
+  1 failed
+```
+
+This was the correct RED: the manual transaction had no `recurring_occurrence_id`.
+The API transaction serializer does not expose that linkage, so the GREEN uses the
+test-only DB-safe inspection helper (no production endpoint or fake row): it asserts
+one transaction row, one non-null occurrence linkage, and one distinct occurrence.
+The browser snapshots transaction identity and all financial fields through the real
+API, then edits, pauses, resumes, and re-reads it; the same one-row/one-occurrence
+assertion proves no duplicate or backfill.
+
+Processor command and environment used by the E2E helper:
+
+```text
+CASHMEMO_V1_APP_ENV=test
+CASHMEMO_V1_DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e
+cargo run -p cashmemo-api --bin cashmemo-api -- process-recurring --batch-size 1 --max-occurrences-per-recurring-transaction 1
+=> {"command":"process-recurring","processed":1}
+```
+
+The recurrence uses deterministic local DATE-only `2000-01-01` and daily cadence,
+avoiding UTC-derived JavaScript `Date` values while making exactly one due occurrence
+processable against the real current local date. The budget flow now fetches the
+server budget collection after confirmed deletion and asserts zero records.
+
+Fix-round-2 GREEN on fresh disposable services (removed with
+`docker-compose -f infra/v1/test-compose.yml down --remove-orphans`):
+
+```text
+$ PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir apps/web exec playwright test e2e/budgets-recurring.spec.ts
+process-recurring: CASHMEMO_V1_APP_ENV=test CASHMEMO_V1_DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:54329/cashmemo_e2e cargo run -p cashmemo-api --bin cashmemo-api -- process-recurring --batch-size 1 --max-occurrences-per-recurring-transaction 1 => {"command":"process-recurring","processed":1}
+  ✓  1 [chromium] › e2e/budgets-recurring.spec.ts:36:1 › updates a server-owned budget and pauses then resumes a recurring rule (15.0s)
+  1 passed (32.0s)
+```
+
+Targeted ESLint and `git diff --check` also pass after the helper cleanup. Full Node24
+Vitest/lint/typecheck/build remain the passing fix-round-1 results above; they will be
+rerun for the final signed Task 21 commit.
