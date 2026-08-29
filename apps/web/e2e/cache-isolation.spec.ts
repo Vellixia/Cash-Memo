@@ -71,40 +71,59 @@ test("session transition cannot reuse private cache and ownership failures revea
   const second = await provisionUser(secondPage, "cache-other");
   await secondContext.close();
 
+  let aRequestSeen = false;
+  let aUpstreamBodyValidated = false;
+  let aFulfillAttempted = false;
+  let aRequestOutcome: "finished" | "failed" | undefined;
+  let aHeldRequestUrl: string | undefined;
   let releaseAResponse!: () => void;
   const aResponseHeld = new Promise<void>((resolve) => {
     releaseAResponse = resolve;
   });
-  const latePage = await page.context().newPage();
-  await connectPageToRealApi(latePage);
-  let aRequestSeen = false;
-  let aUpstreamBodyValidated = false;
+  let resolveFulfillAttempt!: () => void;
+  const fulfillAttempt = new Promise<void>((resolve) => {
+    resolveFulfillAttempt = resolve;
+  });
   const holdAResponse = async (route: Route) => {
     const request = route.request();
     if (!aRequestSeen && request.method() === "GET" && new URL(request.url()).pathname === "/api/v1/transactions") {
       aRequestSeen = true;
+      aHeldRequestUrl = request.url();
       // Fetch upstream while A cookie is valid; delay only delivery into browser.
       const response = await route.fetch({ url: apiUrl(`${new URL(request.url()).pathname}${new URL(request.url()).search}`) });
       const body = await response.body();
       expect(body.toString("utf8")).toContain(privateNote);
       aUpstreamBodyValidated = true;
       await aResponseHeld;
-      await route.fulfill({ response, body });
+      aFulfillAttempted = true;
+      try {
+        await route.fulfill({ response, body });
+      } catch {
+        // Cleanup may abort the browser request before fulfillment. Record outcome without leaking
+        // transport details; either fulfillment or abort is an explicit late-delivery observation.
+      } finally {
+        resolveFulfillAttempt();
+      }
       return;
     }
     await route.fallback();
   };
-  await latePage.route("**/api/v1/**", holdAResponse);
-  await latePage.goto("/login");
-  // Hold actual User A response before logout; cleanup must isolate it before User B uses same client.
-  const lateResponsePromise = latePage.evaluate(async () => {
-    const response = await fetch("/api/v1/transactions?limit=50");
-    return { body: await response.text(), status: response.status };
+  page.on("requestfinished", (request) => {
+    if (request.url() === aHeldRequestUrl) aRequestOutcome = "finished";
   });
+  page.on("requestfailed", (request) => {
+    if (request.url() === aHeldRequestUrl) aRequestOutcome = "failed";
+  });
+  await page.route("**/api/v1/**", holdAResponse);
+  // Hold mounted production History query response before logout; cleanup must isolate it before B.
+  await page.goto("/app/transactions");
   await expect.poll(() => aRequestSeen).toBe(true);
   await expect.poll(() => aUpstreamBodyValidated).toBe(true);
 
-  await page.goto("/app/settings/sessions");
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/app\/settings$/);
+  await page.getByRole("link", { name: "Sessions" }).click();
+  await expect(page).toHaveURL(/\/app\/settings\/sessions$/);
   await page.getByRole("button", { name: "Sign out this session" }).click();
   await expect(page).toHaveURL(/\/login$/);
 
@@ -113,15 +132,16 @@ test("session transition cannot reuse private cache and ownership failures revea
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
   await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
   releaseAResponse();
-  const lateResponse = await lateResponsePromise;
-  expect(lateResponse.status).toBe(200);
-  expect(lateResponse.body).toContain(privateNote);
-  await latePage.unroute("**/api/v1/**", holdAResponse);
+  await fulfillAttempt;
+  expect(aFulfillAttempted).toBe(true);
+  await expect.poll(() => aRequestOutcome).toMatch(/^(finished|failed)$/);
+  await page.unroute("**/api/v1/**", holdAResponse);
 
+  await page.goto("/app/transactions");
+  await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
   await page.goto("/app/wallets");
-  await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
   await expect(page.getByText(second.walletName, { exact: true })).toHaveCount(1);
-  await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
   await page.goto("/app");
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
   const persistence = await page.evaluate(async () => {
@@ -210,6 +230,5 @@ test("session transition cannot reuse private cache and ownership failures revea
   const history = (await list.json()) as { items: { id: string; note?: string | null }[] };
   expect(history.items).not.toContainEqual(expect.objectContaining({ id: transactionId }));
   expect(history.items).not.toContainEqual(expect.objectContaining({ note: privateNote }));
-  await latePage.close();
   await ownerContext.close();
 });

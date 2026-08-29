@@ -37,6 +37,12 @@ Browser cookie metadata passed without exposing value: `__Host-cashmemo_session`
 
 Round 2 delivery evidence: a same-context hidden browser page issued User A's real `/api/v1/transactions?limit=50` request. The route fetched and validated upstream body while A was authenticated, held only `route.fulfill()`, then main page logged out, logged User B in, and released fulfillment. Awaited `latePage.evaluate(fetch).text()` resolved `200` with A sentinel, proving browser receipt after cleanup; main B UI, QueryClient, CacheStorage, and storage showed no A sentinel. No cookie/token value was logged.
 
+## Fix round 3 evidence
+
+Replaced hidden raw-fetch evidence with production main-app query evidence. The same visible User A page navigates to `/app/transactions`, where the mounted History component starts generated-client `GET /api/v1/transactions?limit=50`. Route interception fetches upstream under A's valid cookie, validates the synthetic A note in the actual response body, and holds only browser delivery. The page then uses Settings → Sessions → “Sign out this session”; successful cleanup and fresh User B login occur on the same page and QueryClient owner before held fulfillment is released. `route.fulfill` is attempted after B initialization. Production cleanup aborts the held browser request during logout, so Playwright records the exact held request as `failed` before release; fulfillment attempt still executes after B and is explicitly awaited. B History, wallets, overview, QueryClient behavior, CacheStorage, storage, and IndexedDB contain no A sentinel. No cookie/token value is logged.
+
+Initial round-3 RED: first production E2E assertion filtered request outcome to events after release, but cleanup correctly aborted the held production query before release; exact failure was `expect(received).toMatch(expected)` with `received value: undefined`, timeout at `cache-isolation.spec.ts:139`, while `aFulfillAttempted` had completed. Fix records the exact held request's `finished|failed` outcome at any point, separately asserts post-B `route.fulfill` attempt, and keeps late-result isolation assertions. Cache-only rerun passed 1/1 (40.9s); required fresh-service pair passed 2/2 (1.1m).
+
 ## Verification
 
 - `pnpm --dir apps/web exec vitest run tests/account-deletion.spec.tsx tests/cache-policy.spec.tsx` — PASS, 9/9.
@@ -52,5 +58,8 @@ Round 2 delivery evidence: a same-context hidden browser page issued User A's re
 - Exact cleanup: `docker-compose -f infra/v1/test-compose.yml down -v --remove-orphans` — PASS; Postgres/Mailpit containers, network, and disposable volumes removed.
 - Node24 `pnpm toolchain:check` — PASS (`node=24.14.0`, `pnpm=11.13.1`). Full web Vitest — PASS, 180/180 (parallel run had 3 unrelated 5s resource-contention timeouts; isolated rerun passed). Focused — PASS, 10/10. Full lint, typecheck, and build — PASS.
 - Fix-round-2 final Node24 full web Vitest — PASS, 180/180 isolated; lint, typecheck, and build — PASS. Focused cache/deletion Vitest — PASS, 10/10. Fresh-service Chromium E2E — PASS, 2/2 (53.7s); exact compose cleanup and empty `ps --all` verified.
+- Fix-round-3 focused ESLint — PASS; focused TypeScript — PASS; focused cache/deletion Vitest — PASS, 10/10.
+- Fix-round-3 Node24 `pnpm toolchain:check` — PASS (`node=24.14.0`, `pnpm=11.13.1`); full web Vitest — PASS, 180/180 (16.42s); full lint — PASS; full typecheck — PASS; production build — PASS.
+- Fix-round-3 fresh-service Chromium E2E — initial RED timed out on premature post-release-only outcome filter; after fix required `pnpm --dir apps/web exec playwright test e2e/account-deletion.spec.ts e2e/cache-isolation.spec.ts` — PASS, 2/2 (1.1m). Exact cleanup after failed, cache-only, and final runs: `docker-compose -f infra/v1/test-compose.yml down -v --remove-orphans`; `docker-compose -f infra/v1/test-compose.yml ps --all` returned header with no containers.
 - Existing protected files `.claude/settings.json`, `.serena/`, `AGENTS.md`, and `CLAUDE.md` remain untouched/unstaged.
 - No React-side deadline arithmetic or browser token persistence added; server cookie remains authoritative.
