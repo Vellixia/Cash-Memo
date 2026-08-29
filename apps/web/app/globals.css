@@ -312,6 +312,8 @@ a:focus-visible {
   border-right: 1px solid var(--sidebar-border);
   padding: 1.5rem 1rem;
   background: var(--sidebar);
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
@@ -408,6 +410,24 @@ a:focus-visible {
 .bottom-nav-sheet-links {
   display: grid;
   gap: 0.5rem;
+  padding: 0 1rem 1rem;
+}
+
+.sidebar-sign-out {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 1.5rem;
+}
+
+.sidebar-sign-out > button,
+.bottom-nav-sign-out > button {
+  width: 100%;
+}
+
+.bottom-nav-sign-out {
+  display: grid;
+  gap: 0.75rem;
   padding: 0 1rem 1rem;
 }
 
@@ -883,6 +903,13 @@ a:focus-visible {
 
 .session-actions {
   justify-content: start;
+}
+
+.current-session-sign-out {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

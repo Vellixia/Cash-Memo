@@ -13,6 +13,7 @@ import {
   WalletCards,
   ReceiptText,
 } from "lucide-react";
+import { CurrentSessionSignOut } from "../../features/settings/session-controls";
 
 export interface ShellNavItem {
   label: string;
@@ -97,6 +98,7 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+      <CurrentSessionSignOut className="sidebar-sign-out" label="Sign out" />
     </aside>
   );
 }

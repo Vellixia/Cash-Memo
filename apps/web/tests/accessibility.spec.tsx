@@ -80,6 +80,7 @@ vi.mock("../generated/api", () => {
           archived_at: null,
         },
       ]),
+    useLogout: mutation,
     useRequestAccountDeletion: mutation,
     useUpdateRecurringTransaction: mutation,
     useUpdateTransaction: mutation,

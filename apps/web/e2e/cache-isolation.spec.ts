@@ -76,6 +76,9 @@ test("session transition cannot reuse private cache and ownership failures revea
   let aFulfillAttempted = false;
   let aRequestOutcome: "finished" | "failed" | undefined;
   let aHeldRequestUrl: string | undefined;
+  let pendingAtLogoutRequest = false;
+  let pendingAtLogoutResponse = false;
+  const lifecycleEvents: string[] = [];
   let releaseAResponse!: () => void;
   const aResponseHeld = new Promise<void>((resolve) => {
     releaseAResponse = resolve;
@@ -109,22 +112,93 @@ test("session transition cannot reuse private cache and ownership failures revea
     await route.fallback();
   };
   page.on("requestfinished", (request) => {
-    if (request.url() === aHeldRequestUrl) aRequestOutcome = "finished";
+    if (request.url() === aHeldRequestUrl) {
+      aRequestOutcome = "finished";
+      lifecycleEvents.push("history-finished");
+    }
   });
   page.on("requestfailed", (request) => {
-    if (request.url() === aHeldRequestUrl) aRequestOutcome = "failed";
+    if (request.url() === aHeldRequestUrl) {
+      aRequestOutcome = "failed";
+      lifecycleEvents.push("history-failed");
+    }
+  });
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/auth/logout") {
+      pendingAtLogoutRequest = aRequestOutcome === undefined;
+      lifecycleEvents.push("logout-request");
+    }
+  });
+  page.on("response", (response) => {
+    if (
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/v1/auth/logout"
+    ) {
+      pendingAtLogoutResponse = aRequestOutcome === undefined;
+      lifecycleEvents.push("logout-response");
+    }
   });
   await page.route("**/api/v1/**", holdAResponse);
-  // Hold mounted production History query response before logout; cleanup must isolate it before B.
+  // Hold mounted production History query response. Shell logout must clean it up without leaving
+  // History, or observer unmount could become an unrelated source of cancellation.
   await page.goto("/app/transactions");
   await expect.poll(() => aRequestSeen).toBe(true);
   await expect.poll(() => aUpstreamBodyValidated).toBe(true);
+  await expect(page.getByText("Loading transactions…")).toBeVisible();
+  expect(aRequestOutcome).toBeUndefined();
 
-  await page.getByRole("link", { name: "Settings" }).click();
-  await expect(page).toHaveURL(/\/app\/settings$/);
-  await page.getByRole("link", { name: "Sessions" }).click();
-  await expect(page).toHaveURL(/\/app\/settings\/sessions$/);
-  await page.getByRole("button", { name: "Sign out this session" }).click();
+  let releaseLoginNavigation!: () => void;
+  const loginNavigationHeld = new Promise<void>((resolve) => {
+    releaseLoginNavigation = resolve;
+  });
+  let resolveLoginNavigationAttempt!: () => void;
+  const loginNavigationAttempt = new Promise<void>((resolve) => {
+    resolveLoginNavigationAttempt = resolve;
+  });
+  let loginNavigationSeen = false;
+  const holdLoginNavigation = async (route: Route) => {
+    const request = route.request();
+    if (!loginNavigationSeen && request.method() === "GET" && new URL(request.url()).pathname === "/login") {
+      loginNavigationSeen = true;
+      lifecycleEvents.push("login-navigation-start");
+      const response = await route.fetch();
+      await loginNavigationHeld;
+      try {
+        await route.fulfill({ response });
+      } finally {
+        resolveLoginNavigationAttempt();
+      }
+      return;
+    }
+    await route.fallback();
+  };
+  await page.route("**/login*", holdLoginNavigation);
+  const logoutResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/v1/auth/logout",
+  );
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  expect((await logoutResponse).ok()).toBe(true);
+  await expect.poll(() => loginNavigationSeen).toBe(true);
+  try {
+    expect(pendingAtLogoutRequest).toBe(true);
+    expect(pendingAtLogoutResponse).toBe(true);
+    await expect
+      .poll(() => aRequestOutcome, {
+        message: "logout cleanup must abort held History request before held login navigation commits",
+        timeout: 5_000,
+      })
+      .toBe("failed");
+    expect(lifecycleEvents.indexOf("logout-response")).toBeLessThan(
+      lifecycleEvents.indexOf("history-failed"),
+    );
+    await expect(page.getByText("Loading transactions…")).toBeVisible();
+  } finally {
+    releaseLoginNavigation();
+    await loginNavigationAttempt;
+    await page.unroute("**/login*", holdLoginNavigation);
+  }
   await expect(page).toHaveURL(/\/login$/);
 
   await login(page, second);

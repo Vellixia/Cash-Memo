@@ -63,3 +63,50 @@ Initial round-3 RED: first production E2E assertion filtered request outcome to 
 - Fix-round-3 fresh-service Chromium E2E — initial RED timed out on premature post-release-only outcome filter; after fix required `pnpm --dir apps/web exec playwright test e2e/account-deletion.spec.ts e2e/cache-isolation.spec.ts` — PASS, 2/2 (1.1m). Exact cleanup after failed, cache-only, and final runs: `docker-compose -f infra/v1/test-compose.yml down -v --remove-orphans`; `docker-compose -f infra/v1/test-compose.yml ps --all` returned header with no containers.
 - Existing protected files `.claude/settings.json`, `.serena/`, `AGENTS.md`, and `CLAUDE.md` remain untouched/unstaged.
 - No React-side deadline arithmetic or browser token persistence added; server cookie remains authoritative.
+
+## Fix round 4 evidence
+
+Root-cause review found round 3 navigated from History to Settings before logout. That unmounted the
+History observer, and `gcTime: 0` plus query cancellation could abort the held request independently
+of `clearSessionState`. The smallest product-compatible composition change reuses one
+`CurrentSessionSignOut` action in Settings, the desktop sidebar, and the mobile More sheet. It keeps
+one logout mutation/cleanup implementation and adds no test hook, hidden fetch, alternate
+QueryClient, or parallel auth path.
+
+Initial UI RED, fresh services:
+
+```text
+locator.click: Test timeout of 60000ms exceeded.
+waiting for getByRole('button', { name: 'Sign out this session' })
+```
+
+The RED occurred on `/app/transactions` after the production History query had started and its
+authenticated User A upstream body had been validated. After composing the shared shell action,
+focused Vitest passed 34/34 and the fresh cache-isolation browser test passed 1/1.
+
+The final browser proof holds the real History response and verifies it is pending both when the
+real `POST /api/v1/auth/logout` starts and when its successful response arrives. It also holds the
+subsequent `/login` navigation response, leaving the History loading UI and its query observer
+mounted. Production cleanup must abort the exact held request before that navigation is released.
+Only then may login commit, User B authenticate in the same page and singleton QueryClient, and the
+held User A route attempt late fulfillment. Existing User B UI/cache, cookie metadata,
+localStorage/sessionStorage, IndexedDB, CacheStorage allowlist/body, and ownership-isolation checks
+remain in the same test.
+
+Genuine mutation RED removed `clearSessionState(client)` from the shared current-session logout
+action. With the actual logout response complete and login navigation still held, the actively
+observed History request remained pending for the full 5-second causal window:
+
+```text
+logout cleanup must abort held History request before held login navigation commits
+Expected: "failed"
+Received: undefined
+Timeout 5000ms exceeded while waiting on the predicate
+```
+
+Restoring the cleanup produced fresh GREEN: focused Vitest 34/34; cache-isolation Chromium 1/1
+(38.3s including services). Final Node 24.14.0 verification: toolchain check passed with pnpm
+11.13.1; full web Vitest 180/180; full lint, typecheck, and production build passed. Final required
+fresh-service Chromium pair passed 2/2 (49.2s). Exact `docker-compose -f
+infra/v1/test-compose.yml down -v --remove-orphans` cleanup passed and `ps --all` returned no
+containers.

@@ -18,6 +18,7 @@ import {
   mobileShellLinks,
   type ShellNavItem,
 } from "./sidebar";
+import { CurrentSessionSignOut } from "../../features/settings/session-controls";
 
 function MobileLink({
   item,
@@ -80,6 +81,7 @@ export function BottomNav() {
             </li>
           </ul>
         </nav>
+        <CurrentSessionSignOut className="bottom-nav-sign-out" label="Sign out" />
       </SheetContent>
     </Sheet>
   );

@@ -18,34 +18,75 @@ import {
   AlertDialogTrigger,
 } from "../../components/ui/alert-dialog";
 
-export function SessionControls() {
-  const current = useCurrentSession({ query: { retry: false, refetchOnWindowFocus: false } });
+export function CurrentSessionSignOut({
+  className,
+  disabled = false,
+  label = "Sign out this session",
+  onPendingChange,
+}: {
+  className?: string;
+  disabled?: boolean;
+  label?: string;
+  onPendingChange?: (pending: boolean) => void;
+}) {
   const logout = useLogout();
-  const revokeAll = useRevokeAllSessions();
   const client = useQueryClient();
   const router = useRouter();
   const [error, setError] = useState<string>();
 
   async function endCurrent() {
     setError(undefined);
+    onPendingChange?.(true);
     try {
       await logout.mutateAsync();
     } catch (value) {
       setError(value instanceof Error ? value.message : "Could not sign out this session. Try again.");
       return;
+    } finally {
+      onPendingChange?.(false);
     }
     clearSessionState(client);
     router.replace("/login");
   }
 
+  return (
+    <div className={className}>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={disabled || logout.isPending}
+        onClick={() => void endCurrent()}
+      >
+        {label}
+      </Button>
+      {error ? (
+        <div role="alert" className="field-error">
+          <p>{error}</p>
+          <Button type="button" variant="quiet" onClick={() => void endCurrent()} disabled={logout.isPending}>
+            Try again
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function SessionControls() {
+  const current = useCurrentSession({ query: { retry: false, refetchOnWindowFocus: false } });
+  const revokeAll = useRevokeAllSessions();
+  const client = useQueryClient();
+  const router = useRouter();
+  const [allSessionsError, setAllSessionsError] = useState<string>();
+  const [currentLogoutPending, setCurrentLogoutPending] = useState(false);
+
   async function endAll() {
-    setError(undefined);
+    setAllSessionsError(undefined);
     try {
       await revokeAll.mutateAsync();
       clearSessionState(client);
       router.replace("/login");
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Could not sign out all sessions.");
+      setAllSessionsError(value instanceof Error ? value.message : "Could not sign out all sessions.");
     }
   }
 
@@ -64,17 +105,14 @@ export function SessionControls() {
         </dl>
       ) : null}
       <div className="card-actions session-actions">
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={logout.isPending || revokeAll.isPending}
-          onClick={() => void endCurrent()}
-        >
-          Sign out this session
-        </Button>
+        <CurrentSessionSignOut
+          className="current-session-sign-out"
+          disabled={revokeAll.isPending}
+          onPendingChange={setCurrentLogoutPending}
+        />
         <AlertDialog>
           <AlertDialogTrigger
-            render={<Button type="button" variant="danger" disabled={logout.isPending || revokeAll.isPending} />}
+            render={<Button type="button" variant="danger" disabled={currentLogoutPending || revokeAll.isPending} />}
           >
             Sign out all sessions
           </AlertDialogTrigger>
@@ -95,10 +133,10 @@ export function SessionControls() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      {error ? (
+      {allSessionsError ? (
         <div role="alert" className="field-error">
-          <p>{error}</p>
-          <Button type="button" variant="quiet" onClick={() => void endCurrent()} disabled={logout.isPending}>
+          <p>{allSessionsError}</p>
+          <Button type="button" variant="quiet" onClick={() => void endAll()} disabled={revokeAll.isPending}>
             Try again
           </Button>
         </div>
