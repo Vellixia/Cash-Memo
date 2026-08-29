@@ -28,14 +28,7 @@ only after required checks pass. Protected `.claude/settings.json`, `.serena/`, 
 
 ## TDD and verification evidence
 
-Initial focused RED was captured before each responsive fix:
-
-```text
-reflows dense currency metrics before values can overlap at tablet widths: 1 failed, 11 skipped
-gives hidden-sidebar mobile content the full viewport track: 1 failed, 12 skipped
-```
-
-Focused GREEN after fixes: 2/2. Final required browser sweep:
+Final required browser sweep (rendered geometry and accessibility GREEN):
 
 ```text
 pnpm --dir apps/web exec playwright test e2e/accessibility.spec.ts e2e/visual-review.spec.ts
@@ -45,13 +38,41 @@ pnpm --dir apps/web exec playwright test e2e/accessibility.spec.ts e2e/visual-re
 Final quality commands:
 
 ```text
-pnpm --dir apps/web test --run
+pnpm --dir apps/web test --run --maxWorkers=1
 pnpm --dir apps/web lint
 pnpm --dir apps/web typecheck
 pnpm --dir apps/web build
 ```
 
-All commands passed in Node 24.14.0 / pnpm 11.13.1 CI toolchain. Local recovery host reports
-Node 22.19.0; this is an environment concern only, not a CI acceptance result. No production,
-push, merge, deploy, or Dokploy action was performed.
+All serialized commands passed in Node 24.14.0 / pnpm 11.13.1 CI toolchain. An unbounded parallel
+Vitest invocation was flaky (6 cross-file timeouts/interference); the required full suite is green
+serialized at 18 files / 181 tests. Local recovery host reports Node 22.19.0; this is an environment
+concern only, not a CI acceptance result. No production, push, merge, deploy, or Dokploy action was
+performed.
 
+## Fix round 1 — rendered geometry and small-height reachability
+
+Date: 2026-08-30. Reviewer follow-up replaced former source-regex-only CSS assertions in
+`apps/web/tests/accessibility.spec.tsx` with rendered Playwright geometry checks in
+`apps/web/e2e/visual-review.spec.ts`:
+
+- `expectDashboardMetricGeometry` visits dense two-currency dashboard at exact `768x1024` and
+  `1280x800` viewports. It reads each `.summary-grid` computed track count, every metric
+  card/`dt`/`dd` bounding box, asserts containment in grid/card, rejects label/value and
+  metric/metric collisions, rejects clipped values.
+- `expectMobileShellGeometry` visits dense wallets at exact `375x812`, asserts one shell track,
+  `display:none`/zero-width sidebar, full-width main content, each management row inside usable
+  content width, document `scrollWidth <= clientWidth`.
+- Behavioral RED was proven with temporary CSS mutations, then reverted before final capture:
+  mobile `.app-shell` mutation failed `hidden sidebar must not create a mobile grid track`
+  (`Expected: 1`, `Received: 2`); tablet `.summary-grid` mutation failed
+  `dashboard metric columns at 1280px` (`Expected: 2`, `Received: 3`).
+- Small-height behavioral coverage now runs at `375x500` for representative long Budget and
+  Recurring forms. It focuses/scrolls `Create budget`, `New recurring rule`, and recurring
+  dialog's `Create recurring rule` above fixed Mobile navigation, and asserts no horizontal
+  overflow. Transaction form retains existing focus/inset coverage.
+
+Final GREEN recapture after restoring both CSS mutations: visual review test passed, regenerated
+all 48 synthetic captures, affected dashboard/wallet screenshots were inspected with image viewer.
+Geometry checks provide computed safe-area/overflow and bottom-nav reachability evidence; no new
+visual finding remains.

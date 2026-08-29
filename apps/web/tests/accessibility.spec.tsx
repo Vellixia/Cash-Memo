@@ -292,21 +292,6 @@ describe("app shell navigation", () => {
     );
   });
 
-  it("reflows dense currency metrics before values can overlap at tablet widths", () => {
-    expect(globalsCss).toMatch(
-      /@media \(max-width: 1300px\)\s*\{[\s\S]*?\.summary-grid\s*,\s*\.budget-values\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[\s\S]*?\}[\s\S]*?\}/,
-    );
-    expect(globalsCss).toMatch(
-      /@media \(max-width: 900px\)\s*\{[\s\S]*?\.summary-grid\s*,\s*\.budget-values\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}[\s\S]*?\}/,
-    );
-  });
-
-  it("gives hidden-sidebar mobile content the full viewport track", () => {
-    expect(globalsCss).toMatch(
-      /@media \(max-width: 700px\)\s*\{[\s\S]*?\.app-shell\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}[\s\S]*?\}/,
-    );
-  });
-
   it("keeps the financial shell out of the restricted-mode module graph", () => {
     const restricted = reachableModules(resolve(webRoot, "app/(auth)/deletion/page.tsx"));
     expect(restricted).toContain("components/auth-gate.tsx");

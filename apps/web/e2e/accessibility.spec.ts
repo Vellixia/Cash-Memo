@@ -44,7 +44,7 @@ async function expectFocusedAboveBottomNav(page: Page, control: Locator) {
   await expect(control).toBeFocused();
   const [controlBox, navBox] = await Promise.all([
     control.boundingBox(),
-    page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox(),
+    page.locator(".bottom-nav").boundingBox(),
   ]);
   expect(controlBox).not.toBeNull();
   expect(navBox).not.toBeNull();
@@ -160,6 +160,23 @@ test("authenticated flows preserve reflow, focus, semantics, and non-color meani
   expect(inset.safeArea.trim()).not.toBe("");
   expect(inset.mainPaddingBottom).toBeGreaterThanOrEqual(inset.navHeight);
   await expectNoHorizontalOverflow(page, "small-height transaction form");
+
+  // Representative long management forms must remain keyboard-reachable above fixed mobile nav.
+  await page.goto("/app/budgets");
+  await expectOnePageHeading(page, "Budgets");
+  const createBudget = page.getByRole("button", { name: "Create budget" });
+  await expectFocusedAboveBottomNav(page, createBudget);
+  await expectNoHorizontalOverflow(page, "small-height budget form");
+
+  await page.goto("/app/recurring");
+  await expectOnePageHeading(page, "Recurring transactions");
+  const newRecurring = page.getByRole("button", { name: "New recurring rule" });
+  await expectFocusedAboveBottomNav(page, newRecurring);
+  await newRecurring.click();
+  const recurringDialog = page.getByRole("dialog", { name: "New recurring rule" });
+  await expect(recurringDialog).toBeVisible();
+  await expectFocusedAboveBottomNav(page, recurringDialog.getByRole("button", { name: "Create recurring rule" }));
+  await expectNoHorizontalOverflow(page, "small-height recurring form");
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/app/settings");

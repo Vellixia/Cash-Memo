@@ -324,10 +324,17 @@ Branch: `rewrite/cashmemo-v1`
 
 ## Canonical interaction system
 
-Interactive controls use generated shadcn/Base UI primitives in `apps/web/components/ui/`:
-`Button`, `Input`, `FormField`, `Dialog`, `AlertDialog`, `Sheet`, `Combobox`, `Select`,
-`DropdownMenu`, `Tabs`, and `Progress`. Feature code imports these wrappers; no legacy homemade
-button/dialog implementation or raw interaction CSS remains.
+Interactive controls use one generated shadcn/Base UI interaction substrate in
+`apps/web/components/ui/`: `Button`, `Input`, `Dialog`, `AlertDialog`, `Sheet`, `Combobox`,
+`Select`, `DropdownMenu`, `Tabs`, and `Progress`. Feature code imports these wrappers for
+button, input, overlay, search, and select behavior. `FormField` is a thin custom composition
+for label, control, and error-description wiring; it is not generated shadcn/Base UI.
+
+Two compatibility surfaces remain live and are inventoried rather than misclassified as a second
+primitive system: the global `.button` class styles legacy button-shaped links/error actions, and
+the standalone `.dialog` class styles embedded form surfaces that are intentionally outside a
+generated Dialog popup. Both reuse the same tokens and focus treatment as generated controls; no
+new homemade button or dialog behavior is added.
 
 ## Retained native controls
 
