@@ -35,6 +35,8 @@ First fix-round E2E attempt found exact route glob missed query-string URL (`aRe
 
 Browser cookie metadata passed without exposing value: `__Host-cashmemo_session`, `secure=true`, `httpOnly=true`, `sameSite=Lax`, `path=/`, host-only `domain=localhost`.
 
+Round 2 delivery evidence: a same-context hidden browser page issued User A's real `/api/v1/transactions?limit=50` request. The route fetched and validated upstream body while A was authenticated, held only `route.fulfill()`, then main page logged out, logged User B in, and released fulfillment. Awaited `latePage.evaluate(fetch).text()` resolved `200` with A sentinel, proving browser receipt after cleanup; main B UI, QueryClient, CacheStorage, and storage showed no A sentinel. No cookie/token value was logged.
+
 ## Verification
 
 - `pnpm --dir apps/web exec vitest run tests/account-deletion.spec.tsx tests/cache-policy.spec.tsx` — PASS, 9/9.
@@ -49,5 +51,6 @@ Browser cookie metadata passed without exposing value: `__Host-cashmemo_session`
 - Fresh-service Chromium E2E: `pnpm --dir apps/web exec playwright test e2e/account-deletion.spec.ts e2e/cache-isolation.spec.ts` — PASS, 2/2 (49.3s). E2E exposed and fixed a missing all-sessions confirmation click and stale loading locator; browser assertions now exercise no-store responses, restricted no-financial-requests, local/session storage, CacheStorage body privacy, and IndexedDB absence.
 - Exact cleanup: `docker-compose -f infra/v1/test-compose.yml down -v --remove-orphans` — PASS; Postgres/Mailpit containers, network, and disposable volumes removed.
 - Node24 `pnpm toolchain:check` — PASS (`node=24.14.0`, `pnpm=11.13.1`). Full web Vitest — PASS, 180/180 (parallel run had 3 unrelated 5s resource-contention timeouts; isolated rerun passed). Focused — PASS, 10/10. Full lint, typecheck, and build — PASS.
+- Fix-round-2 final Node24 full web Vitest — PASS, 180/180 isolated; lint, typecheck, and build — PASS. Focused cache/deletion Vitest — PASS, 10/10. Fresh-service Chromium E2E — PASS, 2/2 (53.7s); exact compose cleanup and empty `ps --all` verified.
 - Existing protected files `.claude/settings.json`, `.serena/`, `AGENTS.md`, and `CLAUDE.md` remain untouched/unstaged.
 - No React-side deadline arithmetic or browser token persistence added; server cookie remains authoritative.
