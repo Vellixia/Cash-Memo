@@ -316,3 +316,42 @@ Date: 2026-08-28
 - Recurring due dates render semantic local DATE strings without JavaScript Date/UTC conversion;
   lifecycle copy documents paused-period suppression, future-only edits, and no-backfill resume.
 - No Orval-generated files edited.
+
+# Cashmemo V1 PR3 Task 24 Update (Responsive/accessibility primitive scan)
+
+Date: 2026-08-29
+Branch: `rewrite/cashmemo-v1`
+
+## Canonical interaction system
+
+Interactive controls use generated shadcn/Base UI primitives in `apps/web/components/ui/`:
+`Button`, `Input`, `FormField`, `Dialog`, `AlertDialog`, `Sheet`, `Combobox`, `Select`,
+`DropdownMenu`, `Tabs`, and `Progress`. Feature code imports these wrappers; no legacy homemade
+button/dialog implementation or raw interaction CSS remains.
+
+## Retained native controls
+
+The primitive scan still finds native `<select>` and `<input type="date|month">` controls. Each is
+retained deliberately:
+
+- native date/month inputs provide platform-local pickers and keyboard semantics for reporting
+  month, transaction dates, filter dates, recurring start dates, and budget month;
+- native selects are bounded enum controls for currency, category kind, and transaction type where
+  searchable selection is unnecessary; they use shared global styling and `FormField` labels/error
+  descriptions;
+- native checkbox/radio inputs retain platform semantics for archive toggles and transaction
+  direction while visible labels provide green/neutral state treatment.
+
+These are concrete product choices, not forgotten pre-primitive controls. Searchable or overlay
+interactions use Base UI `Combobox`, `Select`, `Dialog`, `AlertDialog`, `Sheet`, or `DropdownMenu`.
+
+## Task 24 scan outcome
+
+Required scans were run against `apps/web` excluding generated code:
+
+```text
+components/ui/(button|input|dialog|form-field): canonical imports only
+<select>: bounded native date/month/enum controls listed above
+className=.*button- / className=.*input: no legacy interaction class definitions
+^\.button- / ^\.input / [role="dialog"] / aria-modal in CSS/TSX: no homemade definitions
+```

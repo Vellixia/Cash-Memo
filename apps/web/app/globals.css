@@ -112,6 +112,7 @@
 
   html {
     @apply font-sans;
+    scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
   }
 
   body {
@@ -146,6 +147,24 @@ textarea {
   display: grid;
   place-items: center;
   padding: max(1.5rem, var(--content-pad));
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 50;
+  min-height: var(--control-height);
+  padding: 0.75rem 1rem;
+  border-radius: calc(var(--radius) * 0.75);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 700;
+  transform: translateY(calc(-100% - 1rem));
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
 }
 
 .auth-form,
@@ -912,6 +931,20 @@ a:focus-visible {
   align-items: center;
 }
 
+@media (max-width: 1300px) {
+  .summary-grid,
+  .budget-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .summary-grid,
+  .budget-values {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -926,6 +959,10 @@ a:focus-visible {
 @media (max-width: 700px) {
   :root {
     --bottom-nav-height: calc(5rem + var(--safe-area-bottom));
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
   }
 
   .sidebar {
@@ -962,6 +999,7 @@ a:focus-visible {
 
   .app-main {
     padding: 1rem;
+    padding-bottom: calc(1rem + var(--bottom-nav-height) + var(--safe-area-bottom));
   }
 
   .transaction-filters-desktop {

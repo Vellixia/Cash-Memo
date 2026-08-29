@@ -264,6 +264,9 @@ describe("app shell navigation", () => {
 
   it("reserves safe-area content inset and never scrolls the mobile nav sideways", () => {
     expect(globalsCss).toContain("--bottom-nav-height:");
+    expect(globalsCss).toMatch(
+      /html\s*\{[\s\S]*?scroll-padding-bottom:\s*calc\(var\(--bottom-nav-height\) \+ var\(--safe-area-bottom\)\);[\s\S]*?\}/,
+    );
 
     const bottomNav = cssBlocks(".bottom-nav");
     expect(bottomNav.length).toBeGreaterThan(0);
@@ -281,6 +284,27 @@ describe("app shell navigation", () => {
           /padding-bottom:\s*calc\([^;]*var\(--safe-area-bottom\)/.test(block),
       ),
     ).toBe(true);
+    expect(
+      globalsCss,
+      "mobile `.app-main` override must keep bottom-nav and safe-area padding instead of resetting it",
+    ).toMatch(
+      /@media \(max-width: 700px\)\s*\{[\s\S]*?\.app-main\s*\{[\s\S]*?padding:\s*1rem;[\s\S]*?padding-bottom:\s*calc\(1rem \+ var\(--bottom-nav-height\) \+ var\(--safe-area-bottom\)\);[\s\S]*?\}/,
+    );
+  });
+
+  it("reflows dense currency metrics before values can overlap at tablet widths", () => {
+    expect(globalsCss).toMatch(
+      /@media \(max-width: 1300px\)\s*\{[\s\S]*?\.summary-grid\s*,\s*\.budget-values\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[\s\S]*?\}[\s\S]*?\}/,
+    );
+    expect(globalsCss).toMatch(
+      /@media \(max-width: 900px\)\s*\{[\s\S]*?\.summary-grid\s*,\s*\.budget-values\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}[\s\S]*?\}/,
+    );
+  });
+
+  it("gives hidden-sidebar mobile content the full viewport track", () => {
+    expect(globalsCss).toMatch(
+      /@media \(max-width: 700px\)\s*\{[\s\S]*?\.app-shell\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}[\s\S]*?\}/,
+    );
   });
 
   it("keeps the financial shell out of the restricted-mode module graph", () => {

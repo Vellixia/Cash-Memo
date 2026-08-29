@@ -7,6 +7,9 @@ export const fetchCache = "force-no-store";
 export default function PublicLayout({ children }: { children: ReactNode }) {
   return (
     <div className="public-page">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <main
         id="main-content"
         tabIndex={-1}

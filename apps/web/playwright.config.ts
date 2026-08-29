@@ -7,10 +7,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   timeout: 60_000,
   expect: { timeout: 30_000 },
+  outputDir: "./test-results",
+  reporter: [["list"], ["html", { outputFolder: "./playwright-report", open: "never" }]],
   use: {
     baseURL: PUBLIC_ORIGIN,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    video: "retain-on-failure",
   },
   webServer: [
     {

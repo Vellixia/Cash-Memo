@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
     branches: [main, "rewrite/cashmemo-v1"]
+  workflow_dispatch:
+    inputs:
+      capture_visual_review:
+        description: "Capture and retain fixed-viewport visual review screenshots"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -184,6 +191,16 @@ jobs:
       - name: Collect real-stack diagnostics on failure
         if: failure()
         run: docker compose -f infra/v1/test-compose.yml logs --no-color
+      - name: Upload private Playwright evidence
+        if: ${{ !cancelled() && (failure() || inputs.capture_visual_review == true) }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-evidence-${{ github.sha }}
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
   recovery-safety:
     name: Receipt replay and preservation recovery gates

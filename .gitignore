@@ -31,3 +31,5 @@ Thumbs.db
 .idea/
 .vscode/
 .playwright-mcp/
+apps/web/test-results/
+apps/web/playwright-report/

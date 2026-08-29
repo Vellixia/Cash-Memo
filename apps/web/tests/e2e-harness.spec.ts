@@ -75,6 +75,12 @@ describe("real-stack E2E harness", () => {
     expect(normalizePublicOrigin("http://localhost:3000/")).toBe("http://localhost:3000");
   });
 
+  it("rejects every non-loopback origin before the E2E harness can authenticate or capture", () => {
+    expect(() => normalizePublicOrigin("https://cashmemo.example")).toThrow(
+      /loopback.*before authentication or artifact capture/i,
+    );
+  });
+
   it("mounts PostgreSQL 18 temporary storage at its version-safe parent directory", () => {
     const composeFile = path.resolve(process.cwd(), "../../infra/v1/test-compose.yml");
     const hasComposePlugin =
