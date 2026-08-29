@@ -1,16 +1,19 @@
 import { expect, test } from "./support/test";
-import { login, provisionUser } from "./support/auth";
+import { provisionUser } from "./support/auth";
 import { createTransaction } from "./support/transactions";
+
+test.use({ timezoneId: "UTC" });
 
 test("timezone change preserves instant, changes grouping, and refreshes transaction defaults", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const user = await provisionUser(page, "settings-timezone", "UTC");
+  const privateNote = `User A private ${user.email}`;
 
   const transactionId = await createTransaction(page, {
     amount: "7.00",
     category: "Food & Drink",
     direction: "expense",
-    note: "Timezone consequence",
+    note: privateNote,
     occurredLocal: "2026-01-01T00:30",
   });
   const beforeInstant = await page.evaluate(async (id) => {
@@ -71,8 +74,14 @@ test("timezone change preserves instant, changes grouping, and refreshes transac
   await page.getByRole("button", { name: "Confirm sign out all sessions" }).click();
   expect((await allRevoke).ok()).toBe(true);
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
   await expect.poll(async () => page.evaluate(async () => (await fetch("/api/v1/auth/sessions/current")).status)).toBe(401);
-  await login(page, user);
+  const userB = await provisionUser(page, "settings-cache-other", "UTC");
+  await page.goto("/app");
+  await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
+  await page.goto("/app/wallets");
+  await expect(page.getByText(user.walletName, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(userB.walletName, { exact: true })).toBeVisible();
   await page.goto("/app/settings/sessions");
   const currentLogout = page.waitForResponse(
     (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/v1/auth/logout",

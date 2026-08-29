@@ -24,7 +24,7 @@
 ## Self-review/concerns
 
 - Browser regression proves canonical `occurred_at` unchanged, local rendered date changed, fresh entry-default timezone, and both sign-out paths.
-- Server response owns cookie clearing; client clears private QueryClient before navigation after successful revocation (current path also clears on contact failure as existing safety behavior).
+- Server response owns HttpOnly cookie clearing; client clears private QueryClient and navigates only after successful server revocation. Logout failure retains page/session state and exposes retry; client never claims cookie cleared.
 - Backend SessionContract currently returns only `user_id`, `session_id`, and `access`; UI intentionally renders only session ID and no IP/device/geography metadata.
 - Protected `.claude/settings.json`, `.serena/`, `AGENTS.md`, and `CLAUDE.md` were not staged.
 
@@ -39,3 +39,21 @@
 - GREEN fresh-service browser: `pnpm --dir apps/web exec playwright test e2e/settings.spec.ts` — Chromium 1/1. Fixed `2026-01-01T00:30` boundary moved UTC January grouping/display to Pacific/Honolulu December while canonical `occurred_at` stayed equal; actual `Occurred at` datetime-local value checked against new zone. Revoke-all and current logout responses observed; post-logout `/api/v1/auth/sessions/current` returned 401. Services cleaned.
 - Cache harness uses real generated query-key helpers and proves parameterized private cache values remain byte-for-byte unchanged while invalidated; existing transaction-form tests cover pristine datetime rebasing and dirty datetime preservation.
 - Current logout failure now retains page/cache and shows `Try again`; success clears cache/navigates only after `logout.mutateAsync()` resolves. Cookie clearing remains server-owned via HttpOnly response; client makes no cookie-cleared claim.
+
+## Round 2 fix evidence
+
+- True pre-fix RED ran in disposable worktree at base `eac1e99` with behavioral probes (removed afterward), command: `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir apps/web exec vitest run tests/task22-pre-fix.spec.tsx`.
+- `Task 22 pre-fix behavioral RED > requires consequence confirmation before changing timezone`: `expected "vi.fn()" to not be called ... Number of calls: 1` after Save, proving old form submitted changed timezone without consequence confirmation.
+- `Task 22 pre-fix behavioral RED > invalidates entry-defaults cache after timezone save while preserving value`: expected `queryKey ["/api/v1/transactions/entry-defaults"]`, received only `["/api/v1/onboarding"]`, proving missing dependent invalidation.
+- `Task 22 pre-fix behavioral RED > requires explicit confirmation before revoking all sessions`: `expected "vi.fn()" to not be called ... Number of calls: 1`, proving old all-session action revoked immediately.
+- Added same-browser synthetic privacy E2E: User A financial note → successful revoke-all → protected-route redirect and 401 → User B signup/login in same browser context; User A note/wallet never renders. User B current logout separately observes `/auth/logout` response + 401.
+- E2E forces browser `timezoneId: "UTC"`; fixed transaction boundary is `2026-01-01T00:30`, profile changes UTC → `Pacific/Honolulu`, actual `Occurred at` input compared with Cashmemo-zone wall clock.
+- GREEN focused: settings/session + real invalidation + transaction form — 26/26; full web Vitest — 176/176.
+- GREEN lint, typecheck, build, `git diff --check` — passed under Node 24.14.0 path.
+- GREEN fresh-service Chromium E2E — 1/1; Postgres/Mailpit cleaned with `docker-compose -f infra/v1/test-compose.yml down -v`.
+
+## Round 2 final verification
+
+- Final focused command: `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir apps/web exec vitest run tests/settings.spec.tsx tests/settings-invalidation.spec.ts tests/transaction-form.spec.tsx` — 3 files, 26/26.
+- Final full command: `PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH pnpm --dir apps/web exec vitest run` — 17 files, 176/176.
+- Final `pnpm --dir apps/web lint`, `typecheck`, `build`, and `git diff --check` — passed.

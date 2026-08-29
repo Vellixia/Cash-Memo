@@ -80,6 +80,7 @@ export async function completeOnboarding(
   await expect(
     page.getByRole("heading", { name: "Confirm your timezone", level: 2 }),
   ).toBeVisible();
+  await page.getByLabel("Reporting timezone").fill("");
   await page.getByLabel("Reporting timezone").fill(timezone);
   await page.getByRole("option", { name: timezone, exact: true }).click();
   await page.getByLabel("Default currency").fill("USD");
