@@ -3,11 +3,23 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useLogout, useRevokeAllSessions } from "../../generated/api";
+import { useCurrentSession, useLogout, useRevokeAllSessions } from "../../generated/api";
 import { clearSessionState } from "../../lib/auth/session";
 import { Button } from "../../components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../components/ui/alert-dialog";
 
 export function SessionControls() {
+  const current = useCurrentSession({ query: { retry: false, refetchOnWindowFocus: false } });
   const logout = useLogout();
   const revokeAll = useRevokeAllSessions();
   const client = useQueryClient();
@@ -16,15 +28,74 @@ export function SessionControls() {
 
   async function endCurrent() {
     setError(undefined);
-    try { await logout.mutateAsync(); }
-    catch (value) { setError(value instanceof Error ? value.message : "Could not contact Cashmemo. Local session state was cleared."); }
-    finally { clearSessionState(client); router.replace("/login"); }
-  }
-  async function endAll() {
-    setError(undefined);
-    try { await revokeAll.mutateAsync(); clearSessionState(client); router.replace("/login"); }
-    catch (value) { setError(value instanceof Error ? value.message : "Could not sign out all sessions."); }
+    try {
+      await logout.mutateAsync();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Could not contact Cashmemo. Local session state was cleared.");
+    } finally {
+      clearSessionState(client);
+      router.replace("/login");
+    }
   }
 
-  return <section className="dialog"><h2>Sessions</h2><p>Sign out this browser, or revoke every Cashmemo session on all devices.</p><div className="card-actions session-actions"><Button type="button" variant="secondary" disabled={logout.isPending} onClick={() => void endCurrent()}>Sign out this session</Button><Button type="button" variant="danger" disabled={revokeAll.isPending} onClick={() => void endAll()}>Sign out all sessions</Button></div>{error ? <p role="alert" className="field-error">{error}</p> : null}</section>;
+  async function endAll() {
+    setError(undefined);
+    try {
+      await revokeAll.mutateAsync();
+      clearSessionState(client);
+      router.replace("/login");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Could not sign out all sessions.");
+    }
+  }
+
+  return (
+    <section className="dialog">
+      <h2>Sessions</h2>
+      <p>Sign out this browser, or revoke every Cashmemo session on all devices.</p>
+      {current.isPending ? <p role="status">Loading current session…</p> : null}
+      {current.isError ? <p role="alert" className="field-error">Could not load current session.</p> : null}
+      {current.data?.data ? (
+        <dl className="session-details">
+          <div>
+            <dt>Current session</dt>
+            <dd>{current.data.data.session_id}</dd>
+          </div>
+        </dl>
+      ) : null}
+      <div className="card-actions session-actions">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={logout.isPending || revokeAll.isPending}
+          onClick={() => void endCurrent()}
+        >
+          Sign out this session
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={<Button type="button" variant="danger" disabled={logout.isPending || revokeAll.isPending} />}
+          >
+            Sign out all sessions
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sign out all sessions?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This revokes every active Cashmemo session, including this one. You will need to
+                sign in again on each browser.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction type="button" variant="danger" onClick={() => void endAll()} disabled={revokeAll.isPending}>
+                Confirm sign out all sessions
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+      {error ? <p role="alert" className="field-error">{error}</p> : null}
+    </section>
+  );
 }

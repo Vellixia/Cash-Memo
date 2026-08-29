@@ -10,6 +10,17 @@ const api = vi.hoisted(() => ({
   preferences: vi.fn().mockResolvedValue({ data: {} }),
   logout: vi.fn().mockResolvedValue({ data: {} }),
   revoke: vi.fn().mockResolvedValue({ data: {} }),
+  currentSession: {
+    data: {
+      data: {
+        access: "FULL",
+        session_id: "session-current",
+        user_id: "user-1",
+      },
+    },
+    isPending: false,
+    isError: false,
+  },
   deletion: vi.fn().mockResolvedValue({
     data: { status: "pending_deletion", deletion_due_at: "2026-08-31T00:00:00Z" },
   }),
@@ -56,8 +67,15 @@ vi.mock("../generated/api", () => ({
   useUpdatePreferences: () => ({ mutateAsync: api.preferences, isPending: false }),
   useLogout: () => ({ mutateAsync: api.logout, isPending: false }),
   useRevokeAllSessions: () => ({ mutateAsync: api.revoke, isPending: false }),
+  useCurrentSession: () => api.currentSession,
   useRequestAccountDeletion: () => ({ mutateAsync: api.deletion, isPending: false }),
   getGetOnboardingQueryKey: () => ["/api/v1/onboarding"],
+  getGetTransactionEntryDefaultsQueryKey: () => ["/api/v1/transactions/entry-defaults"],
+  getListTransactionsQueryKey: () => ["/api/v1/transactions"],
+  getGetMonthlySummaryQueryKey: () => ["/api/v1/dashboard/monthly"],
+  getGetBudgetSummaryQueryKey: () => ["/api/v1/budgets/summary"],
+  getListBudgetsQueryKey: () => ["/api/v1/budgets"],
+  getGetRecentTransactionsQueryKey: () => ["/api/v1/dashboard/recent"],
 }));
 
 function setup(node: React.ReactNode) {
@@ -80,6 +98,64 @@ describe("settings", () => {
     api.retryCurrencies.mockClear();
   });
 
+  it("requires timezone confirmation with exact new timezone consequences", async () => {
+    const { PreferencesForm } = await import("../features/settings/preferences-form");
+    setup(<PreferencesForm />);
+    fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "Asia/Jakarta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+
+    expect(api.preferences).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog").textContent).toContain("Asia/Jakarta");
+    expect(screen.getByRole("alertdialog").textContent).toContain("stored transaction instants stay unchanged");
+    expect(screen.getByRole("alertdialog").textContent).toContain("historical grouping may change");
+    expect(screen.getByRole("alertdialog").textContent).toContain("dashboard and budget boundaries use Asia/Jakarta");
+    expect(screen.getByRole("alertdialog").textContent).toContain("future recurrence conversion uses Asia/Jakarta");
+    expect(screen.getByRole("alertdialog").textContent).toContain("existing occurrences and generated timestamps stay unchanged");
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timezone change" }));
+    await waitFor(() => expect(api.preferences).toHaveBeenCalledWith({
+      data: { timezone: "Asia/Jakarta", default_currency_code: "USD" },
+    }));
+  });
+
+  it("invalidates every timezone-dependent private query after save", async () => {
+    const { PreferencesForm } = await import("../features/settings/preferences-form");
+    const { client } = setup(<PreferencesForm />);
+    const invalidate = vi.spyOn(client, "invalidateQueries").mockResolvedValue(undefined);
+    fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "Asia/Jakarta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timezone change" }));
+    await waitFor(() => expect(api.preferences).toHaveBeenCalled());
+
+    const keys = invalidate.mock.calls.map(([arg]) => JSON.stringify(arg?.queryKey));
+    expect(keys).toEqual(expect.arrayContaining([
+      JSON.stringify(["/api/v1/onboarding"]),
+      JSON.stringify(["/api/v1/transactions/entry-defaults"]),
+      JSON.stringify(["/api/v1/transactions"]),
+      JSON.stringify(["/api/v1/dashboard/monthly"]),
+      JSON.stringify(["/api/v1/budgets/summary"]),
+      JSON.stringify(["/api/v1/budgets"]),
+      JSON.stringify(["/api/v1/dashboard/recent"]),
+    ]));
+  });
+
+  it("shows minimal current session metadata and confirms all-session revocation", async () => {
+    const { SessionControls } = await import("../features/settings/session-controls");
+    setup(<SessionControls />);
+    expect(screen.getByText("session-current")).toBeTruthy();
+    expect(screen.queryByText(/^(IP|Device|Geography)$/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out all sessions" }));
+    expect(api.revoke).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog").textContent).toContain("every active Cashmemo session");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.revoke).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out all sessions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm sign out all sessions" }));
+    await waitFor(() => expect(api.revoke).toHaveBeenCalledTimes(1));
+  });
+
   it("saves timezone and default currency while explaining server-owned semantics", async () => {
     const { PreferencesForm } = await import("../features/settings/preferences-form");
     setup(<PreferencesForm />);
@@ -96,6 +172,7 @@ describe("settings", () => {
     fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "Asia/Jakarta" } });
     fireEvent.change(screen.getByLabelText("Default currency"), { target: { value: "IDR" } });
     fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timezone change" }));
     await waitFor(() => {
       expect(api.preferences).toHaveBeenCalledWith({
         data: { timezone: "Asia/Jakarta", default_currency_code: "IDR" },
@@ -182,6 +259,7 @@ describe("settings", () => {
     current.unmount();
     const all = setup(<SessionControls />);
     fireEvent.click(screen.getByRole("button", { name: "Sign out all sessions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm sign out all sessions" }));
     await waitFor(() => {
       expect(all.client.getQueryCache().getAll()).toHaveLength(0);
     });
