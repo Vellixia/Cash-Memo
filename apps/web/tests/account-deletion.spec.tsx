@@ -52,25 +52,47 @@ describe("account deletion request", () => {
 });
 
 describe("private query isolation", () => {
+  it("shows legacy cancellation-only cleanup leaves prior private data reusable", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ["financial", "legacy"];
+    const sentinel = { secret: "user A financial sentinel" };
+    client.setQueryData(key, sentinel);
+    let resolve!: (value: typeof sentinel) => void;
+    const request = client.fetchQuery({
+      queryKey: key,
+      queryFn: () => new Promise<typeof sentinel>((done) => { resolve = done; }),
+    });
+
+    // This is the old isolated cleanup shape: cancel, but leave reusable QueryClient state alive.
+    await client.cancelQueries();
+    expect(client.getQueryData(key)).toEqual(sentinel);
+    resolve(sentinel);
+    await request.catch(() => undefined);
+  });
+
   it("aborts in-flight financial requests and blocks late results from returning to cache", async () => {
     const { clearPrivateQueryState } = await import("../lib/query-client");
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const cancelSpy = vi.spyOn(client, "cancelQueries");
+    const key = ["financial", "late"];
+    client.setQueryData(key, { secret: "user A financial sentinel" });
     let resolve!: (value: { secret: string }) => void;
     const request = client.fetchQuery({
-      queryKey: ["financial", "late"],
+      queryKey: key,
       queryFn: ({ signal }) => {
         expect(signal).toBeInstanceOf(AbortSignal);
         return new Promise<{ secret: string }>((done) => {
           resolve = done;
         });
       },
-    });
+    }).catch(() => undefined);
 
     await clearPrivateQueryState(client);
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
     resolve({ secret: "late private result" });
-    await request.catch(() => undefined);
+    await request;
     await new Promise((done) => setTimeout(done, 0));
 
-    expect(client.getQueryData(["financial", "late"])).toBeUndefined();
+    expect(client.getQueryData(key)).toBeUndefined();
   });
 });

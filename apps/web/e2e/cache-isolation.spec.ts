@@ -23,6 +23,23 @@ test("session transition cannot reuse private cache and ownership failures revea
 
   await page.goto("/app");
   await expect(page.getByText(privateNote, { exact: true })).toBeVisible();
+  const sessionCookie = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "__Host-cashmemo_session",
+  );
+  expect(sessionCookie).toBeDefined();
+  expect({
+    secure: sessionCookie?.secure,
+    httpOnly: sessionCookie?.httpOnly,
+    sameSite: sessionCookie?.sameSite,
+    path: sessionCookie?.path,
+    domain: sessionCookie?.domain,
+  }).toEqual({
+    secure: true,
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    domain: "localhost",
+  });
 
   const walletApi = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/wallets",
@@ -54,44 +71,38 @@ test("session transition cannot reuse private cache and ownership failures revea
   const second = await provisionUser(secondPage, "cache-other");
   await secondContext.close();
 
+  let releaseAResponse!: () => void;
+  const aResponseHeld = new Promise<void>((resolve) => {
+    releaseAResponse = resolve;
+  });
+  let aRequestSeen = false;
+  const holdAResponse = async (route: Route) => {
+    const request = route.request();
+    if (!aRequestSeen && request.method() === "GET" && new URL(request.url()).pathname === "/api/v1/transactions") {
+      aRequestSeen = true;
+      await aResponseHeld;
+    }
+    await route.fallback();
+  };
+  await page.route("**/api/v1/**", holdAResponse);
+  // Hold actual User A response before logout; cleanup must cancel it before User B uses same client.
+  await page.goto("/app/transactions");
+  await expect.poll(() => aRequestSeen).toBe(true);
+
   await page.goto("/app/settings/sessions");
   await page.getByRole("button", { name: "Sign out this session" }).click();
   await expect(page).toHaveURL(/\/login$/);
 
-  let releaseFinancialResponses!: () => void;
-  const financialResponsesHeld = new Promise<void>((resolve) => {
-    releaseFinancialResponses = resolve;
-  });
-  const delayedPaths = new Set([
-    "/api/v1/reports/budget-summary",
-    "/api/v1/reports/monthly-summary",
-    "/api/v1/transactions/recent",
-    "/api/v1/wallets",
-  ]);
-  let delayedRequestCount = 0;
-  const holdFinancialResponses = async (route: Route) => {
-    if (delayedPaths.has(new URL(route.request().url()).pathname)) {
-      delayedRequestCount += 1;
-      await financialResponsesHeld;
-    }
-    await route.fallback();
-  };
-  await page.route("**/api/v1/**", holdFinancialResponses);
-
   await login(page, second);
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
-  await expect(page.getByRole("status", { name: "Loading recent transactions" })).toBeVisible();
-  await expect.poll(() => delayedRequestCount).toBeGreaterThanOrEqual(1);
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
   await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
+  releaseAResponse();
+  await page.unroute("**/api/v1/**", holdAResponse);
 
   await page.goto("/app/wallets");
-  await expect(page.getByText("Loading wallets…", { exact: true })).toBeVisible();
   await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(second.walletName, { exact: true })).toHaveCount(0);
-  releaseFinancialResponses();
-  await expect(page.getByRole("heading", { name: second.walletName, level: 2 })).toBeVisible();
-  await page.unroute("**/api/v1/**", holdFinancialResponses);
+  await expect(page.getByText(second.walletName, { exact: true })).toHaveCount(1);
   await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);
   await page.goto("/app");
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
@@ -104,13 +115,21 @@ test("session transition cannot reuse private cache and ownership failures revea
       )
       .join("\n");
     const cacheBodies: string[] = [];
-    for (const cacheName of await caches.keys()) {
+    const cacheUrls: string[] = [];
+    const cacheNames = await caches.keys();
+    for (const cacheName of cacheNames) {
       const cache = await caches.open(cacheName);
-      for (const response of await cache.matchAll()) cacheBodies.push(await response.text());
+      for (const request of await cache.keys()) {
+        cacheUrls.push(request.url);
+        const response = await cache.match(request);
+        if (response) cacheBodies.push(await response.text());
+      }
     }
     const databases = await indexedDB.databases();
     return {
       storageText,
+      cacheNames,
+      cacheUrls,
       cacheText: cacheBodies.join("\n"),
       databaseNames: databases.map((database) => database.name ?? ""),
     };
@@ -120,6 +139,11 @@ test("session transition cannot reuse private cache and ownership failures revea
   expect(persistence.cacheText).not.toContain(first.walletName);
   expect(persistence.cacheText).not.toContain(privateNote);
   expect(persistence.databaseNames).toEqual([]);
+  expect(persistence.cacheNames.every((name) => name === "cashmemo-static-v1")).toBe(true);
+  const approvedStaticAsset =
+    /^http:\/\/localhost:3000\/(?:_next\/static\/.+\.(?:js|css|woff2?|ttf|otf)|icons\/[^/]+\.(?:png|svg|ico)|manifest\.webmanifest|brand\/[^/]+\.(?:svg|png))(?:\?.*)?$/i;
+  for (const url of persistence.cacheUrls) expect(url).toMatch(approvedStaticAsset);
+  expect(persistence.cacheUrls.some((url) => /(?:\/app|\/deletion|\/api\/|_rsc=)/.test(url))).toBe(false);
 
   const missingId = "00000000-0000-4000-8000-000000000000";
   const [knownRead, unknownRead, knownPatch, unknownPatch, knownDelete, unknownDelete] =
