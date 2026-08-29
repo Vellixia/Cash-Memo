@@ -53,6 +53,7 @@ export function BudgetForm({
   const client = useQueryClient();
   const exponent = currencies.data?.data.find((item) => item.code === currency)?.exponent;
   const selectedCategory = categories.data?.data.find((category) => category.id === categoryId);
+  const selectedCurrency = currencies.data?.data.find((item) => item.code === currency);
 
   async function submit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,15 +74,22 @@ export function BudgetForm({
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
     try {
-      if (budget)
+      if (budget) {
+        const data = {
+          month,
+          currency,
+          amount: amount.trim(),
+          ...(categoryId !== budget.category_id ? { category_id: categoryId } : {}),
+        };
         await update.mutateAsync({
           budgetId: budget.id,
-          data: { month, category_id: categoryId, currency, amount: amount.trim() },
+          data,
         });
-      else
+      } else {
         await create.mutateAsync({
           data: { month, category_id: categoryId, currency, amount: amount.trim() },
         });
+      }
       await invalidateBudgetQueries(client, budget ? [budget.month, month] : [month]);
       setStatus({ kind: "success", text: "Budget saved. Totals refreshed from Cashmemo." });
       onSaved?.();
@@ -145,7 +153,11 @@ export function BudgetForm({
             aria-describedby={fieldErrors.category ? "budget-category-error" : undefined}
             className="w-full"
           >
-            <SelectValue placeholder="Choose expense category" />
+            <SelectValue placeholder="Choose expense category">
+              {selectedCategory
+                ? `${selectedCategory.name}${selectedCategory.archived_at ? " (archived historical category)" : ""}`
+                : undefined}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {categories.data.data
@@ -179,7 +191,9 @@ export function BudgetForm({
             aria-describedby={fieldErrors.currency ? "budget-currency-error" : undefined}
             className="w-full"
           >
-            <SelectValue placeholder="Choose currency" />
+            <SelectValue placeholder="Choose currency">
+              {selectedCurrency ? `${selectedCurrency.code} — ${selectedCurrency.display_name}` : undefined}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {currencies.data.data.map((item) => (

@@ -18,6 +18,12 @@ interface Progress {
   remaining: string;
   progress: string;
 }
+interface CategoryOption {
+  id: string;
+  name: string;
+  kind: string;
+  archived_at: string | null;
+}
 
 const api = vi.hoisted(() => ({
   listState: "success",
@@ -42,6 +48,7 @@ const api = vi.hoisted(() => ({
     { code: "USD", display_name: "US Dollar", exponent: 2 },
     { code: "JPY", display_name: "Japanese Yen", exponent: 0 },
   ],
+  categories: [{ id: "food", name: "Food", kind: "expense", archived_at: null }] as CategoryOption[],
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
@@ -62,6 +69,8 @@ function monthlyKey(params?: unknown) {
 async function choose(label: string, option: string | RegExp) {
   fireEvent.click(screen.getByRole("combobox", { name: label }));
   const item = await screen.findByRole("option", { name: option });
+  fireEvent.pointerDown(item);
+  fireEvent.pointerUp(item);
   fireEvent.click(item);
 }
 
@@ -92,9 +101,9 @@ vi.mock("../generated/api", () => ({
       retry: false,
     }),
   useListCategories: () => ({
-    data:
+      data:
       api.categoryState === "success"
-        ? { data: [{ id: "food", name: "Food", kind: "expense", archived_at: null }] }
+        ? { data: api.categories }
         : undefined,
     isPending: api.categoryState === "loading",
     isError: api.categoryState === "error",
@@ -147,10 +156,11 @@ describe("budgets", () => {
         progress: "125",
       },
     ];
-    api.currencies = [
+  api.currencies = [
       { code: "USD", display_name: "US Dollar", exponent: 2 },
       { code: "JPY", display_name: "Japanese Yen", exponent: 0 },
-    ];
+  ];
+    api.categories = [{ id: "food", name: "Food", kind: "expense", archived_at: null }];
     api.create.mockReset().mockResolvedValue({ data: {} });
     api.update
       .mockReset()
@@ -219,6 +229,30 @@ describe("budgets", () => {
       queryKey: ["/api/v1/reports/monthly-summary"],
       exact: true,
     });
+  });
+
+  it("omits unchanged archived category on edit and sends active replacement", async () => {
+    api.categories = [
+      { id: "food", name: "Food", kind: "expense", archived_at: null },
+      { id: "old-food", name: "Old Food", kind: "expense", archived_at: "2026-08-01T00:00:00Z" },
+    ];
+    const { BudgetForm } = await import("../features/budgets/budget-form");
+    const archived = { ...api.budgets[0], category_id: "old-food" };
+    const rendered = view(<BudgetForm budget={archived} />);
+    expect(screen.getByText(/Old Food \(archived historical category\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Budget amount"), { target: { value: "350.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const firstUpdate = api.update.mock.calls[0]?.[0] as { data?: Record<string, unknown> };
+    expect(firstUpdate.data).not.toHaveProperty("category_id");
+    rendered.unmount();
+
+    view(<BudgetForm budget={archived} />);
+    await choose("Category", "Food");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2));
+    const secondUpdate = api.update.mock.calls[1]?.[0] as { data?: { category_id?: string } };
+    expect(secondUpdate.data?.category_id).toBe("food");
   });
 
   it("invalidates parameterless plus source and destination month keys when update moves month", async () => {
