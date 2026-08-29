@@ -80,7 +80,7 @@ test("session transition cannot reuse private cache and ownership failures revea
 
   await login(page, second);
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
-  await expect(page.getByText("Loading recent transactions…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Loading recent transactions" })).toBeVisible();
   await expect.poll(() => delayedRequestCount).toBeGreaterThanOrEqual(1);
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
   await expect(page.getByText(first.walletName, { exact: true })).toHaveCount(0);

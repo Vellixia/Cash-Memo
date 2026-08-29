@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { AccountDeletionContract } from "../../generated/api/model/accountDeletionContract";
+import { clearPrivateQueryState } from "../query-client";
 
 const FALLBACK_RETURN_PATH = "/app";
 const DESTRUCTIVE_PATH = /(?:delete|deletion|purge|logout|sign-out)/i;
@@ -60,6 +61,7 @@ export function getDeletionErrorDestination(error: unknown): "/login" {
 }
 
 export function clearSessionState(queryClient: QueryClient): void {
-  // Query cache is memory-only. Clear before navigation so protected data cannot flash.
-  queryClient.clear();
+  // Keep legacy synchronous call sites safe: clear immediately, await transport cancellation in
+  // the shared helper so late responses cannot restore removed query objects.
+  void clearPrivateQueryState(queryClient);
 }

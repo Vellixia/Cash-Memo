@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useRequestAccountDeletion } from "../../generated/api";
-import { clearSessionState } from "../../lib/auth/session";
+import { clearPrivateQueryState } from "../../lib/query-client";
 import { Button } from "../../components/ui/button";
 import { FormField } from "../../components/ui/form-field";
 import { Input } from "../../components/ui/input";
@@ -13,6 +13,7 @@ export function AccountDeletion() {
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string>();
   const [requestError, setRequestError] = useState<string>();
+  const [deletionDueAt, setDeletionDueAt] = useState<string>();
   const requestDeletion = useRequestAccountDeletion();
   const client = useQueryClient();
   const router = useRouter();
@@ -26,8 +27,9 @@ export function AccountDeletion() {
       return;
     }
     try {
-      await requestDeletion.mutateAsync({ data: { password } });
-      clearSessionState(client);
+      const response = await requestDeletion.mutateAsync({ data: { password } });
+      setDeletionDueAt(response.data.deletion_due_at ?? undefined);
+      await clearPrivateQueryState(client);
       router.replace("/deletion");
     } catch (value) {
       setRequestError(
@@ -46,10 +48,16 @@ export function AccountDeletion() {
         screens become unavailable.
       </p>
       <p>You have a 7-day grace period to cancel from the account deletion screen.</p>
+      <p>Live account data is permanently deleted after the grace period.</p>
       <p>
         After permanent deletion, encrypted backups may retain deleted data after the grace period
         according to the backup retention schedule.
       </p>
+      {deletionDueAt ? (
+        <p role="status">
+          Deletion scheduled for {new Date(deletionDueAt).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" })}.
+        </p>
+      ) : null}
       <p>
         Resetting your password remains available while signed out and does not cancel deletion.
       </p>

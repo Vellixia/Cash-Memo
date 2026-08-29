@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  getGetAccountDeletionQueryKey,
   useCancelAccountDeletion,
   useGetAccountDeletion,
 } from "../../../generated/api";
@@ -20,6 +19,7 @@ import {
   deletionActionsForStatus,
   getDeletionErrorDestination,
 } from "../../../lib/auth/session";
+import { clearPrivateQueryState } from "../../../lib/query-client";
 
 /** Restricted mode: no AppShell, no sidebar, no bottom navigation, no financial queries. */
 export default function DeletionPage() {
@@ -38,11 +38,13 @@ function DeletionPanel() {
   const signOut = useSignOut();
   const deletion = query.data?.data;
   const [password, setPassword] = useState("");
+  const [cancelled, setCancelled] = useState(false);
 
   useEffect(() => {
-    if (cancel.isSuccess)
-      void client.invalidateQueries({ queryKey: getGetAccountDeletionQueryKey() });
-  }, [cancel.isSuccess, client]);
+    if (!cancel.isSuccess || cancelled) return;
+    setCancelled(true);
+    void clearPrivateQueryState(client).then(() => router.replace("/login"));
+  }, [cancel.isSuccess, cancelled, client, router]);
 
   // The cancel route answers 401 for BOTH a rejected password (`INVALID_CREDENTIALS`, raised by the
   // handler) and a missing/expired/revoked cookie (`UNAUTHORIZED`, raised by the session extractor
@@ -74,7 +76,7 @@ function DeletionPanel() {
     );
   }
 
-  const pending = deletion ? deletionActionsForStatus(deletion.status).canCancel : false;
+  const pending = !cancelled && deletion ? deletionActionsForStatus(deletion.status).canCancel : false;
 
   return (
     <main className="public-page">
@@ -96,7 +98,12 @@ function DeletionPanel() {
           </p>
           {deletion?.deletion_due_at ? (
             <p className="m-0 text-sm text-muted-foreground">
-              Scheduled for {new Date(deletion.deletion_due_at).toLocaleDateString()}
+              Scheduled for {new Date(deletion.deletion_due_at).toLocaleDateString("en-US", {
+                timeZone: "UTC",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
             </p>
           ) : null}
           {cancel.isError ? (

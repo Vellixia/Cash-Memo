@@ -18,6 +18,10 @@ test("revokes all sessions and cancels pending account deletion during grace", a
 
   await page.goto("/app/settings/sessions");
   await page.getByRole("button", { name: "Sign out all sessions" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Confirm sign out all sessions" })
+    .click();
   await expect(page).toHaveURL(/\/login$/);
   await secondPage.goto("/app");
   await expect(secondPage).toHaveURL(/\/login\?returnTo=%2Fapp$/);
@@ -33,6 +37,7 @@ test("revokes all sessions and cancels pending account deletion during grace", a
   await expect(page).toHaveURL(/\/login$/);
   await login(page, user, /\/deletion$/);
   await expect(page.getByRole("status")).toContainText("pending_deletion");
+  await expect(page.getByText(/Scheduled for/)).toBeVisible();
 
   const financialRequests: string[] = [];
   page.on("request", (request) => {
@@ -49,6 +54,19 @@ test("revokes all sessions and cancels pending account deletion during grace", a
   await expect(page.getByRole("link", { name: "Overview" })).toHaveCount(0);
   expect(financialRequests).toEqual([]);
   expect(await persistedBrowserStorage(page)).toEqual({ local: [], session: [] });
+  const privateStorage = await page.evaluate(async () => {
+    const cacheBodies: string[] = [];
+    for (const cacheName of await caches.keys()) {
+      const cache = await caches.open(cacheName);
+      for (const response of await cache.matchAll()) cacheBodies.push(await response.text());
+    }
+    return {
+      cacheBodies,
+      databaseNames: (await indexedDB.databases()).map((database) => database.name ?? ""),
+    };
+  });
+  expect(privateStorage.cacheBodies.join("\n")).not.toContain(user.email);
+  expect(privateStorage.databaseNames).toEqual([]);
 
   await page.getByLabel("Confirm password").fill("wrong password entirely");
   await page.getByRole("button", { name: "Cancel deletion" }).click();
@@ -62,4 +80,5 @@ test("revokes all sessions and cancels pending account deletion during grace", a
   expect(financialRequests).toEqual([]);
   await login(page, user);
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+  expect(await persistedBrowserStorage(page)).toEqual({ local: [], session: [] });
 });

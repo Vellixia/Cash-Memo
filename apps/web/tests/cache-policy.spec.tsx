@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createNoStoreFetch } from "../lib/cache/policy";
+import { api } from "../lib/api/axios";
 
 describe("authenticated cache policy", () => {
   it("adds no-store directives to authenticated fetches", async () => {
@@ -14,6 +15,12 @@ describe("authenticated cache policy", () => {
 
     expect(received?.cache).toBe("no-store");
     expect(new Headers(received?.headers).get("cache-control")).toBe("no-store");
+  });
+
+  it("keeps authenticated API requests cookie-only and uncached", () => {
+    expect(api.defaults.withCredentials).toBe(true);
+    expect((api.defaults.headers as Record<string, unknown>)["Cache-Control"]).toBe("no-store");
+    expect((api.defaults.headers as Record<string, unknown>).Pragma).toBe("no-cache");
   });
 
   it("keeps service worker policy static-only", async () => {
