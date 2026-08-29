@@ -265,6 +265,33 @@ describe("settings", () => {
     });
   });
 
+  it("keeps current session and private cache until server logout succeeds", async () => {
+    const { SessionControls } = await import("../features/settings/session-controls");
+    const { client } = setup(<SessionControls />);
+    let release!: () => void;
+    api.logout.mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ data: {} });
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out this session" }));
+    await waitFor(() => expect(api.logout).toHaveBeenCalledTimes(1));
+    expect(client.getQueryCache().getAll()).toHaveLength(1);
+    expect(api.routes).toEqual([]);
+    release();
+    await waitFor(() => expect(client.getQueryCache().getAll()).toHaveLength(0));
+    expect(api.routes).toContain("/login");
+  });
+
+  it("retains current session state and exposes retryable current logout failure", async () => {
+    const { SessionControls } = await import("../features/settings/session-controls");
+    const { client } = setup(<SessionControls />);
+    api.logout.mockRejectedValueOnce(new Error("logout unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out this session" }));
+    expect(await screen.findByText("logout unavailable")).toBeTruthy();
+    expect(client.getQueryCache().getAll()).toHaveLength(1);
+    expect(api.routes).toEqual([]);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
   it("requires recent password, states grace and backup retention, then enters deletion-only access", async () => {
     const { AccountDeletion } = await import("../features/settings/account-deletion");
     const { client } = setup(<AccountDeletion />);

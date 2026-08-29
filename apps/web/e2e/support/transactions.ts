@@ -5,6 +5,7 @@ export interface TransactionInput {
   category: string;
   direction: "expense" | "income";
   note: string;
+  occurredLocal?: string;
 }
 
 export async function createTransaction(page: Page, input: TransactionInput): Promise<string> {
@@ -14,6 +15,7 @@ export async function createTransaction(page: Page, input: TransactionInput): Pr
   await expect(page.getByRole("combobox", { name: "Wallet" })).not.toHaveText("Choose wallet");
   await page.getByRole("combobox", { name: "Category" }).click();
   await page.getByRole("option", { name: input.category, exact: true }).click();
+  if (input.occurredLocal) await page.getByLabel("Occurred at").fill(input.occurredLocal);
   await page.getByLabel("Note").fill(input.note);
   const delivered = page.waitForResponse(
     (response) =>

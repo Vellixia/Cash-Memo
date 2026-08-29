@@ -3,13 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  getGetBudgetSummaryQueryKey,
-  getGetMonthlySummaryQueryKey,
   getGetOnboardingQueryKey,
-  getGetRecentTransactionsQueryKey,
-  getGetTransactionEntryDefaultsQueryKey,
-  getListBudgetsQueryKey,
-  getListTransactionsQueryKey,
   useGetOnboarding,
   useListCurrencies,
   useUpdatePreferences,
@@ -34,6 +28,7 @@ import {
   ComboboxList,
 } from "../../components/ui/combobox";
 import { getTimezoneOptions } from "../onboarding/timezones";
+import { invalidateTimezoneDependentQueries } from "./timezone-invalidation";
 
 export function PreferencesForm() {
   const onboarding = useGetOnboarding({ query: { retry: false } });
@@ -63,16 +58,10 @@ export function PreferencesForm() {
       await update.mutateAsync({
         data: { timezone: timezone.trim(), default_currency_code: currency },
       });
-      await client.invalidateQueries({ queryKey: getGetOnboardingQueryKey() });
       if (timezone.trim() !== savedTimezone) {
-        await Promise.all([
-          client.invalidateQueries({ queryKey: getGetTransactionEntryDefaultsQueryKey() }),
-          client.invalidateQueries({ queryKey: getListTransactionsQueryKey() }),
-          client.invalidateQueries({ queryKey: getGetMonthlySummaryQueryKey() }),
-          client.invalidateQueries({ queryKey: getGetBudgetSummaryQueryKey() }),
-          client.invalidateQueries({ queryKey: getListBudgetsQueryKey() }),
-          client.invalidateQueries({ queryKey: getGetRecentTransactionsQueryKey() }),
-        ]);
+        await invalidateTimezoneDependentQueries(client);
+      } else {
+        await client.invalidateQueries({ queryKey: getGetOnboardingQueryKey() });
       }
       setTimezoneConfirmation(undefined);
       setStatus({

@@ -31,11 +31,11 @@ export function SessionControls() {
     try {
       await logout.mutateAsync();
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Could not contact Cashmemo. Local session state was cleared.");
-    } finally {
-      clearSessionState(client);
-      router.replace("/login");
+      setError(value instanceof Error ? value.message : "Could not sign out this session. Try again.");
+      return;
     }
+    clearSessionState(client);
+    router.replace("/login");
   }
 
   async function endAll() {
@@ -95,7 +95,14 @@ export function SessionControls() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      {error ? <p role="alert" className="field-error">{error}</p> : null}
+      {error ? (
+        <div role="alert" className="field-error">
+          <p>{error}</p>
+          <Button type="button" variant="quiet" onClick={() => void endCurrent()} disabled={logout.isPending}>
+            Try again
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }
