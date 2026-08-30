@@ -21,10 +21,14 @@ test("records isolated expense and income memos", async ({ page }) => {
   });
 
   await page.goto("/app/transactions");
-  await expect(page.getByText(expenseNote, { exact: true })).toBeVisible();
-  await expect(page.getByText(incomeNote, { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Expense 12\.34 USD/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Income 250\.00 USD/ })).toBeVisible();
+  const expenseRow = page.getByRole("article").filter({ hasText: expenseNote });
+  const incomeRow = page.getByRole("article").filter({ hasText: incomeNote });
+  await expect(expenseRow).toContainText("Expense");
+  await expect(expenseRow).toContainText("USD 12.34");
+  await expect(expenseRow).toContainText(expenseNote);
+  await expect(incomeRow).toContainText("Income");
+  await expect(incomeRow).toContainText("USD 250.00");
+  await expect(incomeRow).toContainText(incomeNote);
 });
 
 test("round trips local transaction minute across browser and profile timezones", async ({ browser }) => {

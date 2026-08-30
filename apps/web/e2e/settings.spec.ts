@@ -1,8 +1,20 @@
 import { expect, test } from "./support/test";
+import type { Page } from "@playwright/test";
+import { apiUrl } from "./support/api";
 import { provisionUser } from "./support/auth";
 import { createTransaction } from "./support/transactions";
 
 test.use({ timezoneId: "UTC" });
+
+async function occurredAt(page: Page, id: string) {
+  const response = await page.request.get(apiUrl(`/api/v1/transactions/${id}`));
+  expect(response.ok()).toBe(true);
+  return ((await response.json()) as { occurred_at: string }).occurred_at;
+}
+
+async function currentSessionStatus(page: Page) {
+  return (await page.request.get(apiUrl("/api/v1/auth/sessions/current"))).status();
+}
 
 test("timezone change preserves instant, changes grouping, and refreshes transaction defaults", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -16,10 +28,7 @@ test("timezone change preserves instant, changes grouping, and refreshes transac
     note: privateNote,
     occurredLocal: "2026-01-01T00:30",
   });
-  const beforeInstant = await page.evaluate(async (id) => {
-    const response = await fetch(`/api/v1/transactions/${id}`);
-    return ((await response.json()) as { occurred_at: string }).occurred_at;
-  }, transactionId);
+  const beforeInstant = await occurredAt(page, transactionId);
   await page.goto("/app/transactions");
   const beforeDisplay = await page.getByRole("article", { name: /Expense/ }).locator("time").innerText();
   await page.goto("/app?month=2026-01");
@@ -35,10 +44,7 @@ test("timezone change preserves instant, changes grouping, and refreshes transac
   await confirmation.getByRole("button", { name: "Confirm timezone change" }).click();
   await expect(page.getByRole("status")).toContainText("Preferences saved");
 
-  const afterInstant = await page.evaluate(async (id) => {
-    const response = await fetch(`/api/v1/transactions/${id}`);
-    return ((await response.json()) as { occurred_at: string }).occurred_at;
-  }, transactionId);
+  const afterInstant = await occurredAt(page, transactionId);
   expect(afterInstant).toBe(beforeInstant);
   await page.goto("/app/transactions");
   const afterDisplay = await page.getByRole("article", { name: /Expense/ }).locator("time").innerText();
@@ -75,7 +81,7 @@ test("timezone change preserves instant, changes grouping, and refreshes transac
   expect((await allRevoke).ok()).toBe(true);
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
-  await expect.poll(async () => page.evaluate(async () => (await fetch("/api/v1/auth/sessions/current")).status)).toBe(401);
+  await expect.poll(async () => currentSessionStatus(page)).toBe(401);
   const userB = await provisionUser(page, "settings-cache-other", "UTC");
   await page.goto("/app");
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
@@ -89,5 +95,5 @@ test("timezone change preserves instant, changes grouping, and refreshes transac
   await page.getByRole("button", { name: "Sign out this session" }).click();
   expect((await currentLogout).ok()).toBe(true);
   await expect(page).toHaveURL(/\/login$/);
-  await expect.poll(async () => page.evaluate(async () => (await fetch("/api/v1/auth/sessions/current")).status)).toBe(401);
+  await expect.poll(async () => currentSessionStatus(page)).toBe(401);
 });

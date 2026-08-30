@@ -32,15 +32,11 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
   });
   await page.route("**/api/v1/transactions**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname !== "/api/v1/transactions" || route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
     const response = await route.fetch({ url: apiUrl(`${url.pathname}${url.search}`) });
-    if (url.pathname !== "/api/v1/transactions") {
-      await route.fulfill({ response });
-      return;
-    }
-    if (route.request().method() !== "GET") {
-      await route.fulfill({ response });
-      return;
-    }
     if (url.searchParams.get("cursor") === "synthetic-next" && firstPage) {
       cursorAttempts += 1;
       if (cursorAttempts === 1) {
@@ -132,8 +128,9 @@ test("filters, edits, trashes, and restores one memo", async ({ page }) => {
   await expect(sonnerUndo).toBeVisible();
   await sonnerUndo.click();
   await expect(page.getByRole("status")).toContainText("Transaction restored");
-
   const restoredCard = page.getByRole("article").filter({ hasText: editedNote });
+  await expect(restoredCard).toBeVisible();
+
   await restoredCard.getByRole("button", { name: /Actions for/ }).click();
   await page.getByRole("menuitem", { name: "Move to Trash" }).click();
   await expect(page.getByRole("status")).toContainText("moved to Trash");

@@ -1,4 +1,5 @@
 import { expect, test } from "./support/test";
+import { apiUrl } from "./support/api";
 import { provisionUser } from "./support/auth";
 import { inspectGeneratedLinkage, processRecurring } from "./support/process-recurring";
 import type { Page } from "@playwright/test";
@@ -15,12 +16,10 @@ interface BrowserTransaction {
 }
 
 async function listTransactions(page: Page): Promise<BrowserTransaction[]> {
-  return page.evaluate(async () => {
-    const response = await fetch("/api/v1/transactions?limit=100");
-    if (!response.ok) throw new Error(`Could not list transactions: ${String(response.status)}`);
-    const body = (await response.json()) as { items?: BrowserTransaction[] };
-    return body.items ?? [];
-  });
+  const response = await page.request.get(apiUrl("/api/v1/transactions?limit=100"));
+  if (!response.ok()) throw new Error(`Could not list transactions: ${String(response.status())}`);
+  const body = (await response.json()) as { items?: BrowserTransaction[] };
+  return body.items ?? [];
 }
 
 function cssTimeMilliseconds(value: string): number {
@@ -130,11 +129,13 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
   await page.getByRole("button", { name: "Delete" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Confirm delete" }).click();
   await expect(page.getByRole("heading", { name: "No budgets this month" })).toBeVisible();
-  const budgetsAfterDelete = await page.evaluate(async (month) => {
-    const response = await fetch(`/api/v1/budgets?month=${encodeURIComponent(month)}`);
-    if (!response.ok) throw new Error(`Could not list budgets: ${String(response.status)}`);
-    return (await response.json()) as unknown[];
-  }, budgetMonth);
+  const budgetsAfterDeleteResponse = await page.request.get(
+    apiUrl(`/api/v1/budgets?month=${encodeURIComponent(budgetMonth)}`),
+  );
+  if (!budgetsAfterDeleteResponse.ok()) {
+    throw new Error(`Could not list budgets: ${String(budgetsAfterDeleteResponse.status())}`);
+  }
+  const budgetsAfterDelete = (await budgetsAfterDeleteResponse.json()) as unknown[];
   expect(budgetsAfterDelete, "confirmed budget delete must remove server record").toHaveLength(0);
   await expectGeneratedUnchanged();
 

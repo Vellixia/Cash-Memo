@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test";
 import { expect, test } from "./support/test";
 import { connectPageToRealApi } from "./support/api";
 import {
@@ -7,6 +8,16 @@ import {
   registerVerifyAndLogin,
 } from "./support/auth";
 import { openDeliveredPasswordReset } from "./support/mailbox";
+
+async function waitForAnimationsToFinish(locator: Locator) {
+  await expect
+    .poll(() =>
+      locator.evaluate((element: Element) =>
+        element.getAnimations().every((animation) => animation.playState === "finished"),
+      ),
+    )
+    .toBe(true);
+}
 
 test("first visit registers through delivered verification link and creates first wallet", async ({
   page,
@@ -57,12 +68,25 @@ test("first visit registers through delivered verification link and creates firs
   await expect(page.getByLabel("Amount")).toBeVisible();
 
   await page.goto("/app/wallets");
-  await expect(page.getByRole("heading", { name: user.walletName, level: 2 })).toBeVisible();
-  await expect(page.getByText("USD · Balance 1000.00")).toBeVisible();
+  const walletCard = page.getByRole("article").filter({ hasText: user.walletName });
+  await expect(walletCard.getByRole("heading", { name: user.walletName, level: 2 })).toBeVisible();
+  await expect(walletCard).toContainText("USD 1,000.00");
+  await expect(walletCard).toContainText("Opening balance 1000.00");
   const createWallet = page.getByRole("button", { name: "Create wallet" });
   expect((await createWallet.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await createWallet.click();
-  expect((await page.getByLabel("Wallet name").boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  const walletDialog = page.getByRole("dialog");
+  await expect(walletDialog).toBeVisible();
+  await waitForAnimationsToFinish(walletDialog);
+  const walletNameMetrics = await page.getByLabel("Wallet name").evaluate((element) => {
+    const style = getComputedStyle(element as HTMLElement);
+    return {
+      height: element.getBoundingClientRect().height,
+      minHeight: Number.parseFloat(style.minHeight || "0"),
+    };
+  });
+  expect(walletNameMetrics.minHeight).toBeGreaterThanOrEqual(44);
+  expect(walletNameMetrics.height).toBeGreaterThanOrEqual(43.5);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app");

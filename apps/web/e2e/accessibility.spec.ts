@@ -39,7 +39,18 @@ async function expectOnePageHeading(page: Page, name: string | RegExp) {
 }
 
 async function expectFocusedAboveBottomNav(page: Page, control: Locator) {
-  await control.scrollIntoViewIfNeeded();
+  await expect(control).toBeVisible();
+  await expect
+    .poll(async () => {
+      try {
+        await control.scrollIntoViewIfNeeded();
+        return true;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("Element is not attached to the DOM")) return false;
+        throw error;
+      }
+    })
+    .toBe(true);
   await control.focus();
   await expect(control).toBeFocused();
   const [controlBox, navBox] = await Promise.all([
@@ -52,6 +63,15 @@ async function expectFocusedAboveBottomNav(page: Page, control: Locator) {
   expect(controlBox.y + controlBox.height, "focused control must remain above fixed navigation").toBeLessThanOrEqual(
     navBox.y,
   );
+}
+
+async function waitForBudgetFormReady(page: Page) {
+  await expectOnePageHeading(page, "Budgets");
+  await expect(page.getByText("Loading budget options…")).toHaveCount(0);
+  await expect(page.getByText("Could not load budget options.")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry budget options" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Category" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create budget" })).toBeVisible();
 }
 
 test("public login has a working skip link and no high-impact axe violations", async ({ page }) => {
@@ -163,7 +183,7 @@ test("authenticated flows preserve reflow, focus, semantics, and non-color meani
 
   // Representative long management forms must remain keyboard-reachable above fixed mobile nav.
   await page.goto("/app/budgets");
-  await expectOnePageHeading(page, "Budgets");
+  await waitForBudgetFormReady(page);
   const createBudget = page.getByRole("button", { name: "Create budget" });
   await expectFocusedAboveBottomNav(page, createBudget);
   await expectNoHorizontalOverflow(page, "small-height budget form");
@@ -171,6 +191,7 @@ test("authenticated flows preserve reflow, focus, semantics, and non-color meani
   await page.goto("/app/recurring");
   await expectOnePageHeading(page, "Recurring transactions");
   const newRecurring = page.getByRole("button", { name: "New recurring rule" });
+  await expect(newRecurring).toBeVisible();
   await expectFocusedAboveBottomNav(page, newRecurring);
   await newRecurring.click();
   const recurringDialog = page.getByRole("dialog", { name: "New recurring rule" });

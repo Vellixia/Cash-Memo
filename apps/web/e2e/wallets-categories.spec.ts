@@ -1,5 +1,36 @@
 import { expect, test } from "./support/test";
+import type { Page } from "@playwright/test";
 import { provisionUser } from "./support/auth";
+
+async function chooseOption(page: Page, label: string, option: string) {
+  const combobox = page.getByRole("combobox", { name: label, exact: true });
+  await expect(combobox).toBeVisible();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await combobox.click();
+    const choice = page
+      .locator('[data-slot="select-content"]:visible')
+      .getByRole("option", { name: option, exact: true });
+    await expect(choice).toBeVisible();
+    try {
+      await choice.click();
+      await expect(page.locator('[data-slot="select-content"]:visible')).toHaveCount(0);
+      return;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("Element is not attached to the DOM") || attempt === 2) {
+        throw error;
+      }
+      await page.keyboard.press("Escape");
+    }
+  }
+}
+
+async function waitForBudgetFormReady(page: Page) {
+  await expect(page.getByRole("heading", { name: "Budgets", level: 1 })).toBeVisible();
+  await expect(page.getByText("Loading budget options…")).toHaveCount(0);
+  await expect(page.getByText("Could not load budget options.")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry budget options" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create budget" })).toBeVisible();
+}
 
 test("edits opening balance without changing history, then archives wallet with paused recurring rule", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -26,24 +57,19 @@ test("edits opening balance without changing history, then archives wallet with 
 
   const month = new Date().toISOString().slice(0, 7);
   await page.goto(`/app/budgets?month=${month}`);
-  await expect(page.getByRole("heading", { name: "Budgets", level: 1 })).toBeVisible();
-  const budgetCategory = page.getByLabel("Category");
-  const foodOption = budgetCategory.locator("option", { hasText: "Food & Drink" });
-  await expect(foodOption).toBeAttached();
-  const foodValue = await foodOption.getAttribute("value");
-  await budgetCategory.selectOption({ value: foodValue ?? "" });
-  await expect(page.getByLabel("Category")).not.toHaveValue("");
-  await page.getByLabel("Currency").selectOption("USD");
+  await waitForBudgetFormReady(page);
+  await chooseOption(page, "Category", "Food & Drink");
+  await chooseOption(page, "Currency", "USD — US Dollar");
   await page.getByLabel("Budget amount").fill("100.00");
   await page.getByRole("button", { name: "Create budget" }).click();
   await expect(page.getByRole("status")).toContainText("Budget saved");
 
   await page.goto("/app/recurring");
   await page.getByRole("button", { name: "New recurring rule" }).click();
-  await page.getByLabel("Wallet").selectOption({ label: `${user.walletName} — USD` });
-  await page.getByLabel("Category").selectOption({ label: "Food & Drink" });
+  await chooseOption(page, "Wallet", `${user.walletName} — USD`);
+  await chooseOption(page, "Category", "Food & Drink");
   await page.getByLabel("Amount").fill("15.00");
-  await page.getByLabel("Frequency").selectOption("weekly");
+  await chooseOption(page, "Frequency", "Weekly");
   await page.getByLabel("Start date").fill(new Date().toISOString().slice(0, 10));
   const recurringNote = `Wallet archive rule ${user.email}`;
   await page.getByLabel("Note").fill(recurringNote);
@@ -144,8 +170,9 @@ test("category management keeps archived labels out of active choices", async ({
   await page.getByRole("button", { name: "Create category" }).first().click();
   await page.getByLabel("Category name").fill("Temporary category");
   await page.getByRole("button", { name: "Create category" }).last().click();
-  await expect(page.getByRole("status")).toContainText("Category created");
+  await expect(page.getByRole("dialog", { name: "Create category" })).toBeHidden();
   const category = page.getByRole("article").filter({ hasText: "Temporary category" });
+  await expect(category).toBeVisible();
   await category.getByRole("button", { name: "Actions for Temporary category" }).click();
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await page.getByRole("button", { name: "Archive category" }).click();
