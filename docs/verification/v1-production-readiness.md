@@ -1,6 +1,64 @@
 # Cashmemo V1 production-cutover readiness
 
+## Task 25 final evidence — implementation head `76a8a53`
+
+Status remains **NOT READY**. Head `76a8a53`, parent `3291391`; config-only Playwright serialization.
+Full parent matrix passed install/verify `181/181`, operations `2/2`, Bats `44/44`, migrations `9/9`,
+S3 replay `8/8`, release build, audit, API direct Trivy `0`, and web runtime contract. Exact default
+Playwright passed `15/15` twice with deterministic `workers: 1`; controlled four-worker `9/15` and
+two-worker `14/15` runs established resource contention. Lint, typecheck, and `git diff --check`
+passed. No timeout, retry, or product changes were made.
+
+Scoped Cargo cleanup removed `19.3 GiB` generated `target` output for `ENOSPC`; no source or user
+data was removed. Direct local web-image Trivy remains **NOT GREEN** due to Docker `29.5.2`
+containerd incomplete archive before verdict; flattened merged-rootfs `0` is diagnostic only.
+Hosted direct web-image Trivy remains mandatory. No production evidence or action occurred.
+Prior failures are superseded diagnostics.
+
+## Task 25 final local evidence update
+
+Recorded: `2026-08-31T12:57:16+0700 WIB`. Status remains **NOT READY**. This supersedes prior
+Task 25 summary for current local evidence while retaining it as historical traceability.
+
+At `32913913267ec7ad8fd414dae2bd4f411f0778e7`, fresh pinned-toolchain evidence passed frozen
+install, final `pnpm verify` (`181/181`), operations `2/2`, Bats `44/44`, migrations `9/9`,
+feature-enabled isolated S3 replay `8/8`, release build, dependency audit, API build/direct Trivy,
+and web build/runtime contract. The disposable named `cashmemo-pr3-task25` project used PostgreSQL
+`55429`, restored PostgreSQL `55430`, and MinIO `32769`; it was removed after the gates.
+
+This does not establish a release candidate: default four-worker Playwright had two 60-second
+timeouts (`13/15`), serial diagnosis passed `15/15`, and final default retry then hit host `ENOSPC`
+before tests. Direct local web Trivy also remains fail-closed before a vulnerability verdict due to
+a missing Docker archive blob; flattened rootfs zero-findings scan is diagnostic only. Hosted direct
+web Trivy on exact final integration result remains required. These local results still prove no
+production backup, receipt store, retained-backup restore replay, deployment artifact, target,
+cutover, rollback, or operator approval.
+
 Status: **NOT READY** as of `2026-08-25T05:18:02+0700 WIB`.
+
+## Task 25 local rerun update
+
+Recorded: `2026-08-30T02:56:18+0700 WIB` (`Asia/Jakarta`, WIB).
+
+Fresh local verification at `d733b13dd7fd` did not change production status. It did add current
+local evidence:
+
+- Local disposable recovery mechanism still works: fresh named project `cashmemo-pr3-task25`,
+  isolated restored PostgreSQL at `127.0.0.1:55430`, and disposable MinIO replay at
+  `127.0.0.1:32769` passed feature-enabled `deletion_receipt_replay` `8/8`.
+- Local disposable application and repository gates mostly passed: `pnpm verify`,
+  `pnpm test:operations`, repository/operations Bats `44/44`, migration tests `9/9`,
+  dependency audit, API image build/scan, and web runtime contract.
+- Required local verification is still not green because clean Playwright E2E failed `5/15`, and
+  the required web-image Trivy command aborted during tar-layer analysis before producing any
+  vulnerability verdict.
+- Final cleanup removed the exact named disposable project. `docker-compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml ps -a`
+  returned only the header row.
+
+This still proves mechanism only. It does not prove any actual production backup, receipt store,
+restore rehearsal, deployment artifact, deployment target, cutover sequence, rollback route, or
+operator approval. Local MinIO and disposable restored PostgreSQL remain insufficient substitutes
+for production-target evidence.
 
 Repository implementation reviewed: `b2c89dcbe429100ef2bc700cf2bef9fe26bd1c17`. Repository merge
 readiness is recorded separately in [v1-merge-readiness.md](v1-merge-readiness.md). No actual

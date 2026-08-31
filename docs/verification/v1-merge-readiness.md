@@ -1,6 +1,66 @@
 # Cashmemo V1 merge readiness
 
-Status: **MERGE READY FOR HUMAN REVIEW** as of `2026-08-25T05:18:02+0700 WIB`.
+## Task 25 final ruling — implementation head `76a8a53`
+
+Current implementation head: `76a8a53`; parent: `3291391` (config-only Playwright serialization).
+Full parent matrix passed install/verify `181/181`, operations `2/2`, Bats `44/44`, migrations `9/9`,
+S3 replay `8/8`, release build, audit, API direct Trivy `0`, and web runtime contract. Exact default
+Playwright passed `15/15` twice after setting deterministic `workers: 1`; controlled four-worker
+`9/15` and two-worker `14/15` runs established resource contention. Lint, typecheck, and
+`git diff --check` passed. No timeout, retry, or product changes were made.
+
+Scoped Cargo cleanup removed `19.3 GiB` generated `target` output for `ENOSPC`; no source or user
+data was removed. Direct local web-image Trivy remains **NOT GREEN** because Docker `29.5.2`
+containerd exporter emits an incomplete archive before verdict. Flattened merged-rootfs scan found
+`0` under unchanged policy, diagnostic only; it does not replace direct scan.
+
+Status: **REQUEST CHANGES / NOT MERGE READY** pending Task 26 hosted CI/direct web-image Trivy on
+exact final integration result and exact main integration review. Production readiness is separate
+and remains **NOT READY**. Prior failures below are superseded diagnostics.
+
+## Final Task 25 fresh-local ruling — supersedes prior Task 25 update
+
+As of `2026-08-31T12:57:16+0700 WIB`, implementation
+`32913913267ec7ad8fd414dae2bd4f411f0778e7` is **NOT MERGE READY**. This new ruling supersedes,
+but does not erase, the `2026-08-30` Task 25 failure record below.
+
+Fresh pinned Node `24.14.0` / pnpm `11.13.1` / Rust `1.97.1` evidence passed all non-browser,
+non-direct-web-Trivy repository, recovery, build, audit, API-image, and web-runtime gates. Exact
+default four-worker Playwright did not finish green (`13/15`, two 60-second timeouts); its clean
+serial diagnostic passed `15/15`, then a final clean default retry was blocked before tests by
+`ENOSPC` writing `.next/required-server-files.json` with host free space at `740 MiB`.
+
+Separately and decisively, direct web-tag Trivy failed before a vulnerability verdict because
+Docker's local image archive omitted a required blob. The flattened merged-rootfs diagnostic had
+zero findings under unchanged `CRITICAL,HIGH`, `--ignore-unfixed`, `os,library` policy, but remains
+diagnostic only. Per Task 25 ledger ruling, merge readiness stays blocked unless Task 26 hosted
+direct web Trivy passes on exact final integration result. No signed Task 25 evidence commit exists.
+
+Final cleanup removed only `cashmemo-pr3-task25` and repository-default disposable `v1` Compose
+projects. Protected `.claude/settings.json`, `.serena/`, `AGENTS.md`, and `CLAUDE.md` were preserved.
+
+Status: **NOT CURRENTLY MERGE READY FROM LOCAL GATES** as of `2026-08-30T02:56:18+0700 WIB`.
+
+Superseding Task 25 update: fresh local verification at `d733b13dd7fd` invalidated the earlier
+`2026-08-25` merge-ready record. Current local evidence is mixed:
+
+- PASS: `pnpm verify`, `pnpm test:operations`, `bats tests/operations/*.bats tests/repository/*.bats`,
+  `cargo test --locked -p cashmemo-api --test migrations`, feature-enabled
+  `deletion_receipt_replay`, `cargo build --locked --release -p cashmemo-api --features s3-receipts`,
+  `pnpm --dir apps/web audit --prod --audit-level high`, API image build, API Trivy scan, web image
+  build, and `bash infra/v1/test-web-image.sh cashmemo-v1-web:task25`.
+- FAIL: `pnpm --dir apps/web exec playwright test` on a clean default `v1` stack (`10` passed,
+  `5` failed).
+- FAIL: `trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --pkg-types os,library cashmemo-v1-web:task25`
+  aborted during layer analysis with missing tar blob data, so there is still no clean web-image
+  scan result.
+
+Protected user-owned paths remained untouched: modified tracked `.claude/settings.json`, plus
+untracked `.serena/`, `AGENTS.md`, and `CLAUDE.md`. Final `git diff --check` passed. Final
+`docker-compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml ps -a` returned only the
+header row, confirming named Task 25 containers were removed. No signed evidence commit exists.
+
+Historical `2026-08-25` merge-readiness record remains below for traceability only.
 
 Implementation reviewed: `b2c89dcbe429100ef2bc700cf2bef9fe26bd1c17` on `rewrite/cashmemo-v1`.
 Comparison branch and merge base: `new-cashmemo` at `c428e2dd334fcfbcb4e63d421919282a55227845`.

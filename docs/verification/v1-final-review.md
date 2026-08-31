@@ -1,5 +1,84 @@
 # Cashmemo V1 final branch review
 
+## Task 25 final evidence — implementation head `76a8a53`
+
+Recorded: `2026-08-31` WIB. Current implementation head is `76a8a53`, parent
+`3291391`; config-only Playwright serialization change. Full parent verification matrix passed:
+install/verify `181/181`, operations `2/2`, Bats `44/44`, migrations `9/9`, S3 replay `8/8`, release
+build, audit, API direct Trivy `0`, and web runtime contract. Exact default Playwright then passed
+`15/15` twice after the deterministic worker change. Lint, typecheck, and `git diff --check` passed.
+
+Controlled four-worker (`9/15`) and two-worker (`14/15`) runs established resource contention on
+the disposable 2-vCPU/4-GiB stack; `workers: 1` makes default execution deterministic. No timeout,
+retry, or product changes were made. Scoped Cargo cleanup removed `19.3 GiB` generated `target`
+output to resolve `ENOSPC`; no source or user data was removed.
+
+Direct local web-image Trivy remains **NOT GREEN**: Docker `29.5.2` containerd export emits an
+incomplete archive before vulnerability analysis. Unchanged flattened merged-rootfs diagnostic
+(`CRITICAL,HIGH`, `--ignore-unfixed`, `os,library`) found `0`, but is diagnostic only. Hosted direct
+web-image Trivy remains mandatory. Repository ruling: **REQUEST CHANGES / NOT MERGE READY** pending
+Task 26 hosted CI/direct scan and exact main-integration review. Production remains **NOT READY**;
+no production evidence or action occurred.
+
+Prior failed attempts below are superseded diagnostics; only direct local Trivy remains current
+blocker.
+
+## Task 25 final fresh local verification — supersedes prior Task 25 summaries
+
+Recorded: `2026-08-31T12:56:21+0700 WIB` (`Asia/Jakarta`, WIB). Implementation under test:
+`32913913267ec7ad8fd414dae2bd4f411f0778e7` on `rewrite/cashmemo-v1`.
+
+**Current local verdict: BLOCKED.** This section supersedes the earlier Task 25 status blocks
+below; they remain historical forensic evidence, not current gate results. Pinned execution used
+Node `24.14.0`, pnpm `11.13.1`, Rust/Cargo `1.97.1`, Docker client `29.7.1` / server `29.5.2`,
+Docker Compose `5.3.1`, and Trivy `0.74.0`.
+
+- PASS: frozen install; second exact `pnpm verify` (`181/181` web tests); operations `2/2`; Bats
+  `44/44`; migrations `9/9`; S3 replay `8/8`; release S3 build; production dependency audit;
+  API image/Trivy (`0` findings); web image/runtime contract; and final scoped `git diff --check`.
+- Playwright evidence is mixed: default four-worker run reached `13/15`, with two 60-second E2E
+  timeouts; clean serial diagnostic passed `15/15`. A final clean default rerun was blocked before
+  tests by host `ENOSPC` while Next wrote `.next/required-server-files.json` (only `740 MiB` free).
+  No cache, image, worktree, or unknown Docker-project cleanup was authorized.
+- Required direct web-image Trivy remains **NOT GREEN**: it failed before vulnerability analysis
+  because Docker's local archive lacked `blobs/sha256/f9be01e39433b9e8b3a23690f760b5a8f7056934b6857841c2a7d8c27ffa5e29`.
+  Exact-policy flattened merged-rootfs diagnostic returned zero findings, but is not a substitute.
+  Task 26 hosted direct-image scan on exact final integration result remains mandatory.
+
+No signed evidence commit was created. Protected `.claude/settings.json`, `.serena/`, `AGENTS.md`,
+and `CLAUDE.md` were untouched; both the named `cashmemo-pr3-task25` and repository-default `v1`
+disposable Compose projects were removed.
+
+## Superseding Task 25 local rerun
+
+Recorded: `2026-08-30T02:56:18+0700 WIB` (`Asia/Jakarta`, WIB).
+
+Current implementation under test: `d733b13dd7fd`.
+
+Current verdict from fresh local evidence:
+
+- Repository branch: **NOT CURRENTLY MERGE READY FROM LOCAL GATES**.
+- Merge action: **NOT PERFORMED**.
+- Production cutover: **NOT READY**.
+- Production/Dokploy access or mutation: **NOT PERFORMED**.
+
+Task 25 reran the required local verification with pinned Node `24.14.0`, pnpm `11.13.1`,
+Cargo/Rust `1.97.1`, Docker Compose `5.3.1`, and Trivy `0.74.0`. `pnpm verify`,
+`pnpm test:operations`, repository and operations Bats, migration and feature-enabled S3 replay,
+dependency audit, API image build/scan, and web runtime contract all passed. Two required local
+gates remain unresolved:
+
+- `pnpm --dir apps/web exec playwright test` failed on a clean disposable `v1` stack with `10`
+  passing and `5` failing tests.
+- `trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --pkg-types os,library cashmemo-v1-web:task25`
+  failed during scanner layer analysis, so no web-image vulnerability verdict exists yet.
+
+Protected user-owned paths remained untouched: modified tracked `.claude/settings.json`, plus
+untracked `.serena/`, `AGENTS.md`, and `CLAUDE.md`. No signed evidence commit was created because
+required local gates did not all pass. The remainder of this document preserves the earlier
+`2026-08-25` review as historical context only; use
+[v1-pr3-repair-evidence](v1-pr3-repair-evidence.md) for the fresh Task 25 command record.
+
 Recorded: `2026-08-25T05:18:02+0700 WIB` (`Asia/Jakarta`, WIB).
 
 Implementation under test: `b2c89dcbe429100ef2bc700cf2bef9fe26bd1c17`.

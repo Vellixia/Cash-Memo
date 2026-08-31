@@ -1,5 +1,140 @@
 # Cashmemo V1 PR3 repair evidence
 
+## Task 25 final evidence — implementation head `76a8a53`
+
+Current head `76a8a53`, parent `3291391`; parent full matrix passed install/verify `181/181`,
+operations `2/2`, Bats `44/44`, migrations `9/9`, S3 replay `8/8`, release build, audit, API direct
+Trivy `0`, and web runtime contract. Head is config-only Playwright serialization: controlled
+four-worker run `9/15` and two-worker run `14/15` showed deterministic resource contention; exact
+default command with `workers: 1` passed `15/15` twice. Lint, typecheck, and `git diff --check`
+passed. No timeout, retry, or product changes were made.
+
+Scoped Cargo cleanup removed `19.3 GiB` generated `target` output to resolve `ENOSPC`; no source or
+user data was removed. Direct local web-image Trivy remains **NOT GREEN** because Docker `29.5.2`
+containerd exporter emits incomplete archive before verdict. Flattened merged-rootfs scan returned
+`0` under unchanged `CRITICAL,HIGH`, `--ignore-unfixed`, `os,library` policy, diagnostic only;
+hosted direct web-image Trivy remains mandatory.
+
+Repository ruling: **REQUEST CHANGES / NOT MERGE READY** pending Task 26 hosted CI/direct scan and
+exact main-integration review. Production remains **NOT READY**; no production evidence or action.
+Earlier failures below remain superseded diagnostics, not current blockers except direct Trivy.
+
+## Task 25 final fresh verification at `32913913267ec7ad8fd414dae2bd4f411f0778e7`
+
+Recorded: `2026-08-31T12:34:00+0700` to `2026-08-31T12:57:16+0700 WIB` (`Asia/Jakarta`). This
+section is current Task 25 evidence and supersedes prior Task 25 summaries below without removing
+their failed-run history. Status: **BLOCKED**; no signed docs evidence commit was created.
+
+| Gate | Fresh result |
+| --- | --- |
+| Baseline / pinned tools / frozen install | PASS: scoped `git diff --check`; Node `24.14.0`, pnpm `11.13.1`, Rust/Cargo `1.97.1`; `pnpm install --frozen-lockfile`. |
+| `pnpm verify` | First exact attempt: FAIL, two 5-second Vitest timeouts (`179/181`); serial diagnostic of both files: PASS `21/21`; second exact attempt: PASS, `181/181`, plus OpenAPI/Orval drift, fmt, Clippy, Rust tests, lint, typecheck, and production build. |
+| `pnpm test:operations` / Bats | PASS: `2/2` and `44/44`. |
+| Default Playwright | First clean four-worker run: FAIL `13/15`, `budgets-recurring` and `cache-isolation` timed out at 60 seconds. Required clean `--workers=1` diagnostic: PASS `15/15`. Final clean four-worker retry: BLOCKED before tests by `ENOSPC: no space left on device` writing `.next/required-server-files.json`; host had `740 MiB` available. |
+| Migration / receipt replay / release feature build | PASS: migrations `9/9`; isolated restored PostgreSQL + MinIO replay `8/8`; `cargo build --locked --release -p cashmemo-api --features s3-receipts` passed (feature build emitted one unused-import warning). Exact receipt environment: `DATABASE_URL=postgres://cashmemo_e2e:cashmemo_e2e@127.0.0.1:55429/cashmemo_e2e`, restored URL on `55430`, MinIO `http://127.0.0.1:32769`, bucket `cashmemo-v1-repair-task25`, test credentials from Task 25 brief. |
+| Dependency audit / API image | PASS: `pnpm --dir apps/web audit --prod --audit-level high` found no known vulnerabilities; `cashmemo-v1-api:task25` = `sha256:bab4747e6e31ccaa63e5709f779bf3c409a33853fc5d8e70fa87ce639616adc2`; direct exact-policy Trivy found `0`. |
+| Web image / runtime | PASS: `cashmemo-v1-web:task25` = `sha256:9d0ba778fa8bb946508b8363e8bb04f9c1483666b85890b4aee6289e092314ec`; runtime contract proved non-root response `200`, Node `v24.14.0`, and absent npm/npx/Corepack. |
+| Direct web Trivy | **NOT GREEN / FAIL-CLOSED.** Exact required command exited `1` before a vulnerability verdict: missing archive blob `f9be01e39433b9e8b3a23690f760b5a8f7056934b6857841c2a7d8c27ffa5e29`. |
+| Flattened web diagnostic | Diagnostic only: `cashmemo-v1-web:task25-flattened-export` = `sha256:abbc5675cf5503836109406cc6cdd52fdcac84da3e501ac7567bd2b9cd023fe4`; unchanged exact Trivy policy reached `0` Debian and Node-package findings. It cannot replace direct-tag scan. |
+| Cleanup | PASS: only named `cashmemo-pr3-task25` and repository default `v1` disposable projects were downed; both final `ps -a` outputs were header-only. |
+
+No production, Dokploy, registry, backup, restore-target, cutover, rollback, or external state was
+accessed or changed. Protected modified `.claude/settings.json` and untracked `.serena/`,
+`AGENTS.md`, and `CLAUDE.md` were untouched. Task 26 must provide hosted direct web-image Trivy on
+the exact final integration result; available disk capacity must also be restored before a clean
+default four-worker E2E verdict can be claimed.
+
+## Task 25 fresh local verification rerun
+
+Recorded: `2026-08-30T02:56:18+0700 WIB` (`Asia/Jakarta`, WIB).
+
+Implementation under test: `d733b13dd7fd` on `rewrite/cashmemo-v1`.
+
+Protected user-owned paths preserved throughout rerun:
+
+- Modified tracked path: `.claude/settings.json`.
+- Untracked paths: `.serena/`, `AGENTS.md`, `CLAUDE.md`.
+
+Pinned local toolchain and scanner versions used for the fresh rerun:
+
+- Node `24.14.0`
+- pnpm `11.13.1`
+- Cargo `1.97.1`
+- Rust `1.97.1`
+- Docker `29.7.1`
+- Docker Compose `5.3.1`
+- Trivy `0.74.0` with DB `UpdatedAt: 2026-08-27 02:16:59 +0000 UTC`
+- Bats `1.14.0`
+
+Disposable environment facts:
+
+- Named feature/replay project: `cashmemo-pr3-task25`
+- Dedicated ports: PostgreSQL `55429`, restored PostgreSQL `55430`, SMTP `55125`, Mailpit `58025`
+- Disposable MinIO endpoint mapping: first run `127.0.0.1:32768`, fresh feature-gate rerun `127.0.0.1:32769`
+- Exact S3 test env: bucket `cashmemo-v1-repair-task25`, access key `deletion-receipt-test`
+
+Fresh command evidence:
+
+| Gate | Command | Fresh window | Result |
+| --- | --- | --- | --- |
+| Baseline whitespace | `git diff --check` | `2026-08-30T02:24:45+0700` | PASS |
+| Toolchain pin | `pnpm toolchain:check` | `2026-08-30T02:24:46+0700` to `02:24:47+0700` | PASS |
+| Frozen install | `pnpm install --frozen-lockfile` | `2026-08-30T02:24:50+0700` to `02:24:51+0700` | PASS |
+| Root composite gate | `pnpm verify` | `2026-08-30T02:24:51+0700` to `02:28:05+0700` | PASS. OpenAPI/Orval drift, `cargo fmt --check`, Clippy `-D warnings`, `cargo test -p cashmemo-api`, web lint, typecheck, Vitest `181/181`, and Next production build all passed. |
+| CI contract gate | `pnpm test:operations` | `2026-08-30T02:28:05+0700` to `02:28:07+0700` | PASS. Vitest `2/2`. |
+| Browser gate | `pnpm --dir apps/web exec playwright test` | `2026-08-30T02:31:02+0700` to `02:33:57+0700` | FAIL. `10` passed, `5` failed. |
+| Repository + operations Bats | `bats tests/operations/*.bats tests/repository/*.bats` | `2026-08-30T02:35:16+0700` to `02:36:19+0700` | PASS. `44/44`. |
+| Migration gate | `cargo test --locked -p cashmemo-api --test migrations` | `2026-08-30T02:36:22+0700` to `02:36:23+0700` | PASS. `9/9`. |
+| Feature-enabled replay gate | `DATABASE_URL="$TEST_RESTORED_DATABASE_URL" cargo test --locked -p cashmemo-api --features s3-receipts --test deletion_receipt_replay` | `2026-08-30T02:36:23+0700` to `02:37:42+0700` | PASS. `8/8`. |
+| Feature build gate | `cargo build --locked --release -p cashmemo-api --features s3-receipts` | `2026-08-30T02:37:42+0700` to `02:40:59+0700` | PASS |
+| Dependency audit | `pnpm --dir apps/web audit --prod --audit-level high` | `2026-08-30T02:40:59+0700` to `02:41:00+0700` | PASS. `No known vulnerabilities found`. |
+| API image build | `docker build --file infra/v1/api.Dockerfile --tag cashmemo-v1-api:task25 .` | `2026-08-30T02:41:00+0700` to `02:52:26+0700` | PASS |
+| API image scan | `trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --pkg-types os,library cashmemo-v1-api:task25` | `2026-08-30T02:52:26+0700` to `02:52:58+0700` | PASS. Debian `12.15`, vulnerabilities `0`. |
+| Web image build | `docker build --file infra/v1/web.Dockerfile --tag cashmemo-v1-web:task25 .` | `2026-08-30T02:52:58+0700` to `02:56:14+0700` | PASS |
+| Web runtime contract | `bash infra/v1/test-web-image.sh cashmemo-v1-web:task25` | `2026-08-30T02:56:14+0700` to `02:56:16+0700` | PASS. Non-root runtime, `node` present, `npm`/`npx`/`corepack` absent, `GET /` returned success after redirects. |
+| Web image scan | `trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --pkg-types os,library cashmemo-v1-web:task25` | `2026-08-30T02:56:16+0700` to `02:56:17+0700` | FAIL. Scanner aborted while reading tar layer; no vulnerability report produced. |
+| Final whitespace | `git diff --check` | `2026-08-30T02:57:16+0700` | PASS |
+
+Observed retries and diagnoses:
+
+- Initial harness wrapper used nested `bash -lc`, which reset `PATH` to shell-default Node `22.19.0`. That made the first `pnpm toolchain:check` fail. Re-running the exact task with a non-login shell and the pinned Node `24.14.0`/Rust `1.97.1` paths passed. This was an invocation error, not a repository failure.
+- First Playwright attempt failed immediately because the prestarted named project already held `127.0.0.1:55429`, while Playwright's `config.webServer` tried to start its own default `v1` PostgreSQL container on the same bound port.
+- Second Playwright attempt failed before test execution with `pool timed out while waiting for an open connection`.
+- A direct clean repro after `docker-compose -f infra/v1/test-compose.yml down --volumes --remove-orphans` proved the API migrate path itself still worked: `cargo run -p cashmemo-api --bin cashmemo-api -- migrate` returned `{"command":"migrate","processed":1}` with the exact E2E API environment.
+- Third Playwright attempt on a clean default `v1` compose project produced the real remaining failures below.
+
+Current failing Playwright evidence:
+
+- `e2e/accessibility.spec.ts`: authenticated accessibility flow hit `locator.scrollIntoViewIfNeeded: Element is not attached to the DOM` after navigation reached the budgets view instead of the expected stable focused control.
+- `e2e/auth-onboarding.spec.ts`: expected `USD · Balance 1000.00`, but rendered wallet summary was `USD 1,000.00 · USD` plus `Active · Opening balance 1000.00`.
+- `e2e/transactions.spec.ts`: expected heading text like `Expense 12.34 USD`, but rendered transaction rows exposed amount text inside article links rather than heading nodes.
+- `e2e/wallets-categories.spec.ts` budget creation flow never exposed a `Food & Drink` `<option>` in the budget category control on the captured page.
+- `e2e/wallets-categories.spec.ts` category-management flow created `Temporary category`, but no `role="status"` node containing `Category created` appeared before timeout.
+
+Image evidence:
+
+- API image: `sha256:bab4747e6e31ccaa63e5709f779bf3c409a33853fc5d8e70fa87ce639616adc2`
+- API local repo digest fallback: `cashmemo-v1-api@sha256:bab4747e6e31ccaa63e5709f779bf3c409a33853fc5d8e70fa87ce639616adc2`
+- Web image: `sha256:7bbc0c6d17a2c798ddbd7d74996b855ba521d7de6afcd0f6b3053a7b954c7d5e`
+- Web local repo digest fallback: `cashmemo-v1-web@sha256:7bbc0c6d17a2c798ddbd7d74996b855ba521d7de6afcd0f6b3053a7b954c7d5e`
+
+Trivy web failure details:
+
+- Command failed before vulnerability evaluation with `failed analysis ... file blobs/sha256/79348ece77876bf1b4e483da2ef9a4d68d8efadbc284558497fbe72698b2e388 not found in tar`.
+- This is scanner/runtime evidence only. It is not proof that the image is clean or vulnerable.
+
+Cleanup evidence:
+
+- `docker-compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml down --volumes --remove-orphans` ran before the fresh named rerun and again at the end.
+- `docker-compose -f infra/v1/test-compose.yml down --volumes --remove-orphans` removed the default disposable `v1` Playwright harness project after diagnostics.
+- Final `docker-compose -p cashmemo-pr3-task25 -f infra/v1/test-compose.yml ps -a` returned only the header row, proving no named Task 25 containers remained.
+
+Limits:
+
+- Local disposable PostgreSQL, Mailpit, and MinIO evidence proves repository mechanism only.
+- No production backup, receipt store, restore rehearsal, deployment, cutover, rollback, or Dokploy mutation occurred.
+- Production backup/store/restore/deploy/cutover remain **NOT READY** even where local replay and image/runtime checks passed.
+
 ## Task 13 OpenAPI/Orval contract freeze
 
 - Rust-owned OpenAPI now freezes password-confirmed deletion/cancellation, strict occurred_local
