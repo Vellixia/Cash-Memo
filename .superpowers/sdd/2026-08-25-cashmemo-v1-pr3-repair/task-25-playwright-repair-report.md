@@ -80,3 +80,90 @@ Supporting checks: web Vitest `18` files / `181` tests passed; `pnpm lint` passe
 After verification, default disposable `v1` services were removed with the exact compose down
 command above. No unknown Docker project was removed. This report proves local E2E behavior only;
 it does not claim production deployment, backup/restore, image Trivy, or production readiness.
+
+## Fix round 1/5: independent Important-finding repair
+
+Recorded: 2026-08-31, Asia/Jakarta (WIB). Runtime: Node `v24.14.0`, pnpm `11.13.1`, Chromium.
+
+### Root cause and minimal repair
+
+1. `apps/web/e2e/wallets-categories.spec.ts` `chooseOption` proved only that a Base UI portal
+   option was clicked and the popup closed. It did not prove controlled form-state synchronization.
+   Recurring wallet/category triggers deliberately expose their stable IDs rather than display text,
+   so a trigger-text-only assertion would be invalid. The helper now reopens the visible listbox,
+   requires the named option to have `selected: true`, then closes it. This proves current selected
+   option state for every helper use (budget category/currency and recurring wallet/category/
+   frequency) without production changes.
+
+2. `apps/web/e2e/cache-isolation.spec.ts` had removed Task 23's held `/login` navigation. It then
+   waited for login render before checking History abort, allowing navigation commit/unmount to
+   cancel the mounted production History query independently of logout cleanup. The repair holds
+   actual `/login` delivery after the successful real logout response, waits for that navigation to
+   start, requires the exact held History request to emit `failed` while `Loading transactions…`
+   remains mounted, then releases login navigation and continues same-page User B isolation checks.
+   No production change was required.
+
+### Baseline, RED mutations, and GREEN
+
+Baseline weak tests passed before repair:
+
+```text
+PATH=/Users/andresholivin/.nvm/versions/node/v24.14.0/bin:$PATH \
+  pnpm --dir apps/web exec playwright test e2e/wallets-categories.spec.ts e2e/cache-isolation.spec.ts --workers=1
+3 passed
+```
+
+Selection mutation RED temporarily changed the real recurring frequency handler from
+`setFrequency(value)` to `setFrequency("daily")`, while selecting `Weekly`:
+
+```text
+pnpm --dir apps/web exec playwright test e2e/wallets-categories.spec.ts --grep 'edits opening balance' --workers=1
+1 failed
+Locator: locator('[data-slot="select-content"]:visible').getByRole('option', { name: 'Weekly', exact: true, selected: true })
+Expected: visible
+Error: element(s) not found
+```
+
+The page snapshot showed `combobox "Frequency" [expanded]: daily` and `option "Daily"
+[selected]`. Restoring `setFrequency(value)` followed by
+`pnpm --dir apps/web exec playwright test e2e/wallets-categories.spec.ts --workers=1` produced
+`2 passed`.
+
+Logout-cleanup mutation RED temporarily removed `clearSessionState(client)` from the shared
+`CurrentSessionSignOut` success path:
+
+```text
+pnpm --dir apps/web exec playwright test e2e/cache-isolation.spec.ts --workers=1
+1 failed
+logout cleanup must abort held History request before held login navigation commits
+Expected: "failed"
+Received: undefined
+Timeout 5000ms exceeded while waiting on the predicate
+```
+
+Restoring the cleanup then produced focused GREEN:
+
+```text
+pnpm --dir apps/web exec playwright test e2e/wallets-categories.spec.ts e2e/cache-isolation.spec.ts --workers=1
+3 passed
+```
+
+### Fresh validation
+
+`pnpm toolchain:check` passed (`node=24.14.0`, `pnpm=11.13.1`). One default four-worker Playwright
+attempt had unrelated 60-second E2E timeouts across four specifications, and one default Vitest
+attempt had two unrelated 5-second test-worker timeouts. Fresh single-worker retries passed; this
+report records the parallel attempts as timing failures rather than treating them as verification.
+
+```text
+pnpm --dir apps/web exec playwright test --workers=1
+15 passed
+
+pnpm --dir apps/web test --run --maxWorkers=1
+Test Files  18 passed (18)
+Tests  181 passed (181)
+```
+
+Fresh `pnpm --dir apps/web lint`, `pnpm --dir apps/web typecheck`, and
+`pnpm --dir apps/web build` passed. `git diff --check` passed. Final production source diff is
+empty; only the two E2E proof repairs and this evidence report are intended changes.

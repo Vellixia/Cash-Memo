@@ -14,6 +14,14 @@ async function chooseOption(page: Page, label: string, option: string) {
     try {
       await choice.click();
       await expect(page.locator('[data-slot="select-content"]:visible')).toHaveCount(0);
+      await combobox.click();
+      await expect(
+        page
+          .locator('[data-slot="select-content"]:visible')
+          .getByRole("option", { name: option, exact: true, selected: true }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator('[data-slot="select-content"]:visible')).toHaveCount(0);
       return;
     } catch (error) {
       if (!(error instanceof Error) || !error.message.includes("Element is not attached to the DOM") || attempt === 2) {

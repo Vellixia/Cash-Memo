@@ -147,6 +147,32 @@ test("session transition cannot reuse private cache and ownership failures revea
   await expect(page.getByText("Loading transactions…")).toBeVisible();
   expect(aRequestOutcome).toBeUndefined();
 
+  let releaseLoginNavigation!: () => void;
+  const loginNavigationHeld = new Promise<void>((resolve) => {
+    releaseLoginNavigation = resolve;
+  });
+  let resolveLoginNavigationAttempt!: () => void;
+  const loginNavigationAttempt = new Promise<void>((resolve) => {
+    resolveLoginNavigationAttempt = resolve;
+  });
+  let loginNavigationSeen = false;
+  const holdLoginNavigation = async (route: Route) => {
+    const request = route.request();
+    if (!loginNavigationSeen && request.method() === "GET" && new URL(request.url()).pathname === "/login") {
+      loginNavigationSeen = true;
+      lifecycleEvents.push("login-navigation-start");
+      const response = await route.fetch();
+      await loginNavigationHeld;
+      try {
+        await route.fulfill({ response });
+      } finally {
+        resolveLoginNavigationAttempt();
+      }
+      return;
+    }
+    await route.fallback();
+  };
+  await page.route("**/login*", holdLoginNavigation);
   const logoutResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -154,19 +180,26 @@ test("session transition cannot reuse private cache and ownership failures revea
   );
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   expect((await logoutResponse).ok()).toBe(true);
-  await expect(page).toHaveURL(/\/login(?:\?returnTo=%2Fapp)?$/);
-  await expect(page.getByRole("heading", { name: "Sign in", level: 1 })).toBeVisible();
-  expect(pendingAtLogoutRequest).toBe(true);
-  expect(pendingAtLogoutResponse).toBe(true);
-  await expect
-    .poll(() => aRequestOutcome, {
-      message: "logout cleanup must abort held History request before login screen is visible",
-      timeout: 5_000,
-    })
-    .toBe("failed");
-  expect(lifecycleEvents.indexOf("logout-response")).toBeLessThan(
-    lifecycleEvents.indexOf("history-failed"),
-  );
+  await expect.poll(() => loginNavigationSeen).toBe(true);
+  try {
+    expect(pendingAtLogoutRequest).toBe(true);
+    expect(pendingAtLogoutResponse).toBe(true);
+    await expect
+      .poll(() => aRequestOutcome, {
+        message: "logout cleanup must abort held History request before held login navigation commits",
+        timeout: 5_000,
+      })
+      .toBe("failed");
+    expect(lifecycleEvents.indexOf("logout-response")).toBeLessThan(
+      lifecycleEvents.indexOf("history-failed"),
+    );
+    await expect(page.getByText("Loading transactions…")).toBeVisible();
+  } finally {
+    releaseLoginNavigation();
+    await loginNavigationAttempt;
+    await page.unroute("**/login*", holdLoginNavigation);
+  }
+  await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText(privateNote, { exact: true })).toHaveCount(0);
 
   await login(page, second);
