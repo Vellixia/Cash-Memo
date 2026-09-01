@@ -1,5 +1,28 @@
 # Cashmemo V1 final branch review
 
+## Task 26 candidate A independent review
+
+Signed candidate A `b3e13f31fe4bec084da8b5b818c9450bc25b85fb` was reviewed against current
+base `c428e2dd334fcfbcb4e63d421919282a55227845` and hosted merge result
+`c279025402dfafd0685120b6cec72ed40343b234`. Push run `33471520001` and PR run
+`33471525472` both passed `9/9` jobs, including direct SHA-tagged API/web image scans. The push web
+image was `sha256:020cf1996aca68cfd3d376410e542fca5e94b461d5e0ed2b3e9c61e571fed014`; the
+merge-result web image was
+`sha256:7c287f8fb1adeffb56e5bcb43420db4efa4553be5aca7ddb52287270bc314243`. Both
+returned HTTP `200` and zero HIGH/CRITICAL direct-Trivy findings.
+
+Independent full-range and focused-range review returned **READY**: zero Critical, zero Important,
+one non-blocking Minor. It confirmed I1-I4 closed across lifecycle/replay, recurring API contract,
+bounded conflict work, and all-feature CI Clippy. M1 is preventive lint-scope debt:
+`apps/web/orval.config.ts` passes targeted ESLint and typecheck/generation gates but is absent from
+the normal lint path list. It is deferred to the next cleanup slice.
+
+Candidate A satisfies the implementation and review requirements. This documentation update is not
+itself the final candidate verdict: its docs-only commit must still pass exact-SHA hosted push and
+current-main merge-result gates plus final diff review. Repository status therefore remains
+**REQUEST CHANGES** until that evidence exists. No merge or production action is authorized;
+production remains **NOT READY**.
+
 ## Task 26 post-repair local rerun — implementation head `39e0405`
 
 Fresh pinned-toolchain verification through `2026-09-01T11:51:33+07:00` passed OpenAPI/Orval

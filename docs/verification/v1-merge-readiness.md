@@ -1,5 +1,24 @@
 # Cashmemo V1 merge readiness
 
+## Task 26 candidate A hosted ruling
+
+Signed candidate A: `b3e13f31fe4bec084da8b5b818c9450bc25b85fb`. Current base A:
+`c428e2dd334fcfbcb4e63d421919282a55227845`. Hosted merge result:
+`c279025402dfafd0685120b6cec72ed40343b234`, with base A then candidate A as parents.
+
+Hosted push run `33471520001` and PR run `33471525472` each passed all `9/9` required jobs.
+Direct web-image runtime and Trivy gates passed for push image
+`sha256:020cf1996aca68cfd3d376410e542fca5e94b461d5e0ed2b3e9c61e571fed014` and merge-result image
+`sha256:7c287f8fb1adeffb56e5bcb43420db4efa4553be5aca7ddb52287270bc314243`, with HTTP `200` and zero
+HIGH/CRITICAL findings. Independent two-range review returned **READY**, with zero Critical, zero
+Important, and one accepted non-blocking Minor: normal ESLint scope omits the currently passing,
+typechecked `apps/web/orval.config.ts`.
+
+Candidate A gates are green and I1-I4 are closed. The final docs-only candidate has not yet passed
+its own hosted push/current-main merge-result gates, so current repository status remains
+**REQUEST CHANGES / NOT YET READY FOR HUMAN MERGE REVIEW**. Production readiness is separate and
+remains **NOT READY**.
+
 ## Task 26 post-repair local ruling — implementation head `39e0405`
 
 Post-repair implementation gates are green at

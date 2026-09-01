@@ -1,5 +1,38 @@
 # Cashmemo V1 PR3 repair evidence
 
+## Task 26 candidate A hosted and independent-review evidence
+
+Candidate A is signed commit `b3e13f31fe4bec084da8b5b818c9450bc25b85fb`, tested against
+current base `c428e2dd334fcfbcb4e63d421919282a55227845`. The hosted PR merge result was
+`c279025402dfafd0685120b6cec72ed40343b234`, with those base and candidate commits as its first
+and second parents. Local `HEAD`, the remote rewrite branch, and the PR head all resolved exactly
+to candidate A during custody checks.
+
+Hosted push run `33471520001` and PR run `33471525472` each passed all `9/9` required jobs:
+Rust format/Clippy/PostgreSQL tests/build; frontend lint/types/Vitest/build; OpenAPI/Orval drift;
+migration target safety; real-stack Playwright; receipt replay/preservation recovery; API image
+build/scan; web image build/scan; and the focused V1 dependency audit. Hosted Clippy used
+`--all-targets --all-features -- -D warnings`.
+
+The push run built and directly scanned web image
+`sha256:020cf1996aca68cfd3d376410e542fca5e94b461d5e0ed2b3e9c61e571fed014`; the merge-result run
+built and directly scanned
+`sha256:7c287f8fb1adeffb56e5bcb43420db4efa4553be5aca7ddb52287270bc314243`. Both passed the runtime
+HTTP `200` contract and direct Trivy policy with zero HIGH/CRITICAL findings across OS and library
+packages. This closes the environment-specific local web-image transport gap without reclassifying
+the failed local scan as green.
+
+Independent review of exact ranges `e59bf67c59dc0c31ffb3fef3b56f68bea4331f10..b3e13f31` and
+`c428e2dd334fcfbcb4e63d421919282a55227845..b3e13f31` returned **READY** with zero Critical,
+zero Important, and one non-blocking Minor. I1-I4 are closed. M1 records that
+`apps/web/orval.config.ts` is typechecked and passes targeted ESLint but is omitted from the normal
+lint target; it is accepted for the next cleanup slice.
+
+This is evidence for implementation candidate A only. The docs-only final candidate still requires
+exact-SHA custody, fresh hosted push and merge-result gates against then-current `main`, and final
+review. Until those gates complete, repository status remains **REQUEST CHANGES**. Production is
+separate and remains **NOT READY**.
+
 ## Task 26 post-repair Task 25 rerun — implementation head `39e0405`
 
 Recorded through `2026-09-01T11:51:33+07:00` WIB. Exact source under test:
