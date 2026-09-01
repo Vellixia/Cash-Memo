@@ -12,7 +12,7 @@
     "openapi": "cargo run --locked -p cashmemo-api --bin export_openapi -- openapi/cashmemo-v1.json",
     "api:generate": "pnpm openapi && pnpm --dir apps/web orval",
     "api:check": "pnpm api:generate && git diff --exit-code -- openapi/cashmemo-v1.json apps/web/generated/api",
-    "verify": "pnpm api:check && cargo fmt --check && cargo clippy -p cashmemo-api --all-targets -- -D warnings && cargo test -p cashmemo-api && pnpm --dir apps/web lint && pnpm --dir apps/web typecheck && pnpm --dir apps/web test --run && pnpm --dir apps/web build",
+    "verify": "pnpm api:check && cargo fmt --check && cargo clippy -p cashmemo-api --all-targets --all-features -- -D warnings && cargo test -p cashmemo-api && pnpm --dir apps/web lint && pnpm --dir apps/web typecheck && pnpm --dir apps/web test --run && pnpm --dir apps/web build",
     "test:operations": "vitest run tests/operations/v1-ci.spec.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

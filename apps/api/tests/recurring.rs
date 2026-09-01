@@ -451,6 +451,117 @@ async fn existing_occurrence_never_regenerates_after_transaction_deletion_and_du
 }
 
 #[sqlx::test(migrations = false)]
+async fn processor_bounds_conflicting_occurrence_decisions_and_continues_safely(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, _cookie) =
+        authenticated_user(&pool, "recurring-conflict-batch@example.test").await;
+    let (wallet_id, category_id) = owned_references(&pool, user_id).await;
+    let due = Utc::now().date_naive();
+    let mut rule_ids = Vec::new();
+    for _ in 0..5 {
+        let rule_id = insert_rule(&pool, user_id, wallet_id, category_id, due).await;
+        sqlx::query(
+            "INSERT INTO recurring_occurrences
+             (user_id, recurring_transaction_id, scheduled_for)
+             VALUES ($1, $2, $3)",
+        )
+        .bind(user_id)
+        .bind(rule_id)
+        .bind(due)
+        .execute(&pool)
+        .await
+        .unwrap();
+        rule_ids.push(rule_id);
+    }
+
+    let processor = RecurringProcessor::new(pool.clone());
+    for expected_advanced in [2_i64, 4, 5] {
+        let result = processor
+            .process(ProcessOptions {
+                batch_size: 2,
+                max_occurrences_per_recurring_transaction: 1,
+            })
+            .await
+            .unwrap();
+        assert_eq!(result.generated, 0);
+        let advanced: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM recurring_transactions
+             WHERE id = ANY($1) AND next_due_date > $2",
+        )
+        .bind(&rule_ids)
+        .bind(due)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            advanced, expected_advanced,
+            "each invocation may decide at most batch_size conflicting occurrences"
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM recurring_occurrences")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        5
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM transactions")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn ordinary_direct_occurrence_update_and_delete_remain_rejected(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    let (user_id, _cookie) =
+        authenticated_user(&pool, "recurring-immutable-direct@example.test").await;
+    let (wallet_id, category_id) = owned_references(&pool, user_id).await;
+    let due = Utc::now().date_naive();
+    let rule_id = insert_rule(&pool, user_id, wallet_id, category_id, due).await;
+    let occurrence_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO recurring_occurrences
+         (user_id, recurring_transaction_id, scheduled_for)
+         VALUES ($1, $2, $3) RETURNING id",
+    )
+    .bind(user_id)
+    .bind(rule_id)
+    .bind(due)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        sqlx::query("UPDATE recurring_occurrences SET scheduled_for = $2 WHERE id = $1")
+            .bind(occurrence_id)
+            .bind(due + chrono::Days::new(1))
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("DELETE FROM recurring_occurrences WHERE id = $1")
+            .bind(occurrence_id)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, chrono::NaiveDate>(
+            "SELECT scheduled_for FROM recurring_occurrences WHERE id = $1",
+        )
+        .bind(occurrence_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        due
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn concurrent_processors_create_one_occurrence_and_transaction(pool: PgPool) {
     support::migrate_v1(&pool).await;
     let (user_id, _cookie) = authenticated_user(&pool, "recurring-concurrent@example.test").await;

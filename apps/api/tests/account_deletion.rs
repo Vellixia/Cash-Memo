@@ -66,6 +66,62 @@ async fn active_account(pool: &PgPool) -> (AuthService, uuid::Uuid) {
     (auth, user_id)
 }
 
+async fn seed_generated_occurrence_history(pool: &PgPool, user_id: uuid::Uuid) {
+    let wallet_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO wallets (user_id, name, currency_code)
+         VALUES ($1, 'Purge wallet', 'USD') RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let category_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO categories
+         (user_id, name, normalized_name, transaction_type)
+         VALUES ($1, 'Purge category', 'purge category', 'EXPENSE') RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let recurring_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO recurring_transactions
+         (user_id, wallet_id, category_id, transaction_type, amount, frequency,
+          start_date, next_due_date)
+         VALUES ($1, $2, $3, 'EXPENSE', 1, 'daily', DATE '2026-08-30', DATE '2026-08-31')
+         RETURNING id",
+    )
+    .bind(user_id)
+    .bind(wallet_id)
+    .bind(category_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let occurrence_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO recurring_occurrences
+         (user_id, recurring_transaction_id, scheduled_for)
+         VALUES ($1, $2, DATE '2026-08-30') RETURNING id",
+    )
+    .bind(user_id)
+    .bind(recurring_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO transactions
+         (user_id, wallet_id, category_id, transaction_type, amount, occurred_at,
+          recurring_occurrence_id)
+         VALUES ($1, $2, $3, 'EXPENSE', 1, TIMESTAMPTZ '2026-08-30T00:00:00Z', $4)",
+    )
+    .bind(user_id)
+    .bind(wallet_id)
+    .bind(category_id)
+    .bind(occurrence_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn recent_password_starts_seven_day_deletion_and_revokes_all_sessions(pool: PgPool) {
     let (auth, user_id) = active_account(&pool).await;
@@ -481,6 +537,58 @@ async fn expired_or_slow_claimant_cannot_delete_after_takeover_or_lease_expiry(p
             .unwrap()
             .is_some()
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn live_account_purge_keeps_receipt_and_cascades_generated_occurrence_history(pool: PgPool) {
+    let (_auth, user_id) = active_account(&pool).await;
+    seed_generated_occurrence_history(&pool, user_id).await;
+    let deletion = AccountDeletionService::new(pool.clone());
+    deletion
+        .request(user_id, "correct horse battery staple")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET deletion_due_at = now() - INTERVAL '1 second' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let claim = deletion
+        .claim_next("occurrence-cascade", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    let receipts = FakeReceipts::default();
+
+    deletion
+        .purge_claim(&claim, &[4; 32], 3, &receipts)
+        .await
+        .unwrap();
+
+    let written_key_version = {
+        let written = receipts.writes.lock().unwrap();
+        assert_eq!(written.len(), 1, "durable receipt precedes live purge");
+        written[0].key_version
+    };
+    assert_eq!(written_key_version, 3);
+    for table in [
+        "users",
+        "wallets",
+        "categories",
+        "recurring_transactions",
+        "recurring_occurrences",
+        "transactions",
+    ] {
+        let remaining: i64 = sqlx::query_scalar(&format!(
+            "SELECT count(*) FROM {table} WHERE {} = $1",
+            if table == "users" { "id" } else { "user_id" }
+        ))
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(remaining, 0, "{table} must be removed by account cascade");
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

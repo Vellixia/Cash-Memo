@@ -242,7 +242,7 @@ mod s3_integration {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn delete_failure_rolls_back_earlier_replay_deletions(pool: PgPool) {
+    async fn restored_replay_cascades_occurrence_history_and_reaches_ready(pool: PgPool) {
         let config = receipt_config();
         let client = client(&config).await;
         let _ = client.create_bucket().bucket(&config.bucket).send().await;
@@ -314,16 +314,27 @@ mod s3_integration {
             .await
             .unwrap();
         assert_eq!(summary.receipts_scanned, 2);
-        assert_eq!(summary.users_purged, 0);
+        assert_eq!(summary.users_purged, 2);
         assert_eq!(summary.unreadable_receipts, 0);
-        assert_eq!(summary.unprocessed_matches, 2);
+        assert_eq!(summary.unprocessed_matches, 0);
+        assert!(summary.ready());
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users WHERE id = ANY($1)")
                 .bind(&[first, blocked][..])
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            2
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM recurring_occurrences WHERE user_id = $1",
+            )
+            .bind(blocked)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            0
         );
     }
 

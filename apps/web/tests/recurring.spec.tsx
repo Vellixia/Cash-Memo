@@ -24,7 +24,6 @@ const api = vi.hoisted(() => ({
   currencies: [{ code: "USD", display_name: "US Dollar", exponent: 2 }],
   create: vi.fn(),
   update: vi.fn(),
-  remove: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
   retryList: vi.fn(),
@@ -68,7 +67,6 @@ vi.mock("../generated/api", () => ({
   useListCurrencies: () => result(api.currencyState, api.currencies, api.retryCurrencies),
   useCreateRecurringTransaction: () => ({ mutateAsync: api.create, isPending: false }),
   useUpdateRecurringTransaction: () => ({ mutateAsync: api.update, isPending: false }),
-  useDeleteRecurringTransaction: () => ({ mutateAsync: api.remove, isPending: false }),
   usePauseRecurringTransaction: () => ({ mutateAsync: api.pause, isPending: false }),
   useResumeRecurringTransaction: () => ({ mutateAsync: api.resume, isPending: false }),
   getListRecurringTransactionsQueryKey: () => ["/api/v1/recurring-transactions"],
@@ -105,7 +103,6 @@ describe("recurring transactions", () => {
     for (const mock of [
       api.create,
       api.update,
-      api.remove,
       api.pause,
       api.resume,
       api.retryList,
@@ -260,5 +257,13 @@ describe("recurring transactions", () => {
     await waitFor(() => {
       expect(api.resume).toHaveBeenCalledWith({ id: "rule" });
     });
+  });
+
+  it("offers only the approved pause and resume lifecycle without a false delete action", async () => {
+    const { RecurringList } = await import("../features/recurring/recurring-list");
+    view(<RecurringList />);
+
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 });

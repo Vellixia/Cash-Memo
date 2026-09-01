@@ -58,7 +58,7 @@ jobs:
             target
           key: ${{ runner.os }}-cashmemo-v1-cargo-${{ hashFiles('Cargo.lock') }}
       - run: cargo fmt --check
-      - run: cargo clippy --locked -p cashmemo-api --all-targets -- -D warnings
+      - run: cargo clippy --locked -p cashmemo-api --all-targets --all-features -- -D warnings
       - run: cargo test --locked -p cashmemo-api
       - run: cargo build --locked --release -p cashmemo-api --features s3-receipts
 

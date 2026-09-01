@@ -15,6 +15,14 @@ fn rust_openapi_freezes_v1_contract_names() {
     assert!(paths.contains_key("/api/v1/health/live"));
     assert!(paths.contains_key("/api/v1/health/ready"));
     assert!(!paths.contains_key("/api/v1/health"));
+    let recurring_resource = paths
+        .get("/api/v1/recurring-transactions/{id}")
+        .and_then(Value::as_object)
+        .expect("recurring item path");
+    assert!(
+        !recurring_resource.contains_key("delete"),
+        "approved recurring lifecycle exposes pause/resume, not DELETE"
+    );
 
     let schemas = document
         .get("components")

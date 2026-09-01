@@ -623,7 +623,6 @@ fn contract(operation_id: &str) -> Contract {
             query: &[],
             errors: AUTH_ERRORS,
         },
-        "delete_recurring_transaction" => no_content(),
         "get_monthly_summary" => Contract {
             query: QUERY_MONTH,
             ..json("MonthlySummaryContract")
@@ -983,11 +982,6 @@ fn paths() -> utoipa::openapi::Paths {
             "/api/v1/recurring-transactions/{id}",
             HttpMethod::Patch,
             "update_recurring_transaction",
-        ),
-        (
-            "/api/v1/recurring-transactions/{id}",
-            HttpMethod::Delete,
-            "delete_recurring_transaction",
         ),
         (
             "/api/v1/recurring-transactions/{id}/pause",

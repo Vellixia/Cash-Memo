@@ -146,7 +146,7 @@ async fn readiness_rejects_empty_database_without_mutation(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn readiness_rejects_v1_migration_prefix_without_mutation(pool: PgPool) {
     support::migrate_v1(&pool).await;
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 9")
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 10")
         .execute(&pool)
         .await
         .unwrap();
@@ -157,7 +157,7 @@ async fn readiness_rejects_v1_migration_prefix_without_mutation(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn readiness_rejects_failed_migration_without_mutation(pool: PgPool) {
     support::migrate_v1(&pool).await;
-    sqlx::query("UPDATE _sqlx_migrations SET success = FALSE WHERE version = 9")
+    sqlx::query("UPDATE _sqlx_migrations SET success = FALSE WHERE version = 10")
         .execute(&pool)
         .await
         .unwrap();
@@ -168,7 +168,7 @@ async fn readiness_rejects_failed_migration_without_mutation(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn readiness_rejects_checksum_divergence_without_mutation(pool: PgPool) {
     support::migrate_v1(&pool).await;
-    sqlx::query("UPDATE _sqlx_migrations SET checksum = '\\x00' WHERE version = 9")
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = '\\x00' WHERE version = 10")
         .execute(&pool)
         .await
         .unwrap();

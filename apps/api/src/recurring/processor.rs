@@ -40,9 +40,10 @@ impl RecurringProcessor {
         if options.batch_size == 0 || options.max_occurrences_per_recurring_transaction == 0 {
             return Ok(ProcessResult::default());
         }
-        let mut total = 0;
+        let mut generated = 0;
+        let mut decisions = 0;
         let mut claimed = Vec::<Uuid>::new();
-        while total < options.batch_size {
+        while decisions < options.batch_size {
             let mut db = self
                 .pool
                 .begin()
@@ -63,7 +64,7 @@ impl RecurringProcessor {
             let mut count = 0;
             while due <= today
                 && count < options.max_occurrences_per_recurring_transaction
-                && total < options.batch_size
+                && decisions < options.batch_size
             {
                 let occurrence: Option<Uuid> = sqlx::query_scalar("INSERT INTO recurring_occurrences (user_id,recurring_transaction_id,scheduled_for) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id")
                     .bind(rule.user_id).bind(rule.id).bind(due).fetch_optional(&mut *db).await.map_err(|_| ProcessorError::Persistence)?;
@@ -80,11 +81,12 @@ impl RecurringProcessor {
                 );
                 sqlx::query("UPDATE recurring_transactions SET next_due_date=$3,updated_at=now() WHERE user_id=$1 AND id=$2").bind(rule.user_id).bind(rule.id).bind(due).execute(&mut *db).await.map_err(|_| ProcessorError::Persistence)?;
                 count += 1;
-                total += u64::from(inserted.is_some());
+                decisions += 1;
+                generated += u64::from(inserted.is_some());
             }
             db.commit().await.map_err(|_| ProcessorError::Persistence)?;
         }
-        Ok(ProcessResult { generated: total })
+        Ok(ProcessResult { generated })
     }
 }
 #[derive(FromRow)]

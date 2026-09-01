@@ -5,7 +5,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { RecurringTransaction } from "../../generated/api/model/recurringTransaction";
 import {
   getListRecurringTransactionsQueryKey,
-  useDeleteRecurringTransaction,
   useListRecurringTransactions,
   usePauseRecurringTransaction,
   useResumeRecurringTransaction,
@@ -13,16 +12,6 @@ import {
 import { MoneyAmount } from "../../components/money/amount";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -39,11 +28,9 @@ export function RecurringList() {
   const categories = useListCategories({ query: { retry: false } });
   const pause = usePauseRecurringTransaction();
   const resume = useResumeRecurringTransaction();
-  const remove = useDeleteRecurringTransaction();
   const client = useQueryClient();
   const [editing, setEditing] = useState<RecurringTransaction>();
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<string>();
   const [status, setStatus] = useState<{ kind: "error" | "success"; text: string }>();
 
   function formatLocalDate(value: string): string {
@@ -88,20 +75,6 @@ export function RecurringList() {
       });
     }
   }
-  async function deleteItem(id: string) {
-    setStatus(undefined);
-    try {
-      await remove.mutateAsync({ id });
-      await refresh("Recurring rule deleted.");
-      setDeleting(undefined);
-    } catch (error) {
-      setStatus({
-        kind: "error",
-        text: error instanceof Error ? error.message : "Could not delete recurring rule.",
-      });
-    }
-  }
-
   if (query.isPending) return <p role="status">Loading recurring rules…</p>;
   if (query.isError)
     return (
@@ -236,48 +209,12 @@ export function RecurringList() {
                   >
                     {item.status === "paused" ? "Resume" : "Pause"}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    onClick={() => {
-                      setDeleting(item.id);
-                    }}
-                  >
-                    Delete
-                  </Button>
                 </div>
               </article>
             );
           })}
         </div>
       )}
-      <AlertDialog
-        open={Boolean(deleting)}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(undefined);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete recurring rule?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete only future scheduling instructions. Generated transactions and history stay
-              unchanged.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="danger"
-              onClick={() => deleting && void deleteItem(deleting)}
-              disabled={remove.isPending}
-              aria-busy={remove.isPending}
-            >
-              {remove.isPending ? "Deleting…" : "Confirm delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </section>
   );
 }

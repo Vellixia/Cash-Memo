@@ -120,7 +120,7 @@ async fn identified_v1_database_at_0004_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 }
 
 #[sqlx::test(migrations = false)]
@@ -164,7 +164,7 @@ async fn identified_v1_database_at_0005_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 }
 
 #[sqlx::test(migrations = false)]
@@ -191,14 +191,36 @@ async fn identified_v1_database_at_0007_upgrades_to_latest(pool: PgPool) {
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn identified_v1_database_at_0009_upgrades_occurrence_purge_guard(pool: PgPool) {
+    support::migrate_v1(&pool).await;
+    rollback_0010(&pool).await;
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 10")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        assert_v1_migration_target(&pool).await.unwrap(),
+        TargetState::CashmemoV1
+    );
+    assert!(matches!(
+        assert_latest_v1_migration_target(&pool).await,
+        Err(TargetError::UnknownNonEmpty)
+    ));
+    assert_eq!(migrate_v1(&pool).await.unwrap(), TargetState::CashmemoV1);
+    check_latest_v1_readiness(&pool).await.unwrap();
 }
 
 #[sqlx::test(migrations = false)]
 async fn migration_0009_removes_opening_balance_guard_and_backfills_completed_users(pool: PgPool) {
     support::migrate_v1(&pool).await;
+    rollback_0010(&pool).await;
     rollback_0009(&pool).await;
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 9")
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 9")
         .execute(&pool)
         .await
         .unwrap();
@@ -307,6 +329,20 @@ async fn rollback_0009(pool: &PgPool) {
     .unwrap();
 }
 
+async fn rollback_0010(pool: &PgPool) {
+    sqlx::raw_sql(
+        "CREATE OR REPLACE FUNCTION reject_recurring_occurrence_mutation()
+         RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+             RAISE EXCEPTION 'recurring occurrences are immutable';
+         END;
+         $$;",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn rollback_0008(pool: &PgPool) {
     sqlx::query("DROP INDEX users_deletion_purge_candidates_idx")
         .execute(pool)
@@ -335,7 +371,7 @@ async fn identified_v1_database_with_migration_gap_is_rejected(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn identified_v1_database_with_modified_migration_is_rejected(pool: PgPool) {
     support::migrate_v1(&pool).await;
-    sqlx::query("UPDATE _sqlx_migrations SET checksum = '\\x00' WHERE version = 9")
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = '\\x00' WHERE version = 10")
         .execute(&pool)
         .await
         .unwrap();

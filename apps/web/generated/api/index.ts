@@ -2232,64 +2232,6 @@ export function useGetRecurringTransaction<TData = Awaited<ReturnType<typeof get
 
 
 
-export const deleteRecurringTransaction = (
-    id: string,
- signal?: AbortSignal
-) => {
-
-
-      return customAxios<void>(
-      {url: `/api/v1/recurring-transactions/${id}`, method: 'DELETE', signal
-    },
-      );
-    }
-
-
-
-
-export const getDeleteRecurringTransactionMutationOptions = <TError = ErrorEnvelope,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRecurringTransaction>>, TError,DeleteRecurringTransactionMutationVariables, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof deleteRecurringTransaction>>, TError,DeleteRecurringTransactionMutationVariables, TContext> => {
-
-const mutationKey = ['deleteRecurringTransaction'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRecurringTransaction>>, DeleteRecurringTransactionMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteRecurringTransaction(id,)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteRecurringTransactionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteRecurringTransaction>>>
-
-    export type DeleteRecurringTransactionMutationError = ErrorEnvelope
-    export type DeleteRecurringTransactionMutationVariables = {id: string}
-
-    export const useDeleteRecurringTransaction = <TError = ErrorEnvelope,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRecurringTransaction>>, TError,DeleteRecurringTransactionMutationVariables, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteRecurringTransaction>>,
-        TError,
-        DeleteRecurringTransactionMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteRecurringTransactionMutationOptions(options), queryClient);
-    }
-
 export const updateRecurringTransaction = (
     id: string,
     updateRecurringTransactionRequest: UpdateRecurringTransactionRequest,

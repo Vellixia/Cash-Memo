@@ -15,11 +15,25 @@ interface BrowserTransaction {
   note?: string | null;
 }
 
+interface BrowserRecurringRule {
+  id: string;
+  note?: string | null;
+  status: "active" | "paused";
+}
+
 async function listTransactions(page: Page): Promise<BrowserTransaction[]> {
   const response = await page.request.get(apiUrl("/api/v1/transactions?limit=100"));
   if (!response.ok()) throw new Error(`Could not list transactions: ${String(response.status())}`);
   const body = (await response.json()) as { items?: BrowserTransaction[] };
   return body.items ?? [];
+}
+
+async function listRecurringRules(page: Page): Promise<BrowserRecurringRule[]> {
+  const response = await page.request.get(apiUrl("/api/v1/recurring-transactions"));
+  if (!response.ok()) {
+    throw new Error(`Could not list recurring rules: ${String(response.status())}`);
+  }
+  return (await response.json()) as BrowserRecurringRule[];
 }
 
 function cssTimeMilliseconds(value: string): number {
@@ -64,6 +78,11 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
 
   const recurringCard = page.getByRole("article").filter({ hasText: ordinaryNote });
   await expect(recurringCard).toContainText("Active");
+  const createdRules = (await listRecurringRules(page)).filter(
+    (item) => item.note === ordinaryNote,
+  );
+  expect(createdRules, "created recurring rule must exist on server").toHaveLength(1);
+  const recurringRuleId = createdRules[0].id;
   const processor = processRecurring();
   expect(processor).toEqual({ command: "process-recurring", processed: 1 });
   const generated = (await listTransactions(page)).filter((item) => item.note === ordinaryNote);
@@ -115,7 +134,10 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
   await expect(budgetCard).toContainText("Over budget");
   await expect(budgetCard).toContainText("-17.00");
   await expect(budgetCard.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
-  await expect(budgetCard.getByRole("progressbar")).toHaveAttribute("aria-valuetext", /% used — over budget/);
+  await expect(budgetCard.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuetext",
+    /% used — over budget/,
+  );
   await expect(page.getByRole("article").filter({ hasText: "Food & Drink" })).toContainText(
     "25.00",
   );
@@ -149,13 +171,27 @@ test("updates a server-owned budget and pauses then resumes a recurring rule", a
   await recurringCard.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByRole("status")).toContainText("Recurring rule paused");
   await expect(recurringCard).toContainText("Paused");
+  expect((await listRecurringRules(page)).find((item) => item.id === recurringRuleId)?.status).toBe(
+    "paused",
+  );
   await expectGeneratedUnchanged();
   await page.goto("/app/recurring");
   await recurringCard.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByRole("status")).toContainText("Recurring rule resumed");
   await expect(recurringCard).toContainText("Active");
+  expect((await listRecurringRules(page)).find((item) => item.id === recurringRuleId)?.status).toBe(
+    "active",
+  );
   await expectGeneratedUnchanged();
-  await page.goto("/app/recurring");
-  await recurringCard.getByRole("button", { name: "Delete" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Confirm delete" }).click();
+  await expect(recurringCard.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  const unsupportedDelete = await page.request.delete(
+    apiUrl(`/api/v1/recurring-transactions/${recurringRuleId}`),
+    { headers: { Origin: new URL(page.url()).origin } },
+  );
+  expect(unsupportedDelete.status(), "recurring DELETE is outside approved API contract").toBe(405);
+  expect(
+    (await listRecurringRules(page)).find((item) => item.id === recurringRuleId)?.status,
+    "unsupported DELETE must not mutate server lifecycle state",
+  ).toBe("active");
+  await expectGeneratedUnchanged();
 });

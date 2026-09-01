@@ -24,10 +24,7 @@ where
 {
     Router::new()
         .route("/recurring-transactions", get(list).post(create))
-        .route(
-            "/recurring-transactions/{id}",
-            get(get_one).patch(update).delete(delete),
-        )
+        .route("/recurring-transactions/{id}", get(get_one).patch(update))
         .route("/recurring-transactions/{id}/pause", post(pause))
         .route("/recurring-transactions/{id}/resume", post(resume))
         .layer(Extension(service))
@@ -149,18 +146,6 @@ async fn resume(
         .resume(user_id(session, request_id.clone())?, id)
         .await
         .map(Json)
-        .map_err(|error| map_error(error, request_id))
-}
-async fn delete(
-    Extension(service): Extension<RecurringTransactionService>,
-    session: AuthSession,
-    Extension(request_id): Extension<RequestId>,
-    Path(id): Path<Uuid>,
-) -> Result<StatusCode, HttpError> {
-    service
-        .pause(user_id(session, request_id.clone())?, id)
-        .await
-        .map(|_| StatusCode::NO_CONTENT)
         .map_err(|error| map_error(error, request_id))
 }
 fn user_id(session: AuthSession, request_id: RequestId) -> Result<Uuid, HttpError> {
