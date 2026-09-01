@@ -1,5 +1,25 @@
 # Cashmemo V1 merge readiness
 
+## Task 26 post-repair local ruling — implementation head `39e0405`
+
+Post-repair implementation gates are green at
+`39e0405008159d94d80175a045732937dcabd602`: all-feature Clippy, Rust `186/186`, web
+Vitest `182/182`, lint/typecheck/build, operations `2/2`, Bats `44/44`, migrations `10/10`,
+restored-database receipt replay `8/8`, S3 release build, dependency audit, and Playwright `15/15`.
+Fresh API image `sha256:d233c25bcb7bc28557c6de6904d866f918db7abcfcfead428297c36109ea92af`
+passed direct exact-policy Trivy with zero HIGH/CRITICAL findings. Fresh web image
+`sha256:f08dbb38c177d8011602d701c6b3dc464ec6618d5228ae11d5e2b82de624ff72`
+passed runtime assertions.
+
+Direct local web-image Trivy remains **NOT GREEN / FAIL-CLOSED** because Docker `29.5.2` again
+produced an incomplete archive before vulnerability analysis. This environment failure is not a
+security PASS. Per the existing Task 25 ruling, hosted direct-image Trivy must pass on exact final
+candidate and merge-result SHAs before any merge-ready recommendation.
+
+Status: **REQUEST CHANGES / NOT MERGE READY** pending Task 26 hosted jobs, exact SHA custody,
+current-main merge-result verification, and independent two-diff review. Production readiness is
+separate and remains **NOT READY**.
+
 ## Task 25 final ruling — implementation head `76a8a53`
 
 Current implementation head: `76a8a53`; parent: `3291391` (config-only Playwright serialization).

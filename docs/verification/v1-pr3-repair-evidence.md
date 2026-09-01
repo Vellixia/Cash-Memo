@@ -1,5 +1,35 @@
 # Cashmemo V1 PR3 repair evidence
 
+## Task 26 post-repair Task 25 rerun — implementation head `39e0405`
+
+Recorded through `2026-09-01T11:51:33+07:00` WIB. Exact source under test:
+`39e0405008159d94d80175a045732937dcabd602`. Pinned Node `24.14.0`, pnpm `11.13.1`,
+Rust/Cargo `1.97.1`, Docker client `29.7.1` / server `29.5.2`, Trivy `0.74.0`, and
+Bats `1.14.0` were used.
+
+Fresh post-repair results:
+
+| Gate | Result |
+| --- | --- |
+| Root composite | PASS after correcting one controller invocation that had stopped PostgreSQL before `cargo test`: OpenAPI/Orval drift, fmt, Clippy `--all-targets --all-features -D warnings`, Rust `186/186`, web lint/typecheck, Vitest `182/182`, and Next production build. The two Vitest files that timed out during the disk-starved first attempt also passed focused `22/22` unchanged. |
+| Operations/repository | PASS: root operations `2/2`; Bats `44/44`; final `git diff --check`. |
+| Migration/recovery/release | PASS: migrations `10/10`; restored PostgreSQL + MinIO receipt replay `8/8`; S3-enabled release build. |
+| Browser | PASS: exact default Playwright command, configured one worker, `15/15` in `3.9m` after serializing its `v1` Compose harness away from the named Task 25 stack. |
+| Dependency audit | PASS: no known production dependency vulnerabilities. |
+| API image | PASS: fresh `cashmemo-v1-api:task25` image `sha256:d233c25bcb7bc28557c6de6904d866f918db7abcfcfead428297c36109ea92af`; exact direct Trivy policy reached a verdict with `0` HIGH/CRITICAL findings. |
+| Web image/runtime | PASS: fresh `cashmemo-v1-web:task25` image `sha256:f08dbb38c177d8011602d701c6b3dc464ec6618d5228ae11d5e2b82de624ff72`; non-root runtime contract, Node `24.14.0`, absent npm/npx/Corepack, and HTTP `200` passed. |
+| Direct web Trivy | **NOT GREEN / FAIL-CLOSED**: exact required direct-image command again failed before vulnerability analysis because Docker's exported archive omitted blob `b64ca75f4a2e0325828438f003b101412f373c61a82b6847f5809ee7c3254923`. No vulnerability count is claimed. Existing ruling remains: only hosted direct-image Trivy on exact candidate and merge-result SHAs can close this environment-specific transport gate. |
+| Cleanup | PASS after restarting the existing Colima profile without reset: exact `cashmemo-pr3-task25` and `v1` disposable projects both returned header-only `ps -a`; no unrelated Docker project was stopped or removed. |
+
+First attempt evidence remains in the ignored Task 25 report: it passed migration/recovery/release
+but hit two web test timeouts, a known Compose port collision, then Docker/containerd I/O errors as
+host space collapsed. Colima stopped; host later recovered. Restarting the existing profile restored
+Docker with `22 GiB` guest capacity, allowing the fresh gates above without source/config changes.
+
+Repository status remains **REQUEST CHANGES / NOT MERGE READY** until Task 26 verifies hosted direct
+web Trivy, every required hosted job, exact remote SHAs, current-main merge result, and independent
+two-diff review. Production remains **NOT READY**; no production system or data was accessed.
+
 ## Task 25 final evidence — implementation head `76a8a53`
 
 Current head `76a8a53`, parent `3291391`; parent full matrix passed install/verify `181/181`,

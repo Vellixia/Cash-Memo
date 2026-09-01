@@ -1,5 +1,27 @@
 # Cashmemo V1 final branch review
 
+## Task 26 post-repair local rerun — implementation head `39e0405`
+
+Fresh pinned-toolchain verification through `2026-09-01T11:51:33+07:00` passed OpenAPI/Orval
+drift, fmt, all-target/all-feature Clippy with warnings denied, Rust `186/186`, web lint/typecheck,
+Vitest `182/182`, Next build, operations `2/2`, Bats `44/44`, migrations `10/10`, isolated S3
+receipt replay `8/8`, S3 release build, dependency audit, and exact default Playwright `15/15`.
+Two unrelated five-second Vitest timeouts from a disk-starved first attempt passed focused `22/22`
+unchanged and passed inside the full rerun.
+
+Fresh API image `sha256:d233c25bcb7bc28557c6de6904d866f918db7abcfcfead428297c36109ea92af`
+built and direct exact-policy Trivy reported `0` HIGH/CRITICAL findings. Fresh web image
+`sha256:f08dbb38c177d8011602d701c6b3dc464ec6618d5228ae11d5e2b82de624ff72`
+built and passed non-root/runtime/minimal-tooling/HTTP assertions. Direct local web Trivy remains
+**NOT GREEN**: Docker `29.5.2` again exported an archive missing a required blob before analysis.
+No local web vulnerability verdict is claimed; hosted direct-image Trivy on exact candidate and
+merge-result SHAs remains mandatory.
+
+Both exact disposable Compose projects were removed and returned header-only status. Protected
+user-owned paths remained untouched. Current verdict: **REQUEST CHANGES / NOT MERGE READY** pending
+Task 26 exact hosted CI, current-main integration, and independent two-diff review. Production is
+**NOT READY**; no production action occurred.
+
 ## Task 25 final evidence — implementation head `76a8a53`
 
 Recorded: `2026-08-31` WIB. Current implementation head is `76a8a53`, parent

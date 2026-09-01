@@ -1,5 +1,19 @@
 # Cashmemo V1 production-cutover readiness
 
+## Task 26 post-repair local evidence — implementation head `39e0405`
+
+Status remains **NOT READY**. Fresh local verification through
+`2026-09-01T11:51:33+07:00` passed repository, Rust `186/186`, web `182/182`, browser `15/15`,
+migration `10/10`, isolated receipt replay `8/8`, release build, audit, API image/direct Trivy, and
+web image/runtime gates. These results prove only repository behavior and disposable recovery
+mechanism.
+
+Direct local web Trivy remains fail-closed before a vulnerability verdict because Docker `29.5.2`
+exported an incomplete image archive. Hosted direct-image evidence remains required for repository
+merge readiness. No actual production backup, receipt store, retained-backup restore, registry
+artifact, deployment target, migration, cutover, rollback, or operator approval was accessed or
+created. This record authorizes no production action.
+
 ## Task 25 final evidence — implementation head `76a8a53`
 
 Status remains **NOT READY**. Head `76a8a53`, parent `3291391`; config-only Playwright serialization.
