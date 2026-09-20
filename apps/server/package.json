@@ -18,7 +18,7 @@
     "@cashmemo/privacy-rules": "workspace:*",
     "@fastify/cors": "^11.3.0",
     "argon2": "0.45.1",
-    "better-auth": "1.6.26",
+    "better-auth": "1.6.33",
     "drizzle-orm": "0.45.2",
     "fastify": "5.11.3",
     "minio": "8.0.7",
