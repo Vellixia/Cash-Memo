@@ -232,10 +232,10 @@ bun run test:e2e
 
 ## CI/CD & deployment
 
-- **`ci.yml`** (push to `v1`, PRs):
+- **`ci.yml`** (push to `main`, PRs):
   - `check` job: lint, API tests and build.
   - `e2e` job: Postgres service, then the release API, then the web production build, then Playwright on all viewports.
-- **`images.yml`** (push to `v1`): builds `ghcr.io/vellixia/cashmemo-api` and `cashmemo-web`, tagged with the commit SHA and `v1`. Images are built on GitHub's runners because the Dokploy host's build containers can't resolve DNS.
+- **`images.yml`** (push to `main`): builds `ghcr.io/vellixia/cashmemo-api` and `cashmemo-web`, tagged with the commit SHA and `latest`. Images are built on GitHub's runners because the Dokploy host's build containers can't resolve DNS.
 - **Dokploy project `cashmemo`**:
   - `cashmemo-db` (Postgres 18).
   - `cashmemo-api`: internal only. Env: `DATABASE_URL`, `COOKIE_SECURE=true`.

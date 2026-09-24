@@ -4,7 +4,7 @@ name: images
 
 on:
   push:
-    branches: [v1]
+    branches: [main]
 
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/vellixia/cashmemo-${{ matrix.app }}:${{ github.sha }}
-            ghcr.io/vellixia/cashmemo-${{ matrix.app }}:v1
+            ghcr.io/vellixia/cashmemo-${{ matrix.app }}:latest
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
       # Dokploy has no registry credentials; new GHCR packages default to private.
