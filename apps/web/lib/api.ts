@@ -1,4 +1,4 @@
-export type User = { id: string; email: string };
+export type User = { id: string; email: string; default_currency: string };
 export type Direction = "income" | "expense";
 export type Memo = {
   id: string;
@@ -116,60 +116,14 @@ export function login(email: string, password: string): Promise<User> {
   return api<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
-export function signup(email: string, password: string): Promise<User> {
-  return api<User>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) });
+export function signup(email: string, password: string, default_currency?: string): Promise<User> {
+  return api<User>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, default_currency }) });
+}
+
+export function updateMe(patch: { default_currency: string }): Promise<User> {
+  return api<User>("/auth/me", { method: "PATCH", body: JSON.stringify(patch) });
 }
 
 export function logout(): Promise<void> {
   return api<void>("/auth/logout", { method: "POST" });
-}
-
-// --- money helpers -----------------------------------------------------
-
-function getExponent(currency: string): number {
-  try {
-    return (
-      // Fixed locale: the minor-unit exponent must not depend on the viewer's browser.
-      new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
-        .maximumFractionDigits ?? 2
-    );
-  } catch {
-    return 2;
-  }
-}
-
-/** Formats minor units (cents) as a localized currency string, e.g. 1050 -> "$10.50". */
-export function formatMoney(amount_minor: number, currency: string): string {
-  const exp = getExponent(currency);
-  const value = amount_minor / 10 ** exp;
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
-  } catch {
-    return `${value.toFixed(exp)} ${currency}`;
-  }
-}
-
-/** Parses a decimal string ("10.5") into minor units (1050) using string math
- * (no float drift) for the currency's exponent. */
-export function toMinor(input: string, currency: string): number {
-  const exp = getExponent(currency);
-  const trimmed = input.trim();
-  const negative = trimmed.startsWith("-");
-  const digitsOnly = trimmed.replace(/^-/, "").replace(/[^0-9.]/g, "");
-  const [intPart, fracPart = ""] = digitsOnly.split(".");
-  const frac = (fracPart + "0".repeat(exp)).slice(0, exp);
-  const combined = `${intPart || "0"}${frac}` || "0";
-  const value = parseInt(combined, 10) || 0;
-  return negative ? -value : value;
-}
-
-/** Inverse of toMinor: minor units (1050) -> decimal string ("10.50"). */
-export function fromMinor(amount_minor: number, currency: string): string {
-  const exp = getExponent(currency);
-  const negative = amount_minor < 0;
-  const abs = Math.abs(amount_minor).toString().padStart(exp + 1, "0");
-  if (exp === 0) return `${negative ? "-" : ""}${abs}`;
-  const intPart = abs.slice(0, -exp);
-  const fracPart = abs.slice(-exp);
-  return `${negative ? "-" : ""}${intPart}.${fracPart}`;
 }

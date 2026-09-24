@@ -1,4 +1,4 @@
-import { formatMoney, type Memo } from "@/lib/api";
+import type { Memo } from "@/lib/api";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -41,12 +41,6 @@ export function dayLabel(key: string, now = new Date()): string {
 
 export function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-}
-
-/** Money with an explicit sign: "+$12.00", "−$4.50" (true minus sign), "$0.00". */
-export function signedMoney(amount_minor: number, currency: string): string {
-  const sign = amount_minor > 0 ? "+" : amount_minor < 0 ? "−" : "";
-  return sign + formatMoney(Math.abs(amount_minor), currency);
 }
 
 export function signedAmount(memo: Pick<Memo, "direction" | "amount_minor">): number {

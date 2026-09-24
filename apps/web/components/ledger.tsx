@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Segmented } from "@/components/segmented";
 import { card } from "@/components/summary";
 import type { Category, Direction, Memo } from "@/lib/api";
-import { dayLabel, groupByDay, signedAmount, signedMoney, timeLabel } from "@/lib/format";
+import { dayLabel, groupByDay, signedAmount, timeLabel } from "@/lib/format";
+import { signedMoney } from "@/lib/money";
 import { STARTER_CATEGORIES, useAddStarterSet } from "@/lib/queries";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";

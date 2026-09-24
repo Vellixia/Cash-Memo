@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { formatMoney, type Category, type Summary } from "@/lib/api";
-import { CATEGORY_COLORS, signedMoney } from "@/lib/format";
+import type { Category, Summary } from "@/lib/api";
+import { CATEGORY_COLORS } from "@/lib/format";
+import { formatMoney, signedMoney } from "@/lib/money";
 import { Segmented } from "@/components/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -190,6 +191,47 @@ export function SpendingCard({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Every currency this month side by side, natively formatted (no conversion). Shown when there are 2+. */
+export function CurrenciesCard({ summary, currencies }: { summary: Summary; currencies: string[] }) {
+  const total = (currency: string, direction: string) =>
+    summary.totals.find((t) => t.currency === currency && t.direction === direction)?.total_minor ?? 0;
+  return (
+    <section className={cn(card, "p-4 sm:p-6")} aria-labelledby="currencies-title" data-testid="currencies-card">
+      <h2 id="currencies-title" className="font-serif text-lg sm:text-xl">
+        All currencies
+      </h2>
+      <ul className="mt-1.5 divide-y divide-border/70">
+        {currencies.map((c) => {
+          const income = total(c, "income");
+          const expense = total(c, "expense");
+          const net = income - expense;
+          return (
+            <li key={c} data-testid="currency-row" className="py-2.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs font-semibold tracking-wider text-muted-foreground">{c}</span>
+                <span className={cn("num text-lg [overflow-wrap:anywhere]", net > 0 && "text-income", net < 0 && "text-expense")}>
+                  <span className="sr-only">Net </span>
+                  {signedMoney(net, c)}
+                </span>
+              </div>
+              <dl className="mt-0.5 flex flex-wrap justify-end gap-x-4 text-xs text-muted-foreground">
+                <div className="flex gap-1.5">
+                  <dt>Income</dt>
+                  <dd className="num text-foreground">{formatMoney(income, c)}</dd>
+                </div>
+                <div className="flex gap-1.5">
+                  <dt>Expense</dt>
+                  <dd className="num text-foreground">{formatMoney(expense, c)}</dd>
+                </div>
+              </dl>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

@@ -51,7 +51,7 @@ test.describe("auth", () => {
 
   test("login with a wrong password shows an error and stays on /login", async ({ page, playwright, allowConsole }) => {
     allowConsole(/status of 401/);
-    const anon = await playwright.request.newContext({ baseURL: "http://localhost:3000" });
+    const anon = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL });
     const { email } = await apiFor(anon).signup();
     await anon.dispose();
 
@@ -64,7 +64,7 @@ test.describe("auth", () => {
   });
 
   test("login with the right password opens home", async ({ page, playwright }) => {
-    const anon = await playwright.request.newContext({ baseURL: "http://localhost:3000" });
+    const anon = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL });
     const { email } = await apiFor(anon).signup();
     await anon.dispose();
 
@@ -231,16 +231,11 @@ test.describe("memos", () => {
     await dialog.getByLabel("Amount").fill("0");
     await dialog.getByRole("button", { name: "Save expense" }).click();
     await expect(dialog.getByText("Amount must be greater than zero")).toBeVisible();
+    // Non-numeric input never reaches the field.
     await dialog.getByLabel("Amount").fill("abc");
+    await expect(dialog.getByLabel("Amount")).toHaveValue("");
     await dialog.getByRole("button", { name: "Save expense" }).click();
-    await expect(dialog.getByText("Enter a number like 12.50")).toBeVisible();
-    // Bad currency code.
-    await dialog.getByLabel("Amount").fill("5");
-    await dialog.getByRole("button", { name: /Currency USD/ }).click();
-    await dialog.getByLabel("Currency code").fill("US");
-    await dialog.getByLabel("Currency code").press("Enter");
-    await dialog.getByRole("button", { name: "Save expense" }).click();
-    await expect(dialog.getByText("Use a 3-letter code like USD")).toBeVisible();
+    await expect(dialog.getByText("Enter an amount")).toBeVisible();
     // Esc closes without saving.
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -352,11 +347,12 @@ test.describe("memos", () => {
     await expect(page.getByTestId("hero-expense")).toHaveText("$15.00");
 
     await switcher.getByRole("radio", { name: "EUR" }).click();
-    await expect(page.getByTestId("hero-expense")).toHaveText("€40.00");
-    await expect(page.getByTestId("hero-income")).toHaveText("€100.00");
-    await expect(page.getByTestId("hero-net")).toHaveText("+€60.00");
+    // Euro amounts read the German way whatever the browser's language.
+    await expect(page.getByTestId("hero-expense")).toHaveText("40,00 €");
+    await expect(page.getByTestId("hero-income")).toHaveText("100,00 €");
+    await expect(page.getByTestId("hero-net")).toHaveText("+60,00 €");
     await expect(page.getByTestId("donut-legend")).toContainText("Uncategorized");
-    await expect(page.getByTestId("donut-legend")).toContainText("€40.00");
+    await expect(page.getByTestId("donut-legend")).toContainText("40,00 €");
 
     await switcher.getByRole("radio", { name: "USD" }).click();
     await expect(page.getByTestId("hero-net")).toHaveText("−$15.00");

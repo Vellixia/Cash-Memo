@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useWatch } from "react-hook-form";
+import { useController, useForm, useWatch, type Control } from "react-hook-form";
 import { z } from "zod";
 import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -23,9 +23,11 @@ import {
 import { Segmented } from "@/components/segmented";
 import { EmojiField } from "@/components/emoji-field";
 import { OfflineHint } from "@/components/offline-hint";
-import { fromMinor, toMinor, type Direction, type Memo } from "@/lib/api";
+import { CurrencyPicker } from "@/components/currency-picker";
+import type { Direction, Memo } from "@/lib/api";
+import { editAmount, exponent, fitAmount, formatAmountInput, fromMinor, toMinor } from "@/lib/money";
 import { toDatetimeLocal } from "@/lib/format";
-import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useUpdateMemo } from "@/lib/queries";
+import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useUpdateMemo } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
@@ -33,21 +35,18 @@ import { cn } from "@/lib/utils";
 const schema = z
   .object({
     direction: z.enum(["expense", "income"]),
+    // Canonical "1234.5" (the field shows it natively grouped); see lib/money.ts editAmount.
     amount: z
       .string()
-      .trim()
       .min(1, "Enter an amount")
-      .regex(/^\d+([.,]\d*)?$|^[.,]\d+$/, "Enter a number like 12.50"),
-    currency: z
-      .string()
-      .trim()
-      .regex(/^[A-Za-z]{3}$/, "Use a 3-letter code like USD"),
+      .regex(/^\d+(\.\d*)?$/, "Enter a number like 12.50"),
+    currency: z.string().regex(/^[A-Z]{3}$/, "Pick a currency"),
     occurred_at: z.string().min(1, "Pick a date and time"),
     category_id: z.string().nullable(),
     note: z.string().max(2000, "Keep notes under 2000 characters"),
   })
   .superRefine((v, ctx) => {
-    if (/^[A-Za-z]{3}$/.test(v.currency) && /\d/.test(v.amount) && toMinor(v.amount.replace(",", "."), v.currency.toUpperCase()) <= 0) {
+    if (/^[A-Z]{3}$/.test(v.currency) && /\d/.test(v.amount) && toMinor(v.amount, v.currency) <= 0) {
       ctx.addIssue({ code: "custom", path: ["amount"], message: "Amount must be greater than zero" });
     }
   });
@@ -112,20 +111,21 @@ function MemoForm({
   amountRef: React.RefObject<HTMLInputElement | null>;
   onDone: () => void;
 }) {
-  const lastCurrency = useUiStore((s) => s.lastCurrency);
-  const setLastCurrency = useUiStore((s) => s.setLastCurrency);
+  const recentCurrencies = useUiStore((s) => s.recentCurrencies);
+  const noteCurrency = useUiStore((s) => s.noteCurrency);
+  const { data: me } = useMe();
   const { data: categories = [] } = useCategories();
   const createMemo = useCreateMemo();
   const updateMemo = useUpdateMemo();
   const deleteMemo = useDeleteMemo();
   const online = useOnline();
-  const [editingCurrency, setEditingCurrency] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const {
     control,
     register,
     handleSubmit,
+    getValues,
     setValue,
     formState: { errors },
   } = useForm<Values>({
@@ -133,17 +133,16 @@ function MemoForm({
     defaultValues: {
       direction: memo?.direction ?? "expense",
       amount: memo ? fromMinor(memo.amount_minor, memo.currency) : "",
-      currency: memo?.currency ?? lastCurrency,
+      currency: memo?.currency ?? me?.default_currency ?? recentCurrencies[0] ?? "USD",
       occurred_at: toDatetimeLocal(memo ? new Date(memo.occurred_at) : new Date()),
       category_id: memo?.category_id ?? null,
       note: memo?.note ?? "",
     },
   });
 
-  const [direction, currency, categoryId, amount] = useWatch({ control, name: ["direction", "currency", "category_id", "amount"] });
+  const [direction, currency, categoryId] = useWatch({ control, name: ["direction", "currency", "category_id"] });
   const choices = categories.filter((c) => c.direction === direction);
   const saving = createMemo.isPending || updateMemo.isPending;
-  const { ref: amountFieldRef, ...amountField } = register("amount");
 
   function setDirection(d: Direction) {
     setValue("direction", d);
@@ -153,10 +152,10 @@ function MemoForm({
 
   async function onSubmit(values: Values) {
     if (!online) return;
-    const cur = values.currency.toUpperCase();
+    const cur = values.currency;
     const body = {
       direction: values.direction,
-      amount_minor: toMinor(values.amount.replace(",", "."), cur),
+      amount_minor: toMinor(values.amount, cur),
       currency: cur,
       occurred_at: new Date(values.occurred_at).toISOString(),
       category_id: values.category_id,
@@ -170,7 +169,7 @@ function MemoForm({
         await createMemo.mutateAsync(body);
         toast.success(values.direction === "income" ? "Income added" : "Expense added");
       }
-      setLastCurrency(cur);
+      noteCurrency(cur);
       onDone();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save memo");
@@ -216,53 +215,19 @@ function MemoForm({
 
         {/* Big amount */}
         <div className="flex flex-col items-center gap-2 py-2">
-          <div className="flex items-baseline justify-center gap-2">
-            {editingCurrency ? (
-              <input
-                aria-label="Currency code"
-                autoFocus
-                maxLength={3}
-                autoComplete="off"
-                className="w-20 rounded-full border border-input bg-card px-2 py-1 text-center text-base font-semibold md:text-sm tracking-wider uppercase outline-none focus:ring-3 focus:ring-ring/40"
-                {...register("currency", {
-                  onBlur: () => setEditingCurrency(false),
-                })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    setEditingCurrency(false);
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditingCurrency(true)}
-                aria-label={`Currency ${currency.toUpperCase()}, change`}
-                className="min-h-8 rounded-full bg-muted px-3 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase transition-colors hover:bg-accent hover:text-foreground"
-              >
-                {currency.toUpperCase() || "—"}
-              </button>
-            )}
-          </div>
-          <input
-            {...amountField}
-            ref={(el) => {
-              amountFieldRef(el);
-              amountRef.current = el;
+          <CurrencyPicker
+            value={currency}
+            defaultCurrency={me?.default_currency}
+            onChange={(c) => {
+              setValue("currency", c);
+              setValue("amount", fitAmount(getValues("amount"), c));
             }}
-            aria-label="Amount"
-            aria-invalid={!!errors.amount}
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0.00"
-            className={cn(
-              // Shrinks as digits pile up so long amounts still fit a 320px-wide sheet.
-              "num w-full min-w-0 bg-transparent text-center leading-none outline-none placeholder:text-muted-foreground/35",
-              amount.length > 9 ? "text-4xl" : amount.length > 6 ? "text-5xl" : "text-6xl",
-              tone,
-            )}
-          />
+            triggerLabel={`Currency ${currency}, change`}
+            triggerClassName="min-h-8 rounded-full bg-muted px-3 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+          >
+            {currency}
+          </CurrencyPicker>
+          <AmountField control={control} currency={currency} invalid={!!errors.amount} inputRef={amountRef} className={tone} />
           <div className="h-5 text-center text-sm" aria-live="polite">
             {errors.amount && <p className="text-destructive">{errors.amount.message}</p>}
             {!errors.amount && errors.currency && <p className="text-destructive">{errors.currency.message}</p>}
@@ -329,6 +294,65 @@ function MemoForm({
         </div>
       </div>
     </form>
+  );
+}
+
+/** The big amount field: shows the canonical form value natively grouped, re-groups as you type and keeps
+ * the caret after the same digit (lib/money.ts editAmount does the work). */
+function AmountField({
+  control,
+  currency,
+  invalid,
+  inputRef,
+  className,
+}: {
+  control: Control<Values>;
+  currency: string;
+  invalid: boolean;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  className?: string;
+}) {
+  const { field } = useController({ control, name: "amount" });
+  const text = formatAmountInput(field.value, currency);
+  const el = useRef<HTMLInputElement | null>(null);
+  const caret = useRef<number | null>(null);
+  // Re-render after every edit, even a rejected one, so the caret is restored.
+  const [edits, bump] = useReducer((n: number) => n + 1, 0);
+
+  useLayoutEffect(() => {
+    const node = el.current;
+    if (caret.current !== null && node && document.activeElement === node) node.setSelectionRange(caret.current, caret.current);
+    caret.current = null;
+  }, [edits]);
+
+  return (
+    <input
+      ref={(node) => {
+        el.current = node;
+        inputRef.current = node;
+        field.ref(node);
+      }}
+      name={field.name}
+      value={text}
+      onBlur={field.onBlur}
+      onChange={(e) => {
+        const next = editAmount(text, e.target.value, e.target.selectionStart, currency, (e.nativeEvent as InputEvent).inputType);
+        caret.current = next.caret;
+        field.onChange(next.value);
+        bump();
+      }}
+      aria-label="Amount"
+      aria-invalid={invalid}
+      inputMode={exponent(currency) ? "decimal" : "numeric"}
+      autoComplete="off"
+      placeholder={formatAmountInput(fromMinor(0, currency), currency)}
+      className={cn(
+        // Shrinks as digits pile up so long amounts still fit a 320px-wide sheet.
+        "num w-full min-w-0 bg-transparent text-center leading-none outline-none placeholder:text-muted-foreground/35",
+        text.length > 11 ? "text-3xl" : text.length > 8 ? "text-4xl" : text.length > 6 ? "text-5xl" : "text-6xl",
+        className,
+      )}
+    />
   );
 }
 

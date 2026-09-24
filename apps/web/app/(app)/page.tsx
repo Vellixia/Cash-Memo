@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
-import { HeroCard, SpendingCard } from "@/components/summary";
+import { CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
-import { useCategories, useMemos, useSummary } from "@/lib/queries";
+import { useCategories, useMe, useMemos, useSummary } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 
 export default function HomePage() {
   const month = useUiStore((s) => s.month);
   const storedCurrency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
-  const lastCurrency = useUiStore((s) => s.lastCurrency);
   const openEditor = useUiStore((s) => s.openEditor);
   const [direction, setDirection] = useState<DirectionFilter>("all");
   const [categoryId, setCategoryId] = useState<string | undefined>();
@@ -19,10 +18,14 @@ export default function HomePage() {
   const { data: summary } = useSummary(month);
   const { data: memos } = useMemos(month, categoryId);
   const { data: categories } = useCategories();
+  const defaultCurrency = useMe().data?.default_currency ?? "USD";
 
-  const currencies = [...new Set(summary?.totals.map((t) => t.currency) ?? [])];
+  // The default currency leads the switcher (and is selected) whenever the month has it.
+  const currencies = [...new Set(summary?.totals.map((t) => t.currency) ?? [])].sort(
+    (a, b) => Number(b === defaultCurrency) - Number(a === defaultCurrency),
+  );
   const currency =
-    [storedCurrency, lastCurrency].find((c): c is string => !!c && currencies.includes(c)) ?? currencies[0] ?? lastCurrency;
+    [storedCurrency, defaultCurrency].find((c): c is string => !!c && currencies.includes(c)) ?? currencies[0] ?? defaultCurrency;
 
   return (
     // Phones/tablets: one column. Desktop: a sticky summary column beside the ledger.
@@ -38,6 +41,7 @@ export default function HomePage() {
           <HeroCard summary={summary} currency={currency} currencies={currencies} onCurrency={setCurrency} />
           <SpendingCard summary={summary} currency={currency} categories={categories ?? []} />
         </div>
+        {summary && currencies.length >= 2 && <CurrenciesCard summary={summary} currencies={currencies} />}
       </aside>
       <Ledger
         memos={memos}

@@ -84,7 +84,7 @@ export async function box(locator: Locator) {
 
 export async function openNewMemo(page: Page, isMobile: boolean) {
   await page.getByRole("button", { name: isMobile ? "Add memo" : "New memo" }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByTestId("memo-editor");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("Amount")).toBeFocused();
   return dialog;

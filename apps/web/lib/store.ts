@@ -9,8 +9,9 @@ type UiState = {
   /** Currency the hero + category breakdown show when a month has several. */
   currency: string | null;
   setCurrency: (currency: string) => void;
-  lastCurrency: string;
-  setLastCurrency: (currency: string) => void;
+  /** Last 5 currencies used on saved memos, newest first (the picker's "Recent"). */
+  recentCurrencies: string[];
+  noteCurrency: (currency: string) => void;
   /** Memo editor (sheet on mobile, dialog on desktop). `editorKey` remounts the form per open. */
   editorOpen: boolean;
   editing: Memo | null;
@@ -19,7 +20,7 @@ type UiState = {
   closeEditor: () => void;
 };
 
-/** Client-only UI state. Only `lastCurrency` is persisted, so new memos default sensibly. */
+/** Client-only UI state. Only `recentCurrencies` is persisted. */
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -27,8 +28,9 @@ export const useUiStore = create<UiState>()(
       setMonth: (month) => set({ month }),
       currency: null,
       setCurrency: (currency) => set({ currency }),
-      lastCurrency: "USD",
-      setLastCurrency: (currency) => set({ lastCurrency: currency }),
+      recentCurrencies: [],
+      noteCurrency: (currency) =>
+        set((s) => ({ recentCurrencies: [currency, ...s.recentCurrencies.filter((c) => c !== currency)].slice(0, 5) })),
       editorOpen: false,
       editing: null,
       editorKey: 0,
@@ -38,7 +40,7 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "cashmemo:ui",
-      partialize: (state) => ({ lastCurrency: state.lastCurrency }),
+      partialize: (state) => ({ recentCurrencies: state.recentCurrencies }),
     },
   ),
 );

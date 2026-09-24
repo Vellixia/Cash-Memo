@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Home, LogOut, Plus, Tags, UserRound } from "lucide-react";
+import { Download, Home, LogOut, Plus, Tags, UserRound } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MemoEditor } from "@/components/memo-editor";
 import { THEMES } from "@/components/theme-select";
@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { useInstall } from "@/lib/install";
 import { useLogout, useMe } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
@@ -111,6 +112,7 @@ function AccountMenu() {
   const { data: me } = useMe();
   const { theme, setTheme } = useTheme();
   const logout = useLogoutAndLeave();
+  const { canInstall, install } = useInstall();
   const initial = me?.email?.[0]?.toUpperCase() ?? "·";
 
   return (
@@ -141,6 +143,11 @@ function AccountMenu() {
           <MenuPrimitive.LinkItem render={<Link href="/account" />} closeOnClick className={menuItem}>
             <UserRound /> Account
           </MenuPrimitive.LinkItem>
+          {canInstall && (
+            <DropdownMenuItem className="px-2 py-1.5" onClick={install}>
+              <Download /> Install app
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

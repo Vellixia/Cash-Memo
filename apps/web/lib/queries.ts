@@ -14,10 +14,12 @@ import {
   logout,
   signup,
   updateCategory,
+  updateMe,
   updateMemo,
   type CategoryInput,
   type MemoInput,
 } from "@/lib/api";
+import { guessCurrency } from "@/lib/money";
 
 type Credentials = { email: string; password: string };
 
@@ -33,7 +35,16 @@ export function useLogin() {
 
 export function useSignup() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: ({ email, password }: Credentials) => signup(email, password), onSuccess: () => qc.clear() });
+  return useMutation({
+    // A first guess from the browser's region; changeable on the Account page.
+    mutationFn: ({ email, password }: Credentials) => signup(email, password, guessCurrency(navigator.language)),
+    onSuccess: () => qc.clear(),
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: updateMe, onSuccess: (user) => qc.setQueryData(["me"], user) });
 }
 
 export function useLogout() {

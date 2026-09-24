@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "bun test lib",
     "test:e2e": "playwright test",
     "screenshots": "SCREENSHOTS=1 playwright test e2e/screenshots.spec.ts"
   },
