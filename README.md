@@ -246,29 +246,77 @@ bun run test:e2e
 ## Roadmap
 
 The order is based on trust first, then less typing, then planning, then assistance. Each step builds on the one before it.
+AI features are **opt-in**: they use your own history first, send only the minimum text to a model, never send account data, never train on it, and every suggestion shows why it was made.
+
+### ✅ v1.0: Foundation (shipped)
+- [x] Rust API (Axum + SeaORM) and Postgres, with migrations run on boot
+- [x] Email/password auth: argon2id, hashed session tokens, same-time login
+- [x] Memos CRUD with soft delete, and month boundaries in local time
+- [x] Emoji categories, a starter set on first run, category/direction rule
+- [x] Monthly summary per currency, category donut, day-grouped ledger with filters
+- [x] Per-currency native formatting, currency picker, default currency
+- [x] "Paper ledger" design with light/dark themes, responsive from 320px to wide desktop
+- [x] PWA: installable, offline reading, update prompt, quiet install entry
+- [x] Landing page, README
+- [x] CI: lint, API tests, Playwright e2e on 4 viewports, GHCR images, Dokploy deploy
 
 ### v1.1: Trust & data ownership
-1. **Password reset + email verification.** Account recovery is the first thing real users need. This needs an email provider (for example Resend) and single-use, expiring tokens.
-2. **CSV export / import.** This backs up the privacy promise: your data is yours, and you can leave or migrate at any time. Imports from a spreadsheet or other apps get a column-mapping preview.
-3. **Ops hardening.** Login rate limiting (the web proxy forwards the client IP), automatic deploys from CI to Dokploy, and scheduled Postgres backups.
+- [ ] **Password reset**
+  - [ ] Choose and configure an email provider (e.g. Resend) + sender domain (SPF/DKIM)
+  - [ ] `password_resets` table: hashed single-use token, 1h expiry
+  - [ ] `POST /auth/password-reset/request` (same response whether or not the email exists)
+  - [ ] `POST /auth/password-reset/complete`, which revokes all other sessions
+  - [ ] "Forgot password?" and reset pages, plus e2e
+- [ ] **Email verification**
+  - [ ] Verify link on sign-up, `email_verified_at` column
+  - [ ] Banner until verified, resend link
+- [ ] **Change password / email** on the Account page (needs the current password)
+- [ ] **CSV export**
+  - [ ] `GET /export.csv`: all memos with category names, ISO dates, decimal amounts and currency
+  - [ ] "Export my data" button on Account
+- [ ] **CSV import**
+  - [ ] Upload, then column-mapping preview (date, amount, currency, direction, category, note)
+  - [ ] Dry-run with a row-level error report, then a single-transaction import
+  - [ ] Creates missing categories and skips duplicates
+- [ ] **Delete my account**: confirm with password, hard-delete all data
+- [ ] **Ops hardening**
+  - [ ] Login/sign-up rate limiting (web proxy forwards the client IP)
+  - [ ] Auto-deploy: CI updates the Dokploy image tag and redeploys after green e2e
+  - [ ] Scheduled Postgres backups (Dokploy backup → S3-compatible storage) and a restore drill
+  - [ ] Error tracking and uptime check
 
 ### v1.2: Less typing, more planning
-4. **Recurring memos.** Rent, salary and subscriptions are logged automatically (weekly/monthly/yearly), with "upcoming" rows in the ledger.
-5. **Budgets per category.** A monthly limit per category with progress bars, and a nudge at 80% and 100%. Recurring memos make budget projections honest, so this comes after them.
+- [ ] **Recurring memos**
+  - [ ] `recurring_rules` table: amount, currency, category, cadence (weekly/monthly/yearly), next date
+  - [ ] Daily job materializes due memos (idempotent) and shows "upcoming" rows in the ledger
+  - [ ] Create from the editor ("Repeat monthly") or from an existing memo; pause, edit, stop
+- [ ] **Budgets per category**
+  - [ ] Monthly limit per category and currency
+  - [ ] Progress bars on the home page, with recurring memos included in the projection
+  - [ ] Nudge at 80% and 100% (in-app; push notifications later)
+- [ ] **Search**: full-text search over notes and categories across months
+- [ ] **Keyboard shortcuts** on desktop (`n` new memo, `←/→` month, `/` search)
 
-### v1.3: Smart assist (AI, opt-in, privacy-first)
-Everything here is off by default. Suggestions run on your own history first, and anything that needs a language model sends only the minimum text, never account data, and is never used for training. Each suggestion shows why it was made.
-
-6. **Category suggestions.** Pick a category from the note as you type ("kopi", "grab", "netflix"). This starts as local frequency matching on your own memos, so no AI call is needed.
-7. **Quick add in plain words.** "lunch 45k yesterday" becomes an expense of Rp 45.000, dated yesterday, in Food. A deterministic parser handles the common shapes, with an optional LLM fallback.
-8. **Pattern detection.** "Looks like a monthly subscription. Make it recurring?", possible duplicates, and unusual spikes.
-9. **Monthly recap.** A short plain-language summary of the month ("Food was 30% higher than August, mostly weekend dining"), generated from aggregated numbers only.
+### v1.3: Smart assist (AI, opt-in)
+- [ ] **Settings**: "Smart suggestions" toggle (off by default) with a plain-language data notice
+- [ ] **Category suggestions**: pick the category from the note as you type, using local frequency matching on your own memos (no AI call)
+- [ ] **Quick add in plain words**
+  - [ ] Deterministic parser: amount + shorthand (`45k`, `1,5jt`), currency, relative dates ("yesterday", "last friday"), category hint
+  - [ ] Optional LLM fallback for free-form text, sending only the typed sentence
+  - [ ] Always a reviewable draft; nothing is saved without confirmation
+- [ ] **Pattern detection**
+  - [ ] "Looks like a monthly subscription. Make it recurring?"
+  - [ ] Possible duplicates (same amount, category and day)
+  - [ ] Unusual spikes against your 3-month average
+- [ ] **Monthly recap**: a short plain-language summary generated from aggregated numbers only (no notes or names)
 
 ### v2: Bigger features
-10. **Insights & reports.** A year view, trends, month-to-month comparison and category history.
-11. **Voice & AI capture.** Say "coffee four fifty". It builds on quick add, and audio is transcribed and discarded.
-12. **Converted totals (optional).** One combined total in your default currency using daily reference rates, with the original amounts always kept.
-13. **Offline editing + sync.** Create and edit memos with no connection, queue the changes, and resolve conflicts when back online.
-14. **Shared spaces.** A household or trip journal with invited members and per-member attribution.
+- [ ] **Insights & reports**: year view, trends, month-to-month comparison, category history
+- [ ] **Voice capture**: speak a memo, which goes into quick add; audio is transcribed and immediately discarded
+- [ ] **Converted totals (optional)**: one combined total in your default currency using daily reference rates, with originals always kept
+- [ ] **Offline editing + sync**: queue changes offline and resolve conflicts on reconnect
+- [ ] **Shared spaces**: a household or trip journal with invites, roles and per-member attribution
+- [ ] **Attachments**: receipt photos (private object storage, stripped EXIF)
+- [ ] **Push notifications**: budget nudges and recurring reminders (opt-in)
 
 Have an idea or a different priority? Open an issue.
