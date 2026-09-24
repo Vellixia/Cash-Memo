@@ -13,7 +13,22 @@ export type Memo = {
 };
 export type Category = { id: string; name: string; direction: Direction };
 export type SummaryTotal = { currency: string; direction: Direction; total_minor: number };
-export type Summary = { month: string; totals: SummaryTotal[] };
+export type CategoryTotal = {
+  category_id: string | null;
+  currency: string;
+  direction: Direction;
+  total_minor: number;
+};
+export type Summary = { month: string; totals: SummaryTotal[]; by_category: CategoryTotal[] };
+
+export type MemoInput = {
+  direction: Direction;
+  amount_minor: number;
+  currency: string;
+  occurred_at: string;
+  category_id?: string | null;
+  note?: string | null;
+};
 
 /** Tiny JSON fetch wrapper. Throws Error with the API's `error` message on failure. */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -51,12 +66,67 @@ export function getSummary(month: string): Promise<Summary> {
   return api<Summary>(`/summary?${params}`);
 }
 
+// --- memos --------------------------------------------------------------
+
+export function getMemo(id: string): Promise<Memo> {
+  return api<Memo>(`/memos/${id}`);
+}
+
+export function createMemo(input: MemoInput): Promise<Memo> {
+  return api<Memo>("/memos", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateMemo(id: string, input: Partial<MemoInput>): Promise<Memo> {
+  return api<Memo>(`/memos/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function deleteMemo(id: string): Promise<void> {
+  return api<void>(`/memos/${id}`, { method: "DELETE" });
+}
+
+// --- categories -----------------------------------------------------------
+
+export function getCategories(): Promise<Category[]> {
+  return api<Category[]>("/categories");
+}
+
+export function createCategory(input: { name: string; direction: Direction }): Promise<Category> {
+  return api<Category>("/categories", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateCategory(id: string, name: string): Promise<Category> {
+  return api<Category>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+}
+
+export function deleteCategory(id: string): Promise<void> {
+  return api<void>(`/categories/${id}`, { method: "DELETE" });
+}
+
+// --- auth -----------------------------------------------------------------
+
+export function getMe(): Promise<User> {
+  return api<User>("/auth/me");
+}
+
+export function login(email: string, password: string): Promise<User> {
+  return api<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+}
+
+export function signup(email: string, password: string): Promise<User> {
+  return api<User>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) });
+}
+
+export function logout(): Promise<void> {
+  return api<void>("/auth/logout", { method: "POST" });
+}
+
 // --- money helpers -----------------------------------------------------
 
 function getExponent(currency: string): number {
   try {
     return (
-      new Intl.NumberFormat(undefined, { style: "currency", currency }).resolvedOptions()
+      // Fixed locale: the minor-unit exponent must not depend on the viewer's browser.
+      new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
         .maximumFractionDigits ?? 2
     );
   } catch {

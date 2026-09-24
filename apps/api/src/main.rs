@@ -24,5 +24,24 @@ async fn main() {
         .await
         .expect("bind");
     tracing::info!("listening on {port}");
-    axum::serve(listener, app(state)).await.expect("serve");
+    axum::serve(listener, app(state))
+        .with_graceful_shutdown(shutdown())
+        .await
+        .expect("serve");
+}
+
+/// Finish in-flight requests on SIGTERM (container stop) or Ctrl-C.
+async fn shutdown() {
+    let ctrl_c = async { tokio::signal::ctrl_c().await.expect("ctrl-c handler") };
+    #[cfg(unix)]
+    let term = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("sigterm handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+    tokio::select! { _ = ctrl_c => {}, _ = term => {} }
+    tracing::info!("shutting down");
 }

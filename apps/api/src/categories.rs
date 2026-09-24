@@ -1,10 +1,7 @@
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    http::StatusCode,
-    routing::{delete, get},
+use axum::{Router, extract::State, http::StatusCode, routing::get};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -12,14 +9,22 @@ use crate::{
     AppState,
     auth::CurrentUser,
     entities::category,
-    error::{AppError, Result},
+    error::{AppError, Json, Path, Result},
     parse_direction,
 };
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/categories", get(list).post(create))
-        .route("/categories/{id}", delete(remove))
+        .route(
+            "/categories/{id}",
+            axum::routing::patch(rename).delete(remove),
+        )
+}
+
+#[derive(Deserialize)]
+struct RenameIn {
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -46,10 +51,7 @@ async fn create(
     CurrentUser(uid): CurrentUser,
     Json(input): Json<CategoryIn>,
 ) -> Result<(StatusCode, Json<category::Model>)> {
-    let name = input.name.trim().to_owned();
-    if name.is_empty() || name.chars().count() > 100 {
-        return Err(AppError::BadRequest("name must be 1-100 characters"));
-    }
+    let name = valid_name(&input.name)?;
     let c = category::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(uid),
@@ -75,4 +77,28 @@ async fn remove(
         return Err(AppError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn rename(
+    State(st): State<AppState>,
+    CurrentUser(uid): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<RenameIn>,
+) -> Result<Json<category::Model>> {
+    let mut c = category::Entity::find_by_id(id)
+        .filter(category::Column::UserId.eq(uid))
+        .one(&st.db)
+        .await?
+        .ok_or(AppError::NotFound)?
+        .into_active_model();
+    c.name = Set(valid_name(&input.name)?);
+    Ok(Json(c.update(&st.db).await?))
+}
+
+fn valid_name(name: &str) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err(AppError::BadRequest("name must be 1-100 characters"));
+    }
+    Ok(name.to_owned())
 }

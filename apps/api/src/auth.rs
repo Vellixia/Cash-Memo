@@ -1,5 +1,5 @@
 use axum::{
-    Json, Router,
+    Router,
     extract::{FromRequestParts, State},
     http::{HeaderMap, StatusCode, header, request::Parts},
     response::{IntoResponse, Response},
@@ -9,16 +9,21 @@ use chrono::{Duration, Utc};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::LazyLock;
 use uuid::Uuid;
 
 use crate::{
     AppState,
     entities::{session, user},
-    error::{AppError, Result},
+    error::{AppError, Json, Result},
 };
 
 const COOKIE: &str = "session";
 const SESSION_DAYS: i64 = 30;
+
+/// Verified against when the email is unknown, so login takes the same time either way.
+static DUMMY_HASH: LazyLock<String> =
+    LazyLock::new(|| password_auth::generate_hash("not-a-real-password"));
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -85,13 +90,15 @@ async fn login(State(st): State<AppState>, Json(c): Json<Credentials>) -> Result
     let u = user::Entity::find()
         .filter(user::Column::Email.eq(c.email.trim().to_lowercase()))
         .one(&st.db)
-        .await?
-        .ok_or(AppError::Unauthorized)?;
-    let hash = u.password_hash.clone();
-    blocking(move || password_auth::verify_password(c.password, &hash))
-        .await?
-        .map_err(|_| AppError::Unauthorized)?;
-    start_session(&st, u).await
+        .await?;
+    let hash = u
+        .as_ref()
+        .map_or_else(|| DUMMY_HASH.clone(), |u| u.password_hash.clone());
+    let ok = blocking(move || password_auth::verify_password(c.password, &hash).is_ok()).await?;
+    match u {
+        Some(u) if ok => start_session(&st, u).await,
+        _ => Err(AppError::Unauthorized),
+    }
 }
 
 async fn logout(State(st): State<AppState>, headers: HeaderMap) -> Result<Response> {
@@ -116,6 +123,11 @@ async fn me(State(st): State<AppState>, CurrentUser(id): CurrentUser) -> Result<
 }
 
 async fn start_session(st: &AppState, u: user::Model) -> Result<Response> {
+    // ponytail: expired sessions are swept on each login; move to a periodic task if the table grows.
+    session::Entity::delete_many()
+        .filter(session::Column::ExpiresAt.lt(Utc::now()))
+        .exec(&st.db)
+        .await?;
     let token: String = rand::random::<[u8; 32]>()
         .iter()
         .map(|b| format!("{b:02x}"))

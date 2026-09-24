@@ -118,6 +118,44 @@ async fn memo_flow() {
         ])
     );
 
+    assert_eq!(
+        sum["by_category"],
+        json!([
+            { "category_id": null, "currency": "IDR", "direction": "income", "total_minor": 5000000 },
+            { "category_id": cat["id"], "currency": "USD", "direction": "expense", "total_minor": 1250 },
+            { "category_id": null, "currency": "USD", "direction": "expense", "total_minor": 750 },
+        ])
+    );
+
+    // An expense category can't be put on an income memo, including by flipping only the direction.
+    let (s, _, _) = call(&app, "POST", "/api/memos", &a, Some(json!({ "direction": "income", "amount_minor": 1, "currency": "USD", "occurred_at": "2026-09-10T12:00:00Z", "category_id": cat["id"] }))).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &format!("/api/memos/{}", ids[0]),
+        &a,
+        Some(json!({ "direction": "income" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // Malformed input gets the same JSON error shape as everything else.
+    let (s, _, err) = call(&app, "GET", "/api/memos?month=2026-09&offset=abc", &a, None).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert!(err["error"].is_string());
+
+    let (s, _, renamed) = call(
+        &app,
+        "PATCH",
+        &format!("/api/categories/{}", cat["id"].as_str().unwrap()),
+        &a,
+        Some(json!({ "name": " Groceries " })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(renamed["name"], "Groceries");
+
     // PATCH: only touched fields change; explicit null clears the category.
     let (s, _, upd) = call(
         &app,

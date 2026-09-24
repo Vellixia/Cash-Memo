@@ -4,7 +4,7 @@ mod entities;
 mod error;
 mod memos;
 
-use axum::{Router, routing::get};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use sea_orm::DatabaseConnection;
 use tower_http::trace::TraceLayer;
 
@@ -16,7 +16,7 @@ pub struct AppState {
 
 pub fn app(state: AppState) -> Router {
     let api = Router::new()
-        .route("/health", get(|| async { "ok" }))
+        .route("/health", get(health))
         .merge(auth::routes())
         .merge(memos::routes())
         .merge(categories::routes());
@@ -24,6 +24,14 @@ pub fn app(state: AppState) -> Router {
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Liveness + database reachability, for the Dokploy healthcheck.
+async fn health(State(st): State<AppState>) -> StatusCode {
+    match st.db.ping().await {
+        Ok(()) => StatusCode::OK,
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 /// Shared by memos and categories.

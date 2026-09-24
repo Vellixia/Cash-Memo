@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/signup"];
+const PUBLIC_FILES = ["/icon.svg", "/apple-icon.png", "/manifest.webmanifest"];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||
+    PUBLIC_FILES.includes(pathname) ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/");
 
@@ -17,5 +19,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest).*)"],
 };

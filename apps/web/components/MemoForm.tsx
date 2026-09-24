@@ -1,26 +1,55 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { api, fromMinor, toMinor, type Category, type Direction, type Memo } from "@/lib/api";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toMinor, fromMinor, type Direction, type Memo } from "@/lib/api";
+import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useUpdateMemo } from "@/lib/queries";
+import { useUiStore } from "@/lib/store";
+import { toast } from "sonner";
 
-const LAST_CURRENCY_KEY = "cashmemo:lastCurrency";
+const NO_CATEGORY = "none";
+const NEW_CATEGORY = "__new__";
 
-function readLastCurrency(): string {
-  try {
-    return localStorage.getItem(LAST_CURRENCY_KEY) ?? "USD";
-  } catch {
-    return "USD";
-  }
-}
-
-function writeLastCurrency(currency: string) {
-  try {
-    localStorage.setItem(LAST_CURRENCY_KEY, currency);
-  } catch {
-    // ignore (private mode, blocked storage, etc.)
-  }
-}
+const memoSchema = z.object({
+  direction: z.enum(["expense", "income"]),
+  amount: z
+    .string()
+    .min(1, "Amount is required")
+    .regex(/^\d+(\.\d+)?$/, "Enter a positive number"),
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/, "3-letter code (e.g. USD)"),
+  occurred_at: z.string().min(1, "Required"),
+  category_id: z.string(),
+  note: z.string().max(2000).optional(),
+});
+type MemoFormValues = z.infer<typeof memoSchema>;
 
 function toDatetimeLocal(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -29,202 +58,245 @@ function toDatetimeLocal(date: Date): string {
   )}:${pad(date.getMinutes())}`;
 }
 
-export default function MemoForm({ memo }: { memo?: Memo }) {
-  const router = useRouter();
+export default function MemoForm({ memo, onSaved }: { memo?: Memo; onSaved?: () => void }) {
   const isEdit = !!memo;
+  const lastCurrency = useUiStore((s) => s.lastCurrency);
+  const setLastCurrency = useUiStore((s) => s.setLastCurrency);
+  const { data: categories = [] } = useCategories();
+  const createMemo = useCreateMemo();
+  const updateMemo = useUpdateMemo();
+  const deleteMemo = useDeleteMemo();
+  const createCategory = useCreateCategory();
 
-  const [direction, setDirection] = useState<Direction>(memo?.direction ?? "expense");
-  const [amount, setAmount] = useState(memo ? fromMinor(memo.amount_minor, memo.currency) : "");
-  const [currency, setCurrency] = useState(() => memo?.currency ?? readLastCurrency());
-  const [occurredAt, setOccurredAt] = useState(
-    memo ? toDatetimeLocal(new Date(memo.occurred_at)) : toDatetimeLocal(new Date()),
-  );
-  const [categoryId, setCategoryId] = useState(memo?.category_id ?? "");
-  const [note, setNote] = useState(memo?.note ?? "");
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
-  useEffect(() => {
-    api<Category[]>("/categories")
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
+  const {
+    control,
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<MemoFormValues>({
+    resolver: zodResolver(memoSchema),
+    defaultValues: {
+      direction: memo?.direction ?? "expense",
+      amount: memo ? fromMinor(memo.amount_minor, memo.currency) : "",
+      currency: memo?.currency ?? lastCurrency,
+      occurred_at: memo ? toDatetimeLocal(new Date(memo.occurred_at)) : toDatetimeLocal(new Date()),
+      category_id: memo?.category_id ?? NO_CATEGORY,
+      note: memo?.note ?? "",
+    },
+  });
 
+  const direction = watch("direction");
   const filteredCategories = categories.filter((c) => c.direction === direction);
+  const saving = createMemo.isPending || updateMemo.isPending || deleteMemo.isPending;
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  async function onSubmit(values: MemoFormValues) {
+    const currency = values.currency.toUpperCase();
+    const body = {
+      direction: values.direction as Direction,
+      amount_minor: toMinor(values.amount, currency),
+      currency,
+      occurred_at: new Date(values.occurred_at).toISOString(),
+      category_id: values.category_id === NO_CATEGORY ? null : values.category_id,
+      note: values.note?.trim() ? values.note.trim() : null,
+    };
 
-    const normalizedCurrency = currency.trim().toUpperCase();
-    if (!/^[A-Z]{3}$/.test(normalizedCurrency)) {
-      setError("Currency must be 3 letters (e.g. USD)");
-      return;
-    }
-
-    setSaving(true);
     try {
-      const body = {
-        direction,
-        amount_minor: toMinor(amount, normalizedCurrency),
-        currency: normalizedCurrency,
-        occurred_at: new Date(occurredAt).toISOString(),
-        category_id: categoryId || null,
-        note: note || null,
-      };
-
       if (isEdit) {
-        await api<Memo>(`/memos/${memo.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        await updateMemo.mutateAsync({ id: memo.id, input: body });
+        toast.success("Memo updated");
       } else {
-        await api<Memo>("/memos", { method: "POST", body: JSON.stringify(body) });
+        await createMemo.mutateAsync(body);
+        toast.success("Memo added");
       }
-      writeLastCurrency(normalizedCurrency);
-      router.push("/");
+      setLastCurrency(currency);
+      onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save memo");
-    } finally {
-      setSaving(false);
+      toast.error(err instanceof Error ? err.message : "Could not save memo");
     }
   }
 
   async function onDelete() {
     if (!memo) return;
-    if (!confirm("Delete this memo?")) return;
-    setSaving(true);
-    setError(null);
     try {
-      await api(`/memos/${memo.id}`, { method: "DELETE" });
-      router.push("/");
+      await deleteMemo.mutateAsync(memo.id);
+      toast.success("Memo deleted");
+      onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete memo");
-      setSaving(false);
+      toast.error(err instanceof Error ? err.message : "Could not delete memo");
+    }
+  }
+
+  async function onCreateCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    try {
+      const category = await createCategory.mutateAsync({ name, direction });
+      setValue("category_id", category.id);
+      setNewCategoryName("");
+      setCreatingCategory(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add category");
     }
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-md space-y-4 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-      <h1 className="text-xl font-semibold">{isEdit ? "Edit memo" : "New memo"}</h1>
-
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-      <fieldset className="flex gap-2">
-        <legend className="mb-1 block text-sm font-medium">Direction</legend>
-        {(["expense", "income"] as const).map((d) => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => setDirection(d)}
-            className={`flex-1 rounded border px-3 py-2 capitalize ${
-              direction === d
-                ? d === "income"
-                  ? "border-green-600 bg-green-50 text-green-700"
-                  : "border-red-600 bg-red-50 text-red-700"
-                : "border-zinc-300 text-zinc-600"
-            }`}
-          >
-            {d}
-          </button>
-        ))}
-      </fieldset>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="amount" className="mb-1 block text-sm font-medium">
-            Amount
-          </label>
-          <input
-            id="amount"
-            type="text"
-            inputMode="decimal"
-            required
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded border border-zinc-300 px-3 py-2 focus:border-zinc-500 focus:outline-none"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="currency" className="mb-1 block text-sm font-medium">
-            Currency
-          </label>
-          <input
-            id="currency"
-            type="text"
-            required
-            maxLength={3}
-            placeholder="USD"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-            className="w-full rounded border border-zinc-300 px-3 py-2 uppercase focus:border-zinc-500 focus:outline-none"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="occurred_at" className="mb-1 block text-sm font-medium">
-          Date &amp; time
-        </label>
-        <input
-          id="occurred_at"
-          type="datetime-local"
-          required
-          value={occurredAt}
-          onChange={(e) => setOccurredAt(e.target.value)}
-          className="w-full rounded border border-zinc-300 px-3 py-2 focus:border-zinc-500 focus:outline-none"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="category" className="mb-1 block text-sm font-medium">
-          Category
-        </label>
-        <select
-          id="category"
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          className="w-full rounded border border-zinc-300 px-3 py-2 focus:border-zinc-500 focus:outline-none"
-        >
-          <option value="">No category</option>
-          {filteredCategories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <Field>
+        <FieldLabel>Direction</FieldLabel>
+        <div className="flex gap-2">
+          {(["expense", "income"] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setValue("direction", d)}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium capitalize transition-colors ${
+                direction === d
+                  ? d === "income"
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+                    : "border-rose-600 bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-400"
+                  : "border-input text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {d}
+            </button>
           ))}
-        </select>
+        </div>
+      </Field>
+
+      <div className="grid grid-cols-[1fr_5rem] gap-3">
+        <Field data-invalid={!!errors.amount}>
+          <FieldLabel htmlFor="amount">Amount</FieldLabel>
+          <div className="flex items-center rounded-lg border border-input bg-transparent pl-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+            <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+              {watch("currency")?.toUpperCase() || "USD"}
+            </span>
+            <Input
+              id="amount"
+              inputMode="decimal"
+              placeholder="0.00"
+              className="border-0 text-lg tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent"
+              {...register("amount")}
+            />
+          </div>
+          <FieldError errors={[errors.amount]} />
+        </Field>
+
+        <Field data-invalid={!!errors.currency}>
+          <FieldLabel htmlFor="currency">Currency</FieldLabel>
+          <Input id="currency" maxLength={3} className="uppercase" {...register("currency")} />
+          <FieldError errors={[errors.currency]} />
+        </Field>
       </div>
 
-      <div>
-        <label htmlFor="note" className="mb-1 block text-sm font-medium">
-          Note
-        </label>
+      <Field data-invalid={!!errors.occurred_at}>
+        <FieldLabel htmlFor="occurred_at">Date &amp; time</FieldLabel>
+        <Input id="occurred_at" type="datetime-local" {...register("occurred_at")} />
+        <FieldError errors={[errors.occurred_at]} />
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="category">Category</FieldLabel>
+        <Controller
+          control={control}
+          name="category_id"
+          render={({ field }) => (
+            <Select
+              value={field.value}
+              items={{
+                [NO_CATEGORY]: "No category",
+                ...Object.fromEntries(filteredCategories.map((c) => [c.id, c.name])),
+              }}
+              onValueChange={(value) => {
+                if (value === NEW_CATEGORY) {
+                  setCreatingCategory(true);
+                  return;
+                }
+                field.onChange(value);
+              }}
+            >
+              <SelectTrigger id="category" className="w-full">
+                <SelectValue placeholder="No category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CATEGORY}>No category</SelectItem>
+                {filteredCategories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NEW_CATEGORY}>
+                  <Plus className="size-3.5" /> New category
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+        {creatingCategory && (
+          <div className="flex gap-2">
+            <Input
+              autoFocus
+              placeholder={`New ${direction} category`}
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  onCreateCategory();
+                }
+              }}
+            />
+            <Button type="button" size="sm" onClick={onCreateCategory} disabled={createCategory.isPending}>
+              Add
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setCreatingCategory(false)}>
+              Cancel
+            </Button>
+          </div>
+        )}
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="note">Note</FieldLabel>
         <textarea
           id="note"
           rows={3}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          className="w-full rounded border border-zinc-300 px-3 py-2 focus:border-zinc-500 focus:outline-none"
+          placeholder="Optional"
+          className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
+          {...register("note")}
         />
-      </div>
+      </Field>
 
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="flex-1 rounded bg-zinc-900 px-3 py-2 text-white hover:bg-zinc-700 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save"}
-        </button>
+      <div className="flex gap-2 pt-1">
+        <Button type="submit" disabled={saving} className="flex-1">
+          {saving && <Loader2 className="animate-spin" />}
+          {isEdit ? "Save changes" : "Add memo"}
+        </Button>
         {isEdit && (
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={saving}
-            className="rounded border border-red-300 px-3 py-2 text-red-700 hover:bg-red-50 disabled:opacity-50"
-          >
-            Delete
-          </button>
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={
+                <Button type="button" variant="destructive" disabled={saving}>
+                  <Trash2 />
+                  Delete
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this memo?</AlertDialogTitle>
+                <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
     </form>

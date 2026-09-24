@@ -1,9 +1,4 @@
-use axum::{
-    Json, Router,
-    extract::{Path, Query, State},
-    http::StatusCode,
-    routing::get,
-};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, FixedOffset, Months, NaiveDate, Utc};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, FromQueryResult, IntoActiveModel,
@@ -16,7 +11,7 @@ use crate::{
     AppState,
     auth::CurrentUser,
     entities::{category, memo},
-    error::{AppError, Result},
+    error::{AppError, Json, Path, Query, Result},
     parse_direction,
 };
 
@@ -144,10 +139,19 @@ struct Total {
     total_minor: i64,
 }
 
+#[derive(Serialize, FromQueryResult)]
+struct CategoryTotal {
+    category_id: Option<Uuid>,
+    currency: String,
+    direction: String,
+    total_minor: i64,
+}
+
 #[derive(Serialize)]
 struct Summary {
     month: String,
     totals: Vec<Total>,
+    by_category: Vec<CategoryTotal>,
 }
 
 async fn summary(
@@ -156,19 +160,31 @@ async fn summary(
     Query(q): Query<MonthQuery>,
 ) -> Result<Json<Summary>> {
     let (start, end) = month_range(&q.month, q.offset)?;
-    let stmt = Statement::from_sql_and_values(
-        DbBackend::Postgres,
-        "SELECT currency::text AS currency, direction, SUM(amount_minor)::bigint AS total_minor
-         FROM memos
-         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3
-         GROUP BY currency, direction
-         ORDER BY currency, direction",
-        [uid.into(), start.into(), end.into()],
-    );
-    let totals = Total::find_by_statement(stmt).all(&st.db).await?;
+    let scope = "FROM memos
+         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3";
+    let stmt = |sql: String| {
+        Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            [uid.into(), start.into(), end.into()],
+        )
+    };
+    let totals = Total::find_by_statement(stmt(format!(
+        "SELECT currency::text AS currency, direction, SUM(amount_minor)::bigint AS total_minor {scope}
+         GROUP BY currency, direction ORDER BY currency, direction"
+    )))
+    .all(&st.db)
+    .await?;
+    let by_category = CategoryTotal::find_by_statement(stmt(format!(
+        "SELECT category_id, currency::text AS currency, direction, SUM(amount_minor)::bigint AS total_minor {scope}
+         GROUP BY category_id, currency, direction ORDER BY total_minor DESC, currency"
+    )))
+    .all(&st.db)
+    .await?;
     Ok(Json(Summary {
         month: q.month,
         totals,
+        by_category,
     }))
 }
 
@@ -203,17 +219,23 @@ async fn apply(st: &AppState, uid: Uuid, m: &mut memo::ActiveModel, input: MemoI
         m.occurred_at = Set(t);
     }
     if let Some(cat) = input.category_id {
-        if let Some(cid) = cat {
-            category::Entity::find_by_id(cid)
-                .filter(category::Column::UserId.eq(uid))
-                .one(&st.db)
-                .await?
-                .ok_or(AppError::BadRequest("unknown category"))?;
-        }
         m.category_id = Set(cat);
     }
     if let Some(note) = input.note {
         m.note = Set(note.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty()));
+    }
+    // Checked on the final state, so changing only the direction can't orphan the category.
+    if let Some(cid) = *m.category_id.as_ref() {
+        let c = category::Entity::find_by_id(cid)
+            .filter(category::Column::UserId.eq(uid))
+            .one(&st.db)
+            .await?
+            .ok_or(AppError::BadRequest("unknown category"))?;
+        if &c.direction != m.direction.as_ref() {
+            return Err(AppError::BadRequest(
+                "category direction does not match memo direction",
+            ));
+        }
     }
     Ok(())
 }

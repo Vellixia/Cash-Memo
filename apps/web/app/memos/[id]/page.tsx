@@ -1,26 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { AppHeader } from "@/components/app-header";
 import MemoForm from "@/components/MemoForm";
-import { api, type Memo } from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useMemo_ } from "@/lib/queries";
 
 export default function EditMemoPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
-  const [memo, setMemo] = useState<Memo | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<Memo>(`/memos/${params.id}`)
-      .then(setMemo)
-      .catch((err) => setError(err instanceof Error ? err.message : "Could not load memo"));
-  }, [params.id]);
+  const { data: memo, isLoading, error } = useMemo_(params.id);
 
   return (
-    <main className="flex flex-1 items-start justify-center p-4 pt-10">
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {!error && !memo && <p className="text-zinc-500">Loading...</p>}
-      {memo && <MemoForm memo={memo} />}
-    </main>
+    <>
+      <AppHeader />
+      <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit memo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading && <Skeleton className="h-64" />}
+            {error && <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Could not load memo"}</p>}
+            {memo && <MemoForm memo={memo} onSaved={() => router.push("/")} />}
+          </CardContent>
+        </Card>
+      </main>
+    </>
   );
 }
