@@ -48,6 +48,7 @@ pub mod category {
         pub user_id: Uuid,
         pub name: String,
         pub direction: String,
+        pub emoji: Option<String>,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -12,7 +12,11 @@ async fn main() {
         .init();
 
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
-    let db = sea_orm::Database::connect(&url).await.expect("connect db");
+    let mut opts = sea_orm::ConnectOptions::new(url);
+    opts.max_connections(20)
+        .min_connections(2)
+        .sqlx_logging(false);
+    let db = sea_orm::Database::connect(opts).await.expect("connect db");
     Migrator::up(&db, None).await.expect("run migrations");
 
     let state = AppState {

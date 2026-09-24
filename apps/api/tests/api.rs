@@ -150,11 +150,25 @@ async fn memo_flow() {
         "PATCH",
         &format!("/api/categories/{}", cat["id"].as_str().unwrap()),
         &a,
-        Some(json!({ "name": " Groceries " })),
+        Some(json!({ "name": " Groceries ", "emoji": "🛒" })),
     )
     .await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(renamed["name"], "Groceries");
+    assert_eq!(renamed["emoji"], "🛒");
+    // emoji-only PATCH keeps the name; null clears the emoji
+    let (_, _, cleared) = call(
+        &app,
+        "PATCH",
+        &format!("/api/categories/{}", cat["id"].as_str().unwrap()),
+        &a,
+        Some(json!({ "emoji": null })),
+    )
+    .await;
+    assert_eq!(
+        (cleared["name"].clone(), cleared["emoji"].clone()),
+        (json!("Groceries"), Value::Null)
+    );
 
     // PATCH: only touched fields change; explicit null clears the category.
     let (s, _, upd) = call(

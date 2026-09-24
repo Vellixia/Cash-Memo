@@ -3,6 +3,8 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set,
 };
 use serde::Deserialize;
+
+use crate::memos::present;
 use uuid::Uuid;
 
 use crate::{
@@ -18,19 +20,22 @@ pub fn routes() -> Router<AppState> {
         .route("/categories", get(list).post(create))
         .route(
             "/categories/{id}",
-            axum::routing::patch(rename).delete(remove),
+            axum::routing::patch(update).delete(remove),
         )
 }
 
 #[derive(Deserialize)]
-struct RenameIn {
-    name: String,
+struct UpdateIn {
+    name: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    emoji: Option<Option<String>>,
 }
 
 #[derive(Deserialize)]
 struct CategoryIn {
     name: String,
     direction: String,
+    emoji: Option<String>,
 }
 
 async fn list(
@@ -57,6 +62,7 @@ async fn create(
         user_id: Set(uid),
         name: Set(name),
         direction: Set(parse_direction(&input.direction)?),
+        emoji: Set(valid_emoji(input.emoji)?),
     }
     .insert(&st.db)
     .await?;
@@ -79,11 +85,11 @@ async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn rename(
+async fn update(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Path(id): Path<Uuid>,
-    Json(input): Json<RenameIn>,
+    Json(input): Json<UpdateIn>,
 ) -> Result<Json<category::Model>> {
     let mut c = category::Entity::find_by_id(id)
         .filter(category::Column::UserId.eq(uid))
@@ -91,7 +97,12 @@ async fn rename(
         .await?
         .ok_or(AppError::NotFound)?
         .into_active_model();
-    c.name = Set(valid_name(&input.name)?);
+    if let Some(name) = input.name {
+        c.name = Set(valid_name(&name)?);
+    }
+    if let Some(emoji) = input.emoji {
+        c.emoji = Set(valid_emoji(emoji)?);
+    }
     Ok(Json(c.update(&st.db).await?))
 }
 
@@ -101,4 +112,13 @@ fn valid_name(name: &str) -> Result<String> {
         return Err(AppError::BadRequest("name must be 1-100 characters"));
     }
     Ok(name.to_owned())
+}
+
+/// Blank means "no emoji"; otherwise a short string (one emoji can be several code points).
+fn valid_emoji(emoji: Option<String>) -> Result<Option<String>> {
+    match emoji.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(e) if e.chars().count() <= 8 => Ok(Some(e.to_owned())),
+        Some(_) => Err(AppError::BadRequest("emoji must be at most 8 characters")),
+    }
 }

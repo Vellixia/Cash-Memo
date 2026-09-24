@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCategory,
   createMemo,
@@ -8,7 +8,6 @@ import {
   deleteMemo,
   getCategories,
   getMe,
-  getMemo,
   getMemos,
   getSummary,
   login,
@@ -16,40 +15,37 @@ import {
   signup,
   updateCategory,
   updateMemo,
-  type Direction,
+  type CategoryInput,
   type MemoInput,
 } from "@/lib/api";
+
+type Credentials = { email: string; password: string };
 
 export function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: getMe, retry: false });
 }
 
+/** Login/signup start a fresh session: drop anything cached from a previous user. */
 export function useLogin() {
-  return useMutation({ mutationFn: ({ email, password }: { email: string; password: string }) => login(email, password) });
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ email, password }: Credentials) => login(email, password), onSuccess: () => qc.clear() });
 }
 
 export function useSignup() {
-  return useMutation({ mutationFn: ({ email, password }: { email: string; password: string }) => signup(email, password) });
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ email, password }: Credentials) => signup(email, password), onSuccess: () => qc.clear() });
 }
 
 export function useLogout() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: logout,
-    onSuccess: () => qc.clear(),
-  });
+  return useMutation({ mutationFn: logout });
 }
 
 export function useMemos(month: string, categoryId?: string) {
-  return useQuery({ queryKey: ["memos", month, categoryId ?? null], queryFn: () => getMemos(month, categoryId) });
-}
-
-export function useMemo_(id: string | undefined) {
-  return useQuery({ queryKey: ["memo", id], queryFn: () => getMemo(id as string), enabled: !!id });
+  return useQuery({ queryKey: ["memos", month, categoryId ?? null], queryFn: () => getMemos(month, categoryId), placeholderData: keepPreviousData });
 }
 
 export function useSummary(month: string) {
-  return useQuery({ queryKey: ["summary", month], queryFn: () => getSummary(month) });
+  return useQuery({ queryKey: ["summary", month], queryFn: () => getSummary(month), placeholderData: keepPreviousData });
 }
 
 function useInvalidateMoney() {
@@ -62,10 +58,7 @@ function useInvalidateMoney() {
 
 export function useCreateMemo() {
   const invalidate = useInvalidateMoney();
-  return useMutation({
-    mutationFn: (input: MemoInput) => createMemo(input),
-    onSuccess: invalidate,
-  });
+  return useMutation({ mutationFn: (input: MemoInput) => createMemo(input), onSuccess: invalidate });
 }
 
 export function useUpdateMemo() {
@@ -78,10 +71,7 @@ export function useUpdateMemo() {
 
 export function useDeleteMemo() {
   const invalidate = useInvalidateMoney();
-  return useMutation({
-    mutationFn: (id: string) => deleteMemo(id),
-    onSuccess: invalidate,
-  });
+  return useMutation({ mutationFn: (id: string) => deleteMemo(id), onSuccess: invalidate });
 }
 
 export function useCategories() {
@@ -91,15 +81,36 @@ export function useCategories() {
 export function useCreateCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; direction: Direction }) => createCategory(input),
+    mutationFn: (input: CategoryInput) => createCategory(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+  });
+}
+
+export const STARTER_CATEGORIES: CategoryInput[] = [
+  { name: "Food", emoji: "🍜", direction: "expense" },
+  { name: "Transport", emoji: "🚌", direction: "expense" },
+  { name: "Shopping", emoji: "🛍️", direction: "expense" },
+  { name: "Bills", emoji: "🧾", direction: "expense" },
+  { name: "Fun", emoji: "🎉", direction: "expense" },
+  { name: "Salary", emoji: "💼", direction: "income" },
+  { name: "Other income", emoji: "💰", direction: "income" },
+];
+
+/** Sequential so the categories keep a stable creation order. */
+export function useAddStarterSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      for (const c of STARTER_CATEGORIES) await createCategory(c);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["categories"] }),
   });
 }
 
 export function useUpdateCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => updateCategory(id, name),
+    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; emoji?: string | null } }) => updateCategory(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
   });
 }

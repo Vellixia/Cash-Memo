@@ -28,7 +28,8 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     resHeaders.append("set-cookie", setCookie);
   }
 
-  const body = await upstream.arrayBuffer();
+  // 204/304 must not carry a body: `new Response(emptyBuffer, { status: 204 })` throws.
+  const body = [204, 304].includes(upstream.status) ? null : await upstream.arrayBuffer();
   return new NextResponse(body, { status: upstream.status, headers: resHeaders });
 }
 

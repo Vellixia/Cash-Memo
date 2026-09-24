@@ -44,7 +44,7 @@ struct MemoIn {
 }
 
 /// Distinguishes `"field": null` (Some(None)) from a missing field (None) in PATCH bodies.
-fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+pub(crate) fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     d: D,
 ) -> std::result::Result<Option<Option<T>>, D::Error> {
     Option::deserialize(d).map(Some)

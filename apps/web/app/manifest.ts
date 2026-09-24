@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Your private money journal",
     start_url: "/",
     display: "standalone",
-    background_color: "#fafafa",
-    theme_color: "#10b981",
+    background_color: "#faf8f4",
+    theme_color: "#1f7a5c",
     icons: [
       { src: "/icon.svg", type: "image/svg+xml", sizes: "any" },
       { src: "/apple-icon.png", type: "image/png", sizes: "180x180" },

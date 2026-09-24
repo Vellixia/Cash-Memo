@@ -11,7 +11,7 @@ export type Memo = {
   created_at: string;
   updated_at: string;
 };
-export type Category = { id: string; name: string; direction: Direction };
+export type Category = { id: string; name: string; direction: Direction; emoji: string | null };
 export type SummaryTotal = { currency: string; direction: Direction; total_minor: number };
 export type CategoryTotal = {
   category_id: string | null;
@@ -37,8 +37,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
 
-  if (res.status === 401) {
-    if (typeof window !== "undefined") window.location.href = "/login";
+  // A 401 from login/signup means bad credentials: let the form show it instead of redirecting.
+  if (res.status === 401 && !path.startsWith("/auth/login") && !path.startsWith("/auth/signup")) {
+    if (typeof window !== "undefined") window.location.replace("/login");
     throw new Error("Not logged in");
   }
   if (res.status === 204) return undefined as T;
@@ -90,12 +91,15 @@ export function getCategories(): Promise<Category[]> {
   return api<Category[]>("/categories");
 }
 
-export function createCategory(input: { name: string; direction: Direction }): Promise<Category> {
+export type CategoryInput = { name: string; direction: Direction; emoji?: string | null };
+
+export function createCategory(input: CategoryInput): Promise<Category> {
   return api<Category>("/categories", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateCategory(id: string, name: string): Promise<Category> {
-  return api<Category>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+/** PATCH is partial; `emoji: null` clears it. */
+export function updateCategory(id: string, patch: { name?: string; emoji?: string | null }): Promise<Category> {
+  return api<Category>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
 export function deleteCategory(id: string): Promise<void> {
