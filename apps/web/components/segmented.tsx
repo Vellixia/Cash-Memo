@@ -59,7 +59,8 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cn(
               "inline-flex flex-1 items-center justify-center gap-1.5 rounded-full font-medium whitespace-nowrap transition-[background-color,color,box-shadow] outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-              size === "sm" ? "h-7 px-3 text-xs" : "h-9 px-4 text-sm",
+              // Coarse pointers (touch) get taller pills; with the track padding that's a ≥44px target.
+              size === "sm" ? "h-7 px-3 text-xs pointer-coarse:h-9 pointer-coarse:text-sm" : "h-9 px-4 text-sm pointer-coarse:h-10",
               active ? ACTIVE_TONE[o.tone ?? "neutral"] : "text-muted-foreground hover:text-foreground",
             )}
           >

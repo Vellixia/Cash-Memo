@@ -39,6 +39,8 @@ for (const scheme of ["light", "dark"] as const) {
 
     await gotoHome(page);
     await expect(page.getByTestId("memo-row")).toHaveCount(7);
+    // Categories load separately; without them the legend briefly reads "Uncategorized".
+    await expect(page.getByTestId("donut-legend")).toContainText("Bills");
     await shot("home");
 
     const dialog = await openNewMemo(page, isMobile);

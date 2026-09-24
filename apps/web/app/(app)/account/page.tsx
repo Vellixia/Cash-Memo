@@ -15,7 +15,7 @@ export default function AccountPage() {
   const logout = useLogoutAndLeave();
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-xl space-y-6">
       <h1 className="font-serif text-3xl tracking-tight md:text-4xl">Account</h1>
 
       <section className={cn(card, "flex items-center gap-4 p-5")} aria-label="Profile">

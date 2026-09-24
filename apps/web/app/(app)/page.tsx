@@ -25,11 +25,20 @@ export default function HomePage() {
     [storedCurrency, lastCurrency].find((c): c is string => !!c && currencies.includes(c)) ?? currencies[0] ?? lastCurrency;
 
   return (
-    <div className="space-y-5 md:space-y-6">
-      <MonthSwitcher />
-      {categories?.length === 0 && <StarterCard />}
-      <HeroCard summary={summary} currency={currency} currencies={currencies} onCurrency={setCurrency} />
-      <SpendingCard summary={summary} currency={currency} categories={categories ?? []} />
+    // Phones/tablets: one column. Desktop: a sticky summary column beside the ledger.
+    <div className="flex flex-col gap-3.5 sm:gap-5 lg:grid lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start lg:gap-10">
+      <aside
+        data-testid="summary-column"
+        aria-label="Month summary"
+        className="flex flex-col gap-3.5 sm:gap-5 lg:sticky lg:top-[calc(var(--stick,0px)+6rem)] lg:max-h-[calc(100dvh-var(--stick,0px)-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:px-1 lg:pb-2 lg:-mx-1"
+      >
+        <MonthSwitcher />
+        {categories?.length === 0 && <StarterCard />}
+        <div className="grid gap-3.5 sm:gap-5 md:grid-cols-2 lg:grid-cols-1">
+          <HeroCard summary={summary} currency={currency} currencies={currencies} onCurrency={setCurrency} />
+          <SpendingCard summary={summary} currency={currency} categories={categories ?? []} />
+        </div>
+      </aside>
       <Ledger
         memos={memos}
         categories={categories ?? []}

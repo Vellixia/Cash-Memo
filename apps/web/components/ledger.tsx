@@ -10,6 +10,7 @@ import { card } from "@/components/summary";
 import type { Category, Direction, Memo } from "@/lib/api";
 import { dayLabel, groupByDay, signedAmount, signedMoney, timeLabel } from "@/lib/format";
 import { STARTER_CATEGORIES, useAddStarterSet } from "@/lib/queries";
+import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
 
 export type DirectionFilter = "all" | Direction;
@@ -41,14 +42,16 @@ export function Ledger({
 
   return (
     <section aria-labelledby="ledger-title" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <h2 id="ledger-title" className="font-serif text-xl">
           Ledger
         </h2>
-        <div className="flex max-w-full flex-wrap items-center gap-2">
+        {/* One row that scrolls sideways on narrow screens instead of wrapping. */}
+        <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
           <Segmented
             size="sm"
             label="Filter by direction"
+            className="shrink-0 snap-start"
             value={direction}
             onChange={onDirection}
             options={[
@@ -62,7 +65,11 @@ export function Ledger({
             onValueChange={(v) => onCategory(!v || v === ALL ? undefined : (v as string))}
             items={{ [ALL]: "All categories", ...Object.fromEntries(categories.map((c) => [c.id, `${c.emoji ? c.emoji + " " : ""}${c.name}`])) }}
           >
-            <SelectTrigger size="sm" aria-label="Filter by category" className="h-9 max-w-44 rounded-full bg-card px-3">
+            <SelectTrigger
+              size="sm"
+              aria-label="Filter by category"
+              className="max-w-52 shrink-0 snap-start rounded-full bg-card px-3 data-[size=sm]:h-9 data-[size=sm]:rounded-full pointer-coarse:data-[size=sm]:h-11"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false} align="end" className="rounded-xl p-1">
@@ -101,10 +108,11 @@ export function Ledger({
           onAdd={onAdd}
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-3">
           {groupByDay(shown).map((g) => (
             <div key={g.key}>
-              <div className="flex items-baseline justify-between px-1 pb-2">
+              {/* Sticks under the top bar while its day scrolls by. */}
+              <div className="sticky top-[calc(var(--stick,0px)+3.5rem)] z-10 -mx-1 flex items-baseline justify-between gap-3 bg-background/90 px-2 pt-2 pb-2 backdrop-blur-sm md:top-[calc(var(--stick,0px)+4rem)]">
                 <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{dayLabel(g.key)}</h3>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {Object.entries(g.net)
@@ -123,7 +131,7 @@ export function Ledger({
                         type="button"
                         data-testid="memo-row"
                         onClick={() => onSelect(m)}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/60"
+                        className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/60"
                       >
                         <span
                           className={cn(
@@ -192,6 +200,7 @@ function ReceiptArt() {
 /** First run: a user with no categories gets a one-click starter set. */
 export function StarterCard() {
   const addStarter = useAddStarterSet();
+  const online = useOnline();
   return (
     <section className={cn(card, "overflow-hidden border-income/25 bg-income-soft/50 p-5 md:p-6")} aria-labelledby="starter-title">
       <div className="flex items-start gap-3">
@@ -214,7 +223,7 @@ export function StarterCard() {
       </div>
       <Button
         className="mt-5 h-10 rounded-full px-5"
-        disabled={addStarter.isPending}
+        disabled={addStarter.isPending || !online}
         onClick={() =>
           addStarter.mutate(undefined, {
             onSuccess: () => toast.success("Starter categories added"),

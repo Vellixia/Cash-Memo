@@ -19,11 +19,13 @@ export function EmojiField({
   onChange,
   label = "Choose emoji",
   className,
+  disabled,
 }: {
   value: string | null;
   onChange: (emoji: string | null) => void;
   label?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
@@ -38,8 +40,9 @@ export function EmojiField({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label={label}
+        disabled={disabled}
         className={cn(
-          "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-input bg-card text-lg transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40",
+          "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-input bg-card text-lg transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50",
           className,
         )}
       >

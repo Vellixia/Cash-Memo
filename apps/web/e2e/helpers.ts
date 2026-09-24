@@ -1,4 +1,4 @@
-import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test as base, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 export const PASSWORD = "correct-horse-9";
 
@@ -37,7 +37,10 @@ export const test = base.extend<{
   user: { email: string };
   api: ReturnType<typeof apiFor>;
   allowConsole: (pattern: RegExp) => void;
+  /** Bottom-tab layout (viewport < 768). From 768 up the top bar takes over. */
   isMobile: boolean;
+  /** Two-column desktop dashboard (viewport >= 1024). */
+  isWide: boolean;
 }>({
   allowConsole: [
     async ({ page }, provide) => {
@@ -54,10 +57,30 @@ export const test = base.extend<{
   ],
   api: async ({ page }, provide) => provide(apiFor(page.request)),
   user: async ({ api }, provide) => provide(await api.signup()),
-  isMobile: async ({}, provide, info) => provide(info.project.name === "mobile"),
+  isMobile: async ({}, provide, info) => provide(projectWidth(info.project.use.viewport) < 768),
+  isWide: async ({}, provide, info) => provide(projectWidth(info.project.use.viewport) >= 1024),
 });
 
+const projectWidth = (viewport: { width: number } | null | undefined) => viewport?.width ?? 1280;
+
 export { expect };
+
+/** Categories: tabs below 1024, both lists side by side from 1024. Returns the visible list's region. */
+export async function showCategories(page: Page, direction: "expense" | "income") {
+  const title = direction === "income" ? "Income" : "Expense";
+  if (page.viewportSize()!.width < 1024) {
+    await page.getByRole("radiogroup", { name: "Category type" }).getByRole("radio", { name: title }).click();
+  }
+  const section = page.getByRole("region", { name: `${title} categories` });
+  await expect(section).toBeVisible();
+  return section;
+}
+
+export async function box(locator: Locator) {
+  const b = await locator.boundingBox();
+  expect(b, "element has a layout box").not.toBeNull();
+  return b!;
+}
 
 export async function openNewMemo(page: Page, isMobile: boolean) {
   await page.getByRole("button", { name: isMobile ? "Add memo" : "New memo" }).click();

@@ -10,9 +10,14 @@ const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", axe
 export const metadata: Metadata = {
   title: "Cash Memo",
   description: "Your private money journal",
+  applicationName: "Cash Memo",
+  appleWebApp: { capable: true, title: "Cash Memo", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
+  // Draw under the notch / home indicator; the app shell pads with env(safe-area-inset-*).
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#faf8f4" },
     { media: "(prefers-color-scheme: dark)", color: "#151412" },

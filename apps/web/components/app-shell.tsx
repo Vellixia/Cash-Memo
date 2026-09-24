@@ -22,6 +22,7 @@ import {
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { useLogout, useMe } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
+import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -45,23 +46,37 @@ export function useLogoutAndLeave() {
   };
 }
 
+/* Sticky offsets. Online, the top bar pads itself under the notch (viewport-fit=cover); offline, the
+ * OfflineBanner (components/pwa.tsx) sticks at top-0 and already covers the notch, so the bar sits below it.
+ * --stick is where the top bar starts; sticky things inside the page go below the bar (3.5rem, md 4rem). */
+const ONLINE_VARS = { "--banner-h": "0px", "--header-pt": "env(safe-area-inset-top, 0px)" };
+// Mirrors OfflineBanner's height: pt max(0.375rem, safe-top) + 1rem text-xs line + pb 0.375rem.
+const OFFLINE_VARS = { "--banner-h": "calc(1.375rem + max(0.375rem, env(safe-area-inset-top, 0px)))", "--header-pt": "0px" };
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const openEditor = useUiStore((s) => s.openEditor);
+  const online = useOnline();
   return (
-    <>
+    <div
+      className="contents"
+      style={{ ...(online ? ONLINE_VARS : OFFLINE_VARS), "--stick": "calc(var(--banner-h) + var(--header-pt))" } as React.CSSProperties}
+    >
       <TopBar onNew={() => openEditor()} />
-      <main className="mx-auto w-full max-w-[44rem] flex-1 px-4 pt-4 pb-32 md:px-6 md:pt-8 md:pb-16">{children}</main>
+      {/* Bottom padding clears the tab bar + raised add button (and the home indicator) on phones. */}
+      <main className="mx-auto w-full max-w-[40rem] flex-1 px-4 md:max-w-[48rem] pt-3 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 md:pt-8 md:pb-16 lg:max-w-[72rem] lg:px-8">
+        {children}
+      </main>
       <BottomNav onNew={() => openEditor()} />
       <MemoEditor />
-    </>
+    </div>
   );
 }
 
 function TopBar({ onNew }: { onNew: () => void }) {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 w-full max-w-[44rem] items-center gap-2 px-4 md:h-16 md:px-6">
+    <header className="sticky top-(--banner-h) z-40 border-b pt-(--header-pt) border-border/70 bg-background/85 backdrop-blur-md">
+      <div className="mx-auto flex h-14 w-full max-w-[40rem] items-center gap-2 px-4 md:max-w-[48rem] sm:px-6 md:h-16 lg:max-w-[72rem] lg:px-8">
         <Link href="/" className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40" aria-label="Cash Memo home">
           <Logo size={28} />
           <span className="font-serif text-lg tracking-tight">Cash Memo</span>
@@ -73,7 +88,7 @@ function TopBar({ onNew }: { onNew: () => void }) {
               href={href}
               aria-current={pathname === href ? "page" : undefined}
               className={cn(
-                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+                "rounded-full px-3.5 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
                 pathname === href ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -159,7 +174,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
         href={href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex flex-col items-center justify-center gap-1 rounded-xl py-1 text-[0.7rem] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+          "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl py-1 text-[0.7rem] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
           active ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -172,7 +187,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
   return (
     <nav
       aria-label="Tabs"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/90 pb-safe backdrop-blur-md md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
     >
       <div className="mx-auto grid h-16 max-w-md grid-cols-4 items-center px-2">
         {tab("/", "Home", Home)}

@@ -1,4 +1,4 @@
-import { apiFor, expect, gotoHome, noHorizontalOverflow, openNewMemo, PASSWORD, test, uniqueEmail } from "./helpers";
+import { apiFor, box, expect, gotoHome, noHorizontalOverflow, openNewMemo, PASSWORD, showCategories, test, uniqueEmail } from "./helpers";
 
 const monthName = (offset = 0) => {
   const d = new Date();
@@ -43,9 +43,10 @@ test.describe("auth", () => {
     await expect(starter).toBeHidden();
 
     await page.goto("/categories");
-    for (const name of ["Food", "Transport", "Shopping", "Bills", "Fun"]) await expect(page.getByText(name, { exact: true })).toBeVisible();
-    await page.getByRole("radio", { name: "Income" }).click();
-    for (const name of ["Salary", "Other income"]) await expect(page.getByText(name, { exact: true })).toBeVisible();
+    const expense = page.getByRole("region", { name: "Expense categories" });
+    for (const name of ["Food", "Transport", "Shopping", "Bills", "Fun"]) await expect(expense.getByText(name, { exact: true })).toBeVisible();
+    const income = await showCategories(page, "income");
+    for (const name of ["Salary", "Other income"]) await expect(income.getByText(name, { exact: true })).toBeVisible();
   });
 
   test("login with a wrong password shows an error and stays on /login", async ({ page, playwright, allowConsole }) => {
@@ -385,18 +386,19 @@ test("categories page: add, rename, change emoji, delete", async ({ page, user }
   await page.goto("/categories");
   await expect(page.getByRole("heading", { name: "Categories", exact: true })).toBeVisible();
 
-  // Add (expense tab), with an emoji.
-  await page.getByRole("button", { name: "Choose emoji" }).click();
+  // Add (expense list), with an emoji.
+  const expense = page.getByRole("region", { name: "Expense categories" });
+  await expense.getByRole("button", { name: "Choose emoji" }).click();
   await page.getByRole("button", { name: "🛒" }).click();
-  await page.getByLabel("Category name").fill("Groceries");
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expense.getByLabel("Category name").fill("Groceries");
+  await expense.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Added “Groceries”")).toBeVisible();
   const row = page.getByTestId("category-row").filter({ hasText: "Groceries" });
   await expect(row).toContainText("🛒");
-  await expect(page.getByLabel("Category name")).toHaveValue("");
+  await expect(expense.getByLabel("Category name")).toHaveValue("");
 
   // Empty name is rejected inline.
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expense.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Give it a name" })).toBeVisible();
 
   // Rename.
@@ -421,10 +423,11 @@ test("categories page: add, rename, change emoji, delete", async ({ page, user }
   await page.reload();
   await expect(page.getByTestId("category-row").filter({ hasText: "Supermarket" })).toBeVisible();
 
-  // Income tab is separate.
-  await page.getByRole("radio", { name: "Income" }).click();
-  await expect(page.getByText("No income categories yet. Add one above.")).toBeVisible();
-  await page.getByRole("radio", { name: "Expense" }).click();
+  // Income list is separate (a tab below 1024, a second column from 1024).
+  const income = await showCategories(page, "income");
+  await expect(income.getByText("No income categories yet. Add one above.")).toBeVisible();
+  await expect(income.getByTestId("category-row")).toHaveCount(0);
+  await showCategories(page, "expense");
 
   // Delete with confirm.
   await page.getByRole("button", { name: "Delete Supermarket" }).click();
@@ -488,4 +491,162 @@ test("no horizontal overflow on home, categories, account, login", async ({ page
   await page.context().clearCookies();
   await page.goto("/login");
   await noHorizontalOverflow(page);
+});
+
+test.describe("responsive", () => {
+  test("home layout follows the breakpoint", async ({ page, api, isMobile, isWide }) => {
+    await api.signup();
+    const cats = [];
+    for (const name of ["Food", "Transport", "Shopping", "Bills", "Fun"]) cats.push(await api.category(name, "expense"));
+    for (let i = 0; i < 16; i++) {
+      await api.memo({ direction: "expense", amount_minor: 1000 + i * 150, category_id: cats[i % cats.length].id, note: `Memo ${i}` });
+    }
+    await gotoHome(page);
+    await expect(page.getByTestId("memo-row")).toHaveCount(16);
+    const vp = page.viewportSize()!;
+
+    // Nav: bottom tabs below 768, top bar from 768.
+    await expect(page.getByRole("navigation", { name: "Tabs" })).toBeVisible({ visible: isMobile });
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible({ visible: !isMobile });
+
+    // Legend shows the top 4 and folds the rest away.
+    const legend = page.getByTestId("donut-legend");
+    await expect(legend.getByRole("listitem")).toHaveCount(4);
+    await page.getByRole("button", { name: "Show all 5" }).click();
+    await expect(legend.getByRole("listitem")).toHaveCount(5);
+    await page.getByRole("button", { name: "Top 4" }).click();
+    await expect(legend.getByRole("listitem")).toHaveCount(4);
+    // Clicking scrolled the page; measure the layout from the top.
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    const summary = page.getByTestId("summary-column");
+    const ledger = page.getByRole("region", { name: "Ledger" });
+    const hero = page.getByRole("region", { name: "This month" });
+    const spending = page.getByRole("region", { name: "Spending by category" });
+    const s = await box(summary);
+    const l = await box(ledger);
+
+    if (isWide) {
+      // Two columns: summary on the left, ledger on the right, tops aligned.
+      expect(s.x + s.width).toBeLessThanOrEqual(l.x);
+      expect(Math.abs(s.y - l.y)).toBeLessThan(8);
+      // The summary column is sticky while the ledger scrolls.
+      const top = s.y;
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect.poll(async () => Math.abs((await box(summary)).y - top)).toBeLessThanOrEqual(1);
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    } else {
+      expect(s.y + s.height).toBeLessThanOrEqual(l.y);
+      const h = await box(hero);
+      const d = await box(spending);
+      if (vp.width >= 768) {
+        // Tablet: hero and donut side by side.
+        expect(h.x + h.width).toBeLessThanOrEqual(d.x);
+        expect(Math.abs(h.y - d.y)).toBeLessThan(2);
+      } else {
+        expect(h.y + h.height).toBeLessThanOrEqual(d.y);
+        // Phones: the ledger starts above the fold (above the tab bar).
+        const tabs = await box(page.getByRole("navigation", { name: "Tabs" }));
+        const firstRow = await box(page.getByTestId("memo-row").first());
+        expect(firstRow.y + firstRow.height).toBeLessThanOrEqual(tabs.y);
+      }
+    }
+  });
+
+  test("memo editor: bottom sheet on phones, centered dialog from 768", async ({ page, user, isMobile }) => {
+    void user;
+    await gotoHome(page);
+    const dialog = await openNewMemo(page, isMobile);
+    const vp = page.viewportSize()!;
+    if (isMobile) {
+      await expect.poll(async () => Math.round((await box(dialog)).y + (await box(dialog)).height)).toBeGreaterThanOrEqual(vp.height - 1);
+      const b = await box(dialog);
+      expect(Math.round(b.width)).toBe(vp.width);
+      expect(b.height).toBeLessThanOrEqual(vp.height * 0.92 + 1);
+      await expect(dialog.getByTestId("sheet-handle")).toBeVisible();
+    } else {
+      await expect
+        .poll(async () => {
+          const b = await box(dialog);
+          return Math.round(Math.abs(b.x + b.width / 2 - vp.width / 2) + Math.abs(b.y + b.height / 2 - vp.height / 2));
+        })
+        .toBeLessThanOrEqual(2);
+      expect((await box(dialog)).width).toBeLessThanOrEqual(448);
+      await expect(dialog.getByTestId("sheet-handle")).toBeHidden();
+    }
+    await expect(dialog.getByRole("button", { name: "Save expense" })).toBeInViewport({ ratio: 1 });
+  });
+
+  test("offline: save, delete and add are disabled with a hint", async ({ page, context, api, isMobile, allowConsole }) => {
+    allowConsole(/ERR_INTERNET_DISCONNECTED|ERR_FAILED|Failed to fetch/);
+    await api.signup();
+    await api.memo({ direction: "expense", amount_minor: 1200, note: "Cached lunch" });
+    await gotoHome(page);
+
+    await context.setOffline(true);
+    // Reads keep showing what's already loaded.
+    await expect(page.getByText("Cached lunch")).toBeVisible();
+    const dialog = await openNewMemo(page, isMobile);
+    await dialog.getByLabel("Amount").fill("5");
+    const hint = dialog.getByTestId("offline-hint");
+    await expect(hint).toHaveText("You’re offline — changes can’t be saved");
+    await expect(dialog.getByRole("button", { name: "Save expense" })).toBeDisabled();
+    await context.setOffline(false);
+    await expect(hint).toBeHidden();
+    await expect(dialog.getByRole("button", { name: "Save expense" })).toBeEnabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+
+    // Editing an existing memo: Save and Delete both go.
+    await context.setOffline(true);
+    await page.getByTestId("memo-row").first().click();
+    await expect(page.getByTestId("offline-hint")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Delete" })).toBeDisabled();
+    await context.setOffline(false);
+    await page.keyboard.press("Escape");
+
+    await page.goto("/categories");
+    const expense = page.getByRole("region", { name: "Expense categories" });
+    await expect(expense.getByRole("button", { name: "Add", exact: true })).toBeEnabled();
+    await context.setOffline(true);
+    await expect(page.getByTestId("offline-hint")).toBeVisible();
+    await expect(expense.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+    await context.setOffline(false);
+    await expect(expense.getByRole("button", { name: "Add", exact: true })).toBeEnabled();
+  });
+
+  test.describe("at 320px", () => {
+    test.skip(({ isMobile }) => !isMobile, "phone-only check");
+    test.use({ viewport: { width: 320, height: 640 } });
+
+    test("no horizontal overflow on home, add sheet, categories, account, login", async ({ page, api }) => {
+      await api.signup();
+      const food = await api.category("A very long category name that keeps going", "expense", "🍜");
+      await api.memo({ direction: "expense", amount_minor: 123456789, note: "An extremely long note that should truncate", category_id: food.id });
+      await api.memo({ direction: "income", amount_minor: 5000, currency: "EUR" });
+
+      await gotoHome(page);
+      await expect(page.getByTestId("memo-row")).toHaveCount(2);
+      await noHorizontalOverflow(page);
+
+      const dialog = await openNewMemo(page, true);
+      const amount = dialog.getByLabel("Amount");
+      await amount.fill("1234567.89");
+      await noHorizontalOverflow(page);
+      // The big amount shrinks to fit instead of scrolling inside its field.
+      expect(await amount.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await expect(dialog.getByRole("button", { name: "Save expense" })).toBeInViewport({ ratio: 1 });
+      await page.keyboard.press("Escape");
+
+      for (const path of ["/categories", "/account"]) {
+        await page.goto(path);
+        await page.waitForLoadState("networkidle");
+        await noHorizontalOverflow(page);
+      }
+      await page.context().clearCookies();
+      await page.goto("/login");
+      await noHorizontalOverflow(page);
+    });
+  });
 });

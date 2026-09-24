@@ -65,17 +65,18 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   }
 
   return (
-    <main className="grid flex-1 md:grid-cols-[1.1fr_1fr]">
-      <section className="relative isolate flex flex-col gap-8 overflow-hidden px-6 pt-8 pb-6 md:justify-between md:gap-0 md:border-r md:border-border md:bg-card md:px-12 md:py-12">
+    // Phones/tablets: brand line + one card. From `lg`: split screen, brand panel on the left.
+    <main className="grid min-h-dvh flex-1 content-start lg:grid-cols-[1.1fr_1fr] lg:content-stretch">
+      <section className="relative isolate mx-auto flex w-full max-w-sm flex-col gap-4 overflow-hidden px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-5 sm:pt-[calc(3rem+env(safe-area-inset-top))] lg:mx-0 lg:max-w-none lg:justify-between lg:gap-0 lg:border-r lg:border-border lg:bg-[linear-gradient(160deg,var(--card)_0%,var(--card)_45%,var(--income-soft)_130%)] lg:px-12 lg:py-12 xl:px-16">
         <div className="flex items-center gap-2.5">
           <Logo size={32} />
           <span className="font-serif text-xl tracking-tight">Cash Memo</span>
         </div>
         <div>
-          <h1 className="max-w-md font-serif text-4xl leading-[1.05] tracking-tight md:text-6xl">
+          <h1 className="max-w-md font-serif text-[1.75rem] leading-[1.05] tracking-tight sm:text-4xl lg:text-6xl xl:text-7xl">
             Your private <em className="text-income">money</em> journal
           </h1>
-          <ul className="mt-6 hidden space-y-3 md:block">
+          <ul className="mt-8 hidden space-y-3.5 lg:block">
             {PROPS.map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3 text-muted-foreground">
                 <span className="flex size-8 items-center justify-center rounded-xl bg-income-soft text-income">
@@ -86,12 +87,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             ))}
           </ul>
         </div>
-        <p className="hidden text-xs text-muted-foreground md:block">Calm bookkeeping for real life.</p>
+        <p className="hidden text-xs text-muted-foreground lg:block">Calm bookkeeping for real life.</p>
         <LedgerLines />
       </section>
 
-      <section className="flex items-start justify-center px-4 pb-12 md:items-center md:px-10">
-        <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-paper md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+      <section className="flex items-start justify-center px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] lg:items-center lg:px-10 lg:pb-12">
+        <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-5 shadow-paper sm:p-6 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
           <h2 className="font-serif text-2xl">{copy.title}</h2>
           <form method="post" onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4" noValidate>
             <Field data-invalid={!!errors.email}>
@@ -157,7 +158,7 @@ function LedgerLines() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 -z-10 hidden opacity-40 md:block"
+      className="pointer-events-none absolute inset-0 -z-10 hidden opacity-40 lg:block"
       style={{
         backgroundImage: "repeating-linear-gradient(to bottom, transparent 0 39px, var(--border) 39px 40px)",
         maskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",

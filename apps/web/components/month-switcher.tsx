@@ -22,7 +22,7 @@ export function MonthSwitcher() {
 
   return (
     <div className="flex items-center justify-between gap-2">
-      <Button variant="ghost" size="icon" className="size-10 rounded-full" aria-label="Previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
+      <Button variant="ghost" size="icon" className="size-11 rounded-full" aria-label="Previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
         <ChevronLeft className="size-5" />
       </Button>
       <Popover
@@ -35,19 +35,19 @@ export function MonthSwitcher() {
         <PopoverTrigger
           data-testid="month-label"
           aria-label={mounted ? `${monthLabel(month)}, choose month` : "Choose month"}
-          className="rounded-full px-4 py-1.5 font-serif text-2xl tracking-tight transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40 aria-expanded:bg-muted md:text-[1.75rem]"
+          className="min-h-11 min-w-0 truncate rounded-full px-4 py-1 font-serif text-2xl tracking-tight transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40 aria-expanded:bg-muted md:text-[1.75rem]"
         >
           {mounted ? monthLabel(month) : <span className="my-1.5 inline-block h-6 w-44 animate-pulse rounded-full bg-muted align-middle" />}
         </PopoverTrigger>
         <PopoverContent className="w-72 gap-3 rounded-2xl p-3">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon-sm" aria-label="Previous year" onClick={() => setYear((y) => y - 1)}>
+            <Button variant="ghost" size="icon" aria-label="Previous year" onClick={() => setYear((y) => y - 1)}>
               <ChevronLeft />
             </Button>
             <span className="num text-lg" aria-live="polite">
               {year}
             </span>
-            <Button variant="ghost" size="icon-sm" aria-label="Next year" onClick={() => setYear((y) => y + 1)}>
+            <Button variant="ghost" size="icon" aria-label="Next year" onClick={() => setYear((y) => y + 1)}>
               <ChevronRight />
             </Button>
           </div>
@@ -90,7 +90,7 @@ export function MonthSwitcher() {
           )}
         </PopoverContent>
       </Popover>
-      <Button variant="ghost" size="icon" className="size-10 rounded-full" aria-label="Next month" onClick={() => setMonth(shiftMonth(month, 1))}>
+      <Button variant="ghost" size="icon" className="size-11 rounded-full" aria-label="Next month" onClick={() => setMonth(shiftMonth(month, 1))}>
         <ChevronRight className="size-5" />
       </Button>
     </div>

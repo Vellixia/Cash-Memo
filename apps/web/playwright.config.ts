@@ -23,5 +23,11 @@ export default defineConfig({
       name: "mobile",
       use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 }, browserName: "chromium" },
     },
+    // Large phone / tablet portrait: single column, but the top bar (nav switches at 768).
+    {
+      name: "tablet",
+      use: { ...devices["iPad Pro 11"], viewport: { width: 820, height: 1180 }, browserName: "chromium" },
+    },
+    { name: "wide", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
   ],
 });

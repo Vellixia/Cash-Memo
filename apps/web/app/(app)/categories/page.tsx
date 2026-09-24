@@ -19,29 +19,35 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EmojiField } from "@/components/emoji-field";
 import { Segmented } from "@/components/segmented";
+import { OfflineHint } from "@/components/offline-hint";
+import { useOnline } from "@/lib/use-online";
 import { card } from "@/components/summary";
 import { StarterCard } from "@/components/ledger";
 import { useCategories, useCreateCategory, useDeleteCategory, useUpdateCategory } from "@/lib/queries";
 import type { Category, Direction } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+const DIRECTIONS: Direction[] = ["expense", "income"];
+const TITLE = { expense: "Expense", income: "Income" } as const;
+
 export default function CategoriesPage() {
   const [direction, setDirection] = useState<Direction>("expense");
   const { data: categories, isLoading } = useCategories();
-  const list = categories?.filter((c) => c.direction === direction) ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <header className="space-y-1">
         <h1 className="font-serif text-3xl tracking-tight md:text-4xl">Categories</h1>
         <p className="text-sm text-muted-foreground">Give each kind of money a name and an emoji.</p>
       </header>
 
       {categories?.length === 0 && <StarterCard />}
+      <OfflineHint className="rounded-2xl bg-muted px-4 py-3" />
 
+      {/* Tabs below `lg`; from `lg` both lists sit side by side and the tabs go away. */}
       <Segmented
         label="Category type"
-        className="flex w-full sm:w-72"
+        className="flex w-full sm:w-72 lg:hidden"
         value={direction}
         onChange={setDirection}
         options={[
@@ -50,9 +56,41 @@ export default function CategoriesPage() {
         ]}
       />
 
-      <AddCategory direction={direction} />
+      <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+        {DIRECTIONS.map((d) => (
+          <CategoryList
+            key={d}
+            direction={d}
+            list={categories?.filter((c) => c.direction === d) ?? []}
+            loading={isLoading}
+            className={d === direction ? undefined : "hidden lg:block"}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      {isLoading ? (
+function CategoryList({
+  direction,
+  list,
+  loading,
+  className,
+}: {
+  direction: Direction;
+  list: Category[];
+  loading: boolean;
+  className?: string;
+}) {
+  return (
+    <section aria-label={`${TITLE[direction]} categories`} className={cn("space-y-4", className)}>
+      <h2 className="hidden items-center gap-2 font-serif text-xl lg:flex">
+        <span className={cn("size-2.5 rounded-full", direction === "income" ? "bg-income" : "bg-expense")} aria-hidden />
+        {TITLE[direction]}
+        <span className="text-sm font-normal text-muted-foreground tabular-nums">{list.length || ""}</span>
+      </h2>
+      <AddCategory direction={direction} />
+      {loading ? (
         <Skeleton className="h-40 rounded-2xl" />
       ) : list.length === 0 ? (
         <p className={cn(card, "rounded-2xl px-5 py-8 text-center text-sm text-muted-foreground")}>No {direction} categories yet. Add one above.</p>
@@ -63,12 +101,13 @@ export default function CategoriesPage() {
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
 function AddCategory({ direction }: { direction: Direction }) {
   const create = useCreateCategory();
+  const online = useOnline();
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,9 +131,9 @@ function AddCategory({ direction }: { direction: Direction }) {
   return (
     <form onSubmit={onSubmit} className="space-y-1.5" noValidate>
       <div className="flex items-center gap-2">
-        <EmojiField value={emoji} onChange={setEmoji} className="size-11 rounded-2xl" />
+        <EmojiField value={emoji} onChange={setEmoji} label={`Choose emoji for new ${direction} category`} className="size-11 rounded-2xl" />
         <Input
-          aria-label="Category name"
+          aria-label={`New ${direction} category name`}
           aria-invalid={!!error}
           placeholder={`New ${direction} category`}
           value={name}
@@ -104,7 +143,7 @@ function AddCategory({ direction }: { direction: Direction }) {
           }}
           className="h-11 rounded-2xl bg-card px-4"
         />
-        <Button type="submit" className="h-11 rounded-2xl px-4" disabled={create.isPending}>
+        <Button type="submit" className="h-11 rounded-2xl px-4" disabled={create.isPending || !online}>
           {create.isPending ? <Loader2 className="animate-spin" /> : <Plus />}
           Add
         </Button>
@@ -121,6 +160,7 @@ function AddCategory({ direction }: { direction: Direction }) {
 function CategoryRow({ category }: { category: Category }) {
   const update = useUpdateCategory();
   const remove = useDeleteCategory();
+  const online = useOnline();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(category.name);
   const [emoji, setEmoji] = useState<string | null>(category.emoji);
@@ -163,7 +203,7 @@ function CategoryRow({ category }: { category: Category }) {
         >
           <EmojiField value={emoji} onChange={setEmoji} label={`Emoji for ${category.name}`} className="size-10 rounded-2xl" />
           <Input autoFocus aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-xl bg-card" />
-          <Button type="submit" size="icon" className="size-10 rounded-xl" aria-label="Save category" disabled={update.isPending}>
+          <Button type="submit" size="icon" className="size-10 rounded-xl" aria-label="Save category" disabled={update.isPending || !online}>
             {update.isPending ? <Loader2 className="animate-spin" /> : <Check />}
           </Button>
           <Button type="button" variant="ghost" size="icon" className="size-10 rounded-xl" aria-label="Cancel editing" onClick={() => setEditing(false)}>
@@ -181,13 +221,14 @@ function CategoryRow({ category }: { category: Category }) {
         value={category.emoji}
         onChange={(e) => save({ emoji: e })}
         label={`Change emoji for ${category.name}`}
+        disabled={!online}
         className="size-10 rounded-2xl border-transparent bg-muted"
       />
       <span className="min-w-0 flex-1 truncate font-medium">{category.name}</span>
       <Button
         variant="ghost"
         size="icon"
-        className="size-9 rounded-xl text-muted-foreground"
+        className="size-11 rounded-xl text-muted-foreground md:size-9"
         aria-label={`Rename ${category.name}`}
         onClick={() => {
           setName(category.name);
@@ -199,7 +240,15 @@ function CategoryRow({ category }: { category: Category }) {
       </Button>
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogTrigger
-          render={<Button variant="ghost" size="icon" className="size-9 rounded-xl text-muted-foreground hover:text-destructive" aria-label={`Delete ${category.name}`} />}
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-11 rounded-xl text-muted-foreground hover:text-destructive md:size-9"
+              aria-label={`Delete ${category.name}`}
+              disabled={!online}
+            />
+          }
         >
           <Trash2 />
         </AlertDialogTrigger>
@@ -210,7 +259,7 @@ function CategoryRow({ category }: { category: Category }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={onDelete} disabled={remove.isPending}>
+            <AlertDialogAction variant="destructive" onClick={onDelete} disabled={remove.isPending || !online}>
               {remove.isPending && <Loader2 className="animate-spin" />}
               Delete category
             </AlertDialogAction>

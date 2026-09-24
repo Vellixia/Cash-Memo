@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatMoney, type Category, type Summary } from "@/lib/api";
 import { CATEGORY_COLORS, signedMoney } from "@/lib/format";
 import { Segmented } from "@/components/segmented";
@@ -19,7 +20,7 @@ export function HeroCard({
   currencies: string[];
   onCurrency: (c: string) => void;
 }) {
-  if (!summary) return <Skeleton className="h-52 rounded-3xl" />;
+  if (!summary) return <Skeleton className="h-44 rounded-3xl sm:h-52" />;
   const total = (direction: string) =>
     summary.totals.find((t) => t.currency === currency && t.direction === direction)?.total_minor ?? 0;
   const income = total("income");
@@ -29,7 +30,8 @@ export function HeroCard({
   const incomeShare = sum ? (income / sum) * 100 : 50;
 
   return (
-    <section className={cn(card, "relative overflow-hidden p-5 md:p-7")} aria-label="This month">
+    // Sizes follow the card's own width (@container): it sits full-width, half-width or in the desktop sidebar.
+    <section className={cn(card, "@container relative flex flex-col overflow-hidden p-4 sm:p-6")} aria-label="This month">
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">Net this month</h2>
         {currencies.length > 1 && (
@@ -44,12 +46,18 @@ export function HeroCard({
       </div>
       <p
         data-testid="hero-net"
-        className={cn("num mt-2 text-5xl leading-none md:text-6xl", net > 0 && "text-income", net < 0 && "text-expense")}
+        className={cn(
+          "num mt-1.5 text-4xl leading-none [overflow-wrap:anywhere] @[22rem]:text-5xl lg:text-5xl @[30rem]:text-6xl",
+          net > 0 && "text-income",
+          net < 0 && "text-expense",
+        )}
       >
         {signedMoney(net, currency)}
       </p>
 
-      <div className="mt-6 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+      {/* Soaks up extra height when the card is stretched beside the donut card. */}
+      <div className="flex-1" aria-hidden />
+      <div className="mt-3.5 flex h-2 overflow-hidden rounded-full bg-muted sm:mt-6" aria-hidden>
         {sum > 0 && (
           <>
             <div className="h-full bg-income transition-[width] duration-500" style={{ width: `${incomeShare}%` }} />
@@ -58,12 +66,12 @@ export function HeroCard({
           </>
         )}
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-4">
+      <dl className="mt-3 grid grid-cols-2 gap-3 sm:mt-4">
         <div>
           <dt className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <span className="size-2 rounded-full bg-income" /> Income
           </dt>
-          <dd data-testid="hero-income" className="num mt-1 text-2xl text-foreground">
+          <dd data-testid="hero-income" className="num mt-0.5 text-xl [overflow-wrap:anywhere] text-foreground @[20rem]:text-2xl">
             {formatMoney(income, currency)}
           </dd>
         </div>
@@ -71,7 +79,7 @@ export function HeroCard({
           <dt className="flex items-center justify-end gap-1.5 text-xs font-medium text-muted-foreground">
             <span className="size-2 rounded-full bg-expense" /> Expense
           </dt>
-          <dd data-testid="hero-expense" className="num mt-1 text-2xl text-foreground">
+          <dd data-testid="hero-expense" className="num mt-0.5 text-xl [overflow-wrap:anywhere] text-foreground @[20rem]:text-2xl">
             {formatMoney(expense, currency)}
           </dd>
         </div>
@@ -79,6 +87,8 @@ export function HeroCard({
     </section>
   );
 }
+
+const TOP = 4;
 
 export function SpendingCard({
   summary,
@@ -89,7 +99,8 @@ export function SpendingCard({
   currency: string;
   categories: Category[];
 }) {
-  if (!summary) return <Skeleton className="h-56 rounded-3xl" />;
+  const [showAll, setShowAll] = useState(false);
+  if (!summary) return <Skeleton className="h-44 rounded-3xl sm:h-56" />;
   const rows = summary.by_category.filter((r) => r.direction === "expense" && r.currency === currency);
   const total = rows.reduce((s, r) => s + r.total_minor, 0);
   const byId = new Map(categories.map((c) => [c.id, c]));
@@ -117,35 +128,66 @@ export function SpendingCard({
         })
         .join(", ")})`
     : "conic-gradient(var(--muted) 0 100%)";
+  // The legend lists the biggest first and folds the tail away to keep the card short.
+  const ranked = [...slices].sort((a, b) => b.amount - a.amount);
+  const legend = showAll ? ranked : ranked.slice(0, TOP);
+  const spent = formatMoney(total, currency);
 
   return (
-    <section className={cn(card, "p-5 md:p-7")} aria-labelledby="spending-title">
-      <h2 id="spending-title" className="font-serif text-xl">
-        Spending by category
-      </h2>
+    // Layout follows the card's own width: donut beside the legend when there's room, stacked when narrow.
+    <section className={cn(card, "@container p-4 sm:p-6")} aria-labelledby="spending-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <h2 id="spending-title" className="font-serif text-lg sm:text-xl">
+          Spending by category
+        </h2>
+        {ranked.length > TOP && (
+          <button
+            type="button"
+            aria-expanded={showAll}
+            aria-controls="donut-legend"
+            onClick={() => setShowAll((v) => !v)}
+            className="-my-2 -mr-2 min-h-11 rounded-xl px-2 text-xs font-medium text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+          >
+            {showAll ? "Top 4" : `Show all ${ranked.length}`}
+          </button>
+        )}
+      </div>
       {slices.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">No expenses in {currency} this month yet.</p>
       ) : (
-        <div className="mt-5 flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
-          <div className="relative size-40 shrink-0 rounded-full" style={{ background: gradient }} role="img" aria-label="Spending donut chart">
+        <div className="mt-3 flex flex-col items-center gap-4 @[18rem]:flex-row @[18rem]:items-start @[30rem]:mt-5 @[30rem]:items-center @[30rem]:gap-8">
+          <div
+            className="relative size-28 shrink-0 rounded-full @[18rem]:size-26 @[30rem]:size-40"
+            style={{ background: gradient }}
+            role="img"
+            aria-label={`Spending donut chart, ${spent} spent`}
+          >
             <div className="absolute inset-[18%] flex flex-col items-center justify-center rounded-full bg-card text-center">
-              <span className="text-[0.7rem] font-medium text-muted-foreground">Spent</span>
-              <span className="num text-lg leading-tight">{formatMoney(total, currency)}</span>
+              <span className="hidden text-[0.7rem] font-medium text-muted-foreground @[30rem]:block">Spent</span>
+              <span className="num px-1 text-xs leading-tight @[30rem]:text-lg">{spent}</span>
             </div>
           </div>
-          <ul className="w-full min-w-0 flex-1 divide-y divide-border/70" data-testid="donut-legend">
-            {slices.map((s) => (
-              <li key={s.key} className="flex items-center gap-3 py-2 text-sm">
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden />
-                <span className="w-5 shrink-0 text-center" aria-hidden>
-                  {s.emoji ?? ""}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                <span className="num shrink-0 text-base">{formatMoney(s.amount, currency)}</span>
-                <span className="w-10 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{Math.round(s.pct)}%</span>
-              </li>
-            ))}
-          </ul>
+          <div className="w-full min-w-0 flex-1">
+            <ul id="donut-legend" className="divide-y divide-border/70" data-testid="donut-legend">
+              {legend.map((s) => (
+                <li key={s.key} className="flex items-center gap-2 py-1.5 text-sm @[30rem]:gap-3 @[30rem]:py-2">
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">
+                    {s.emoji && (
+                      <span className="mr-1.5" aria-hidden>
+                        {s.emoji}
+                      </span>
+                    )}
+                    {s.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums @[30rem]:order-last @[30rem]:w-10 @[30rem]:text-right">
+                    {Math.round(s.pct)}%
+                  </span>
+                  <span className="num shrink-0 text-sm @[30rem]:text-base">{formatMoney(s.amount, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </section>
