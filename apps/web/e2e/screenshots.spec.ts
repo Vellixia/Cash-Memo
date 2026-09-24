@@ -6,6 +6,15 @@ const dir = "e2e/screenshots";
 test.skip(!process.env.SCREENSHOTS, "set SCREENSHOTS=1 to render review screenshots");
 
 for (const scheme of ["light", "dark"] as const) {
+  test(`landing screenshots (${scheme})`, async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.screenshot({ path: `${dir}/${info.project.name}-${scheme}-landing-top.png` });
+    await page.locator("details").first().click();
+    await page.screenshot({ path: `${dir}/${info.project.name}-${scheme}-landing.png`, fullPage: true });
+  });
+
   test(`screenshots (${scheme})`, async ({ page, api, isMobile }, info) => {
     await page.emulateMedia({ colorScheme: scheme });
     const shot = (name: string) => page.screenshot({ path: `${dir}/${info.project.name}-${scheme}-${name}.png`, fullPage: name !== "add" });

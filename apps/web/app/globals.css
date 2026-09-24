@@ -142,6 +142,16 @@
   box-shadow: var(--shadow-paper);
 }
 
+/* Landing page: anchor jumps land below the sticky nav; smooth only when motion is welcome. */
+html:has(#landing) {
+  scroll-padding-top: 5rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:has(#landing) {
+    scroll-behavior: smooth;
+  }
+}
+
 @utility pb-safe {
   padding-bottom: max(env(safe-area-inset-bottom), 0px);
 }
