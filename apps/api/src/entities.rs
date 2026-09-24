@@ -9,6 +9,7 @@ pub mod user {
         pub email: String,
         pub password_hash: String,
         pub created_at: DateTimeUtc,
+        pub default_currency: String,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

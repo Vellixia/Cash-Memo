@@ -2,6 +2,7 @@ pub use sea_orm_migration::prelude::*;
 
 mod m20260924_000001_init;
 mod m20260924_000002_category_emoji;
+mod m20260925_000003_default_currency;
 
 pub struct Migrator;
 
@@ -11,6 +12,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20260924_000001_init::Migration),
             Box::new(m20260924_000002_category_emoji::Migration),
+            Box::new(m20260925_000003_default_currency::Migration),
         ]
     }
 }

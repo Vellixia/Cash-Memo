@@ -3,30 +3,10 @@
 import { useEffect } from "react";
 import { WifiOff } from "lucide-react";
 import { toast } from "sonner";
+import "@/lib/install"; // start listening for the install prompt as early as possible
 import { useOnline } from "@/lib/use-online";
 
-type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
-
-const INSTALL_SNOOZE_KEY = "cm-install-snoozed-at";
-const INSTALL_SNOOZE_MS = 14 * 24 * 60 * 60 * 1000;
-
-function snoozed(): boolean {
-  try {
-    return Date.now() - Number(localStorage.getItem(INSTALL_SNOOZE_KEY) ?? 0) < INSTALL_SNOOZE_MS;
-  } catch {
-    return false;
-  }
-}
-
-function snooze() {
-  try {
-    localStorage.setItem(INSTALL_SNOOZE_KEY, String(Date.now()));
-  } catch {
-    // storage blocked (private mode): the prompt just shows again next visit
-  }
-}
-
-/** Registers the service worker, offers updates and installation. Renders nothing. */
+/** Registers the service worker and offers updates. Renders nothing; installing is offered quietly via `useInstall`. */
 export function PwaRegister() {
   useEffect(() => {
     // Dev builds change on every save; a caching worker there only causes stale pages.
@@ -64,25 +44,9 @@ export function PwaRegister() {
         // Registration failing (e.g. blocked by the browser) just means no offline support.
       });
 
-    const onInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      if (snoozed()) return;
-      const prompt = e as InstallPromptEvent;
-      toast("Install Cash Memo for quick access from your home screen", {
-        duration: 15_000,
-        action: {
-          label: "Install",
-          onClick: () => void prompt.prompt(),
-        },
-        onDismiss: snooze,
-        onAutoClose: snooze,
-      });
-    };
-    window.addEventListener("beforeinstallprompt", onInstallPrompt);
 
     return () => {
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
-      window.removeEventListener("beforeinstallprompt", onInstallPrompt);
     };
   }, []);
 

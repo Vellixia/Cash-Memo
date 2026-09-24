@@ -12,7 +12,7 @@ export default defineConfig({
   timeout: 60_000,
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: process.env.BASE_URL ?? "http://localhost:3000",
     trace: "retain-on-failure",
     locale: "en-US",
     timezoneId: "America/New_York",

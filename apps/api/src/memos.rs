@@ -12,7 +12,7 @@ use crate::{
     auth::CurrentUser,
     entities::{category, memo},
     error::{AppError, Json, Path, Query, Result},
-    parse_direction,
+    parse_currency, parse_direction,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -209,11 +209,7 @@ async fn apply(st: &AppState, uid: Uuid, m: &mut memo::ActiveModel, input: MemoI
         m.amount_minor = Set(a);
     }
     if let Some(c) = input.currency {
-        let c = c.trim().to_uppercase();
-        if c.len() != 3 || !c.chars().all(|ch| ch.is_ascii_uppercase()) {
-            return Err(AppError::BadRequest("currency must be a 3-letter ISO code"));
-        }
-        m.currency = Set(c);
+        m.currency = Set(parse_currency(&c)?);
     }
     if let Some(t) = input.occurred_at {
         m.occurred_at = Set(t);

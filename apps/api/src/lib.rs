@@ -34,6 +34,17 @@ async fn health(State(st): State<AppState>) -> StatusCode {
     }
 }
 
+/// ISO 4217-shaped code, uppercased. Shared by memos and user settings.
+pub(crate) fn parse_currency(c: &str) -> error::Result<String> {
+    let c = c.trim().to_uppercase();
+    if c.len() != 3 || !c.chars().all(|ch| ch.is_ascii_uppercase()) {
+        return Err(error::AppError::BadRequest(
+            "currency must be a 3-letter ISO code",
+        ));
+    }
+    Ok(c)
+}
+
 /// Shared by memos and categories.
 pub(crate) fn parse_direction(d: &str) -> error::Result<String> {
     match d {

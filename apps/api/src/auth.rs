@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
 };
 use chrono::{Duration, Utc};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::LazyLock;
@@ -16,6 +16,7 @@ use crate::{
     AppState,
     entities::{session, user},
     error::{AppError, Json, Result},
+    parse_currency,
 };
 
 const COOKIE: &str = "session";
@@ -30,19 +31,37 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/signup", post(signup))
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
-        .route("/auth/me", get(me))
+        .route("/auth/me", get(me).patch(update_me))
 }
 
 #[derive(Deserialize)]
 struct Credentials {
     email: String,
     password: String,
+    /// Only read on signup; the client suggests one from the browser's region.
+    default_currency: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SettingsIn {
+    default_currency: Option<String>,
 }
 
 #[derive(Serialize)]
 struct UserOut {
     id: Uuid,
     email: String,
+    default_currency: String,
+}
+
+impl From<user::Model> for UserOut {
+    fn from(u: user::Model) -> Self {
+        UserOut {
+            id: u.id,
+            email: u.email,
+            default_currency: u.default_currency,
+        }
+    }
 }
 
 /// Authenticated user id, resolved from the session cookie.
@@ -70,12 +89,17 @@ async fn signup(State(st): State<AppState>, Json(c): Json<Credentials>) -> Resul
     if c.password.len() < 8 || c.password.len() > 256 {
         return Err(AppError::BadRequest("password must be 8-256 characters"));
     }
+    let default_currency = match c.default_currency.as_deref() {
+        Some(cur) => parse_currency(cur)?,
+        None => "USD".to_owned(),
+    };
     let password_hash = blocking(move || password_auth::generate_hash(c.password)).await?;
     let u = user::ActiveModel {
         id: Set(Uuid::new_v4()),
         email: Set(email),
         password_hash: Set(password_hash),
         created_at: Set(Utc::now()),
+        default_currency: Set(default_currency),
     }
     .insert(&st.db)
     .await
@@ -116,10 +140,23 @@ async fn me(State(st): State<AppState>, CurrentUser(id): CurrentUser) -> Result<
         .one(&st.db)
         .await?
         .ok_or(AppError::Unauthorized)?;
-    Ok(Json(UserOut {
-        id: u.id,
-        email: u.email,
-    }))
+    Ok(Json(u.into()))
+}
+
+async fn update_me(
+    State(st): State<AppState>,
+    CurrentUser(id): CurrentUser,
+    Json(input): Json<SettingsIn>,
+) -> Result<Json<UserOut>> {
+    let mut u = user::Entity::find_by_id(id)
+        .one(&st.db)
+        .await?
+        .ok_or(AppError::Unauthorized)?
+        .into_active_model();
+    if let Some(c) = input.default_currency {
+        u.default_currency = Set(parse_currency(&c)?);
+    }
+    Ok(Json(u.update(&st.db).await?.into()))
 }
 
 async fn start_session(st: &AppState, u: user::Model) -> Result<Response> {
@@ -144,10 +181,7 @@ async fn start_session(st: &AppState, u: user::Model) -> Result<Response> {
         "{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}{secure}",
         SESSION_DAYS * 86400
     );
-    let body = Json(UserOut {
-        id: u.id,
-        email: u.email,
-    });
+    let body = Json(UserOut::from(u));
     Ok(([(header::SET_COOKIE, cookie)], body).into_response())
 }
 

@@ -70,6 +70,28 @@ async fn memo_flow() {
     let a = signup(&app).await;
     let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
     assert_eq!(s, StatusCode::OK);
+    assert_eq!(me["default_currency"], "USD");
+    let (s, _, me) = call(
+        &app,
+        "PATCH",
+        "/api/auth/me",
+        &a,
+        Some(json!({ "default_currency": "idr" })),
+    )
+    .await;
+    assert_eq!(
+        (s, me["default_currency"].clone()),
+        (StatusCode::OK, json!("IDR"))
+    );
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        "/api/auth/me",
+        &a,
+        Some(json!({ "default_currency": "rupiah" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
     assert!(me["email"].as_str().unwrap().ends_with("@test.dev"));
 
     let (s, _, cat) = call(
