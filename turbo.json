@@ -1,0 +1,9 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "dev": { "cache": false, "persistent": true, "passThroughEnv": ["DATABASE_URL", "PORT", "COOKIE_SECURE", "API_URL"] },
+    "build": { "outputs": [".next/**", "!.next/cache/**"] },
+    "test": { "cache": false, "passThroughEnv": ["DATABASE_URL"] },
+    "lint": {}
+  }
+}

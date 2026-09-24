@@ -1,0 +1,8 @@
+target/
+node_modules/
+.next/
+.turbo/
+.env
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
