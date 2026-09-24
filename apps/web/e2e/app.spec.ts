@@ -6,8 +6,10 @@ const monthName = (offset = 0) => {
 };
 
 test.describe("auth", () => {
-  test("visiting / without a session redirects to /login", async ({ page }) => {
+  test("without a session, / is the landing page and app routes redirect to /login", async ({ page }) => {
     await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "Your private money journal" })).toBeVisible();
+    await page.goto("/account");
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   });
@@ -81,7 +83,7 @@ test.describe("auth", () => {
     await expect(page.getByTestId("account-email")).toHaveText(user.email);
     await page.getByRole("button", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login$/);
-    await page.goto("/");
+    await page.goto("/categories");
     await expect(page).toHaveURL(/\/login$/);
   });
 });
@@ -123,7 +125,7 @@ test.describe("account menu (desktop)", () => {
     await page.getByRole("button", { name: "Account menu" }).click();
     await page.getByRole("menuitem", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login$/);
-    await page.goto("/");
+    await page.goto("/categories");
     await expect(page).toHaveURL(/\/login$/);
   });
 });

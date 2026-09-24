@@ -55,6 +55,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setServerError(null);
     try {
       await mutation.mutateAsync({ email: values.email.trim(), password: values.password });
+      // "/" is the landing page while signed out; drop the router cache so it isn't reused for the app.
+      router.refresh();
       router.replace("/");
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Something went wrong";

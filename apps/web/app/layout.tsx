@@ -8,6 +8,7 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", axes: ["opsz"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cashmemo.andresholivin.dev"),
   title: "Cash Memo",
   description: "Your private money journal",
   applicationName: "Cash Memo",

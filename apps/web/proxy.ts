@@ -8,12 +8,15 @@ export function proxy(req: NextRequest) {
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||
     PUBLIC_FILES.includes(pathname) ||
+    pathname.startsWith("/welcome") ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/icons/") ||
     pathname.startsWith("/_next/");
 
-  if (!isPublic && !req.cookies.get("session")) {
-    return NextResponse.redirect(new URL("/login", req.url));
+  if (!req.cookies.get("session")) {
+    // Signed-out visitors get the landing page at "/" (URL stays "/"); the app itself stays behind login.
+    if (pathname === "/") return NextResponse.rewrite(new URL("/welcome", req.url));
+    if (!isPublic) return NextResponse.redirect(new URL("/login", req.url));
   }
 
   return NextResponse.next();
