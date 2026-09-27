@@ -172,7 +172,7 @@ Open http://localhost:3000, create an account, and add the starter categories. W
 | `MAIL_FROM` | worker | — (required with Resend) | e.g. `Cash Memo <noreply@mail.cashmemo.andresholivin.dev>` |
 | `EMAIL_DAILY_CAP` | worker | `90` | stays under Resend's free 100/day; extra mail waits an hour |
 | `API_URL` | web | `http://localhost:8080` | where the web proxy forwards `/api/*` (read at runtime) |
-| `NEXT_PUBLIC_SENTRY_DSN` | web | unset | GlitchTip DSN for browser/server errors; unset = off |
+| `NEXT_PUBLIC_SENTRY_DSN` | web (build time) | unset | GlitchTip DSN for browser/server errors; unset = off. Inlined when the image is built, so set it as the GitHub **variable** `NEXT_PUBLIC_SENTRY_DSN` (`images.yml` passes it as a build arg) |
 
 The Rust apps load `.env` from the repo root in development (`dotenvy`).
 
@@ -374,7 +374,7 @@ bun run test:e2e
   - `cashmemo-db` (Postgres 18), with daily backups to R2.
   - `cashmemo-api`: internal only. Env: `DATABASE_URL`, `COOKIE_SECURE=true`, `APP_URL`, `SENTRY_DSN`, `S3_*`.
   - `cashmemo-worker`: no ports. Env: `DATABASE_URL`, `SENTRY_DSN`, `S3_*`, `RESEND_API_KEY`, `MAIL_FROM`, `EMAIL_DAILY_CAP`.
-  - `cashmemo-web`: domain `cashmemo.andresholivin.dev` over HTTPS via Cloudflare. Env: `API_URL=http://<api-service>:8080`, `NEXT_PUBLIC_SENTRY_DSN`.
+  - `cashmemo-web`: domain `cashmemo.andresholivin.dev` over HTTPS via Cloudflare. Env: `API_URL=http://<api-service>:8080` (the GlitchTip DSN is baked in at build time from the repo variable).
 - **Shared infrastructure** (not per app):
   - **GlitchTip** runs in the Dokploy project **Observability & Mgmt** next to OpenObserve, with one GlitchTip project per app (Cash Memo, Hortator, Kognovis…).
   - The **R2 backup destination** is org-wide in Dokploy (bucket `dokploy-backups`, a prefix per project).

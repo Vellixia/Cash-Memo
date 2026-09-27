@@ -35,6 +35,9 @@ jobs:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           push: true
+          # Public by design (the browser posts errors to it); set as a repo variable, not a secret.
+          build-args: |
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
           tags: |
             ghcr.io/vellixia/cashmemo-${{ matrix.app }}:${{ github.event.workflow_run.head_sha }}
             ghcr.io/vellixia/cashmemo-${{ matrix.app }}:latest
