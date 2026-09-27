@@ -265,6 +265,7 @@ async fn test_app_db() -> (Router, sea_orm::DatabaseConnection) {
         cookie_secure: false,
         limiter: Default::default(),
         app_url: "https://app.test".into(),
+        storage: domain::storage::Storage::from_env().map(std::sync::Arc::new),
     });
     (router, db)
 }
@@ -721,4 +722,66 @@ async fn account_email_flows() {
         .try_get::<i64>("", "n")
         .unwrap();
     assert_eq!(left, 0, "queued mail for a deleted account is dropped");
+}
+
+#[tokio::test]
+async fn data_endpoints_queue_and_guard() {
+    let (app, _db) = test_app_db().await;
+    if domain::storage::Storage::from_env().is_none() {
+        eprintln!("S3_* not set; skipping");
+        return;
+    }
+    let a = signup(&app).await;
+    let (s, _, q) = call(
+        &app,
+        "POST",
+        "/api/exports",
+        &a,
+        Some(json!({ "offset": 420 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    let (s, _, _) = call(&app, "POST", "/api/exports", &a, Some(json!({}))).await;
+    assert_eq!(s, StatusCode::CONFLICT, "one export at a time");
+    let job = format!("/api/jobs/{}", q["job_id"].as_str().unwrap());
+    let (s, _, j) = call(&app, "GET", &job, &a, None).await;
+    assert_eq!(
+        (s, j["status"].clone(), j["download_url"].clone()),
+        (StatusCode::OK, json!("queued"), Value::Null)
+    );
+
+    let (s, _, up) = call(&app, "POST", "/api/imports", &a, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(
+        up["upload_url"]
+            .as_str()
+            .unwrap()
+            .contains("X-Amz-Signature")
+    );
+    let id = up["import_id"].as_str().unwrap();
+    let mapping = json!({ "mapping": { "date": 0, "amount": 1, "default_currency": "USD" } });
+    let (s, _, v) = call(
+        &app,
+        "POST",
+        &format!("/api/imports/{id}/validate"),
+        &a,
+        Some(mapping),
+    )
+    .await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    // Not validated yet, so it can't be committed.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &format!("/api/imports/{}/commit", v["job_id"].as_str().unwrap()),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // Jobs are private.
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "GET", &job, &b, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
 }

@@ -217,7 +217,14 @@ async fn delete_account(
 ) -> Result<Response> {
     let u = find_user(&st.db, uid).await?;
     check_password(&st, &u, input.password).await?;
-    user::Entity::delete_by_id(uid).exec(&st.db).await?;
+    let txn = st.db.begin().await?;
+    if st.storage.is_some() {
+        // Not tied to the user row, so it survives the cascade below.
+        let prefix = domain::storage::user_prefix(uid);
+        jobs::enqueue(&txn, jobs::PURGE_FILES, jobs::PurgePayload { prefix }, None).await?;
+    }
+    user::Entity::delete_by_id(uid).exec(&txn).await?;
+    txn.commit().await?;
     let clear = format!("{COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
     Ok((StatusCode::NO_CONTENT, [(header::SET_COOKIE, clear)]).into_response())
 }

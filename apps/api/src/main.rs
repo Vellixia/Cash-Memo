@@ -1,5 +1,6 @@
 use api::{AppState, app};
 use domain::migration::{Migrator, MigratorTrait};
+use std::sync::Arc;
 
 fn main() {
     dotenvy::dotenv().ok();
@@ -25,6 +26,7 @@ async fn run() {
         db,
         cookie_secure: std::env::var("COOKIE_SECURE").is_ok_and(|v| v == "true"),
         limiter: Default::default(),
+        storage: domain::storage::Storage::from_env().map(Arc::new),
         app_url: std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
     };
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());

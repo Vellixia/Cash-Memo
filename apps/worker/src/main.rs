@@ -1,6 +1,6 @@
 //! Background jobs from the `jobs` table: email today, CSV export/import next.
 //! Runs with a tiny DB pool so it can never starve the API.
-mod email;
+use worker::{data, email};
 
 use std::time::Duration;
 
@@ -37,8 +37,29 @@ async fn run() {
 
     let mailer = email::Mailer::from_env();
     tracing::info!("worker started (email: {})", mailer.mode());
+    let data = async {
+        match domain::storage::Storage::from_env() {
+            Some(storage) => {
+                let http = reqwest::Client::builder()
+                    .timeout(Duration::from_secs(300))
+                    .build()
+                    .expect("http client");
+                data::run(data::Ctx {
+                    db: db.clone(),
+                    storage,
+                    http,
+                })
+                .await
+            }
+            None => {
+                tracing::warn!("S3_* not set: CSV export/import jobs will wait");
+                std::future::pending().await
+            }
+        }
+    };
     tokio::select! {
         _ = email::run(db.clone(), mailer) => {},
+        _ = data => {},
         _ = shutdown() => tracing::info!("shutting down"),
     }
 }

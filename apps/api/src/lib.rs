@@ -1,6 +1,7 @@
 mod account;
 mod auth;
 mod categories;
+mod data;
 mod error;
 mod limits;
 mod memos;
@@ -20,6 +21,8 @@ pub struct AppState {
     pub limiter: Arc<limits::RateLimiter>,
     /// Public base URL of the web app, for links in emails.
     pub app_url: String,
+    /// Object storage for CSV files; None disables export/import.
+    pub storage: Option<Arc<domain::storage::Storage>>,
 }
 
 pub fn app(state: AppState) -> Router {
@@ -29,7 +32,8 @@ pub fn app(state: AppState) -> Router {
         .merge(account::routes())
         .merge(memos::routes())
         .merge(categories::routes())
-        .merge(sources::routes());
+        .merge(sources::routes())
+        .merge(data::routes());
     Router::new()
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())

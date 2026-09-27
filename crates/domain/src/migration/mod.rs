@@ -5,6 +5,7 @@ mod m20260924_000002_category_emoji;
 mod m20260925_000003_default_currency;
 mod m20261001_000004_sources;
 mod m20261002_000005_jobs_email;
+mod m20261003_000006_csv;
 
 pub struct Migrator;
 
@@ -17,6 +18,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260925_000003_default_currency::Migration),
             Box::new(m20261001_000004_sources::Migration),
             Box::new(m20261002_000005_jobs_email::Migration),
+            Box::new(m20261003_000006_csv::Migration),
         ]
     }
 }

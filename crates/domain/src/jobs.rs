@@ -5,6 +5,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const EMAIL: &str = "email";
+/// Payload `{ offset }`; result `{ key, filename, rows }`.
+pub const EXPORT: &str = "export";
+/// Payload `{ key, mapping }`; result is the preview report. Rows wait in `import_rows`.
+pub const IMPORT_VALIDATE: &str = "import_validate";
+/// Payload `{ import_id }` (the validate job's id); result `{ inserted, duplicates }`.
+pub const IMPORT_COMMIT: &str = "import_commit";
+/// Payload `{ prefix }`: deletes every stored object under it (account deletion).
+pub const PURGE_FILES: &str = "purge_files";
 
 /// Payload of an `email` job. Scrubbed from the row once sent (it may carry a live link).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -120,4 +128,41 @@ pub async fn requeue_stale(db: &impl ConnectionTrait) -> Result<u64, DbErr> {
         ))
         .await?
         .rows_affected())
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExportPayload {
+    /// Minutes east of UTC, so exported dates read in the user's local time.
+    pub offset: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ValidatePayload {
+    pub key: String,
+    pub mapping: crate::import::Mapping,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CommitPayload {
+    pub import_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PurgePayload {
+    pub prefix: String,
+}
+
+/// Where an import's upload lives. Derived server-side so a client can't point at other keys.
+pub fn import_key(user_id: Uuid, import_id: Uuid) -> String {
+    format!(
+        "{}imports/{import_id}.csv",
+        crate::storage::user_prefix(user_id)
+    )
+}
+
+pub fn export_key(user_id: Uuid, job_id: Uuid) -> String {
+    format!(
+        "{}exports/{job_id}.csv",
+        crate::storage::user_prefix(user_id)
+    )
 }
