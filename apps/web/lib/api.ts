@@ -1,17 +1,33 @@
 export type User = { id: string; email: string; default_currency: string };
 export type Direction = "income" | "expense";
+export type MemoDirection = Direction | "transfer";
 export type Memo = {
   id: string;
-  direction: Direction;
+  direction: MemoDirection;
   amount_minor: number;
   currency: string;
   occurred_at: string;
   category_id: string | null;
+  source_id: string | null;
+  to_source_id: string | null;
   note: string | null;
   created_at: string;
   updated_at: string;
 };
 export type Category = { id: string; name: string; direction: Direction; emoji: string | null };
+export type SourceKind = "cash" | "bank" | "ewallet" | "credit" | "paylater" | "other";
+export type Source = {
+  id: string;
+  name: string;
+  kind: SourceKind;
+  emoji: string | null;
+  track_balance: boolean;
+  currency: string | null;
+  opening_minor: number;
+  archived_at: string | null;
+  /** Only for sources that track a balance. */
+  balance_minor: number | null;
+};
 export type SummaryTotal = { currency: string; direction: Direction; total_minor: number };
 export type CategoryTotal = {
   category_id: string | null;
@@ -22,11 +38,13 @@ export type CategoryTotal = {
 export type Summary = { month: string; totals: SummaryTotal[]; by_category: CategoryTotal[] };
 
 export type MemoInput = {
-  direction: Direction;
+  direction: MemoDirection;
   amount_minor: number;
   currency: string;
   occurred_at: string;
   category_id?: string | null;
+  source_id?: string | null;
+  to_source_id?: string | null;
   note?: string | null;
 };
 
@@ -56,9 +74,10 @@ export function utcOffsetMinutes(): number {
   return -new Date().getTimezoneOffset();
 }
 
-export function getMemos(month: string, categoryId?: string): Promise<Memo[]> {
+export function getMemos(month: string, categoryId?: string, sourceId?: string): Promise<Memo[]> {
   const params = new URLSearchParams({ month, offset: String(utcOffsetMinutes()) });
   if (categoryId) params.set("category_id", categoryId);
+  if (sourceId) params.set("source_id", sourceId);
   return api<Memo[]>(`/memos?${params}`);
 }
 
@@ -104,6 +123,35 @@ export function updateCategory(id: string, patch: { name?: string; emoji?: strin
 
 export function deleteCategory(id: string): Promise<void> {
   return api<void>(`/categories/${id}`, { method: "DELETE" });
+}
+
+// --- sources ----------------------------------------------------------------
+
+export function getSources(): Promise<Source[]> {
+  return api<Source[]>("/sources");
+}
+
+export type SourceInput = {
+  name: string;
+  kind: SourceKind;
+  emoji?: string | null;
+  track_balance?: boolean;
+  currency?: string | null;
+  opening_minor?: number;
+};
+
+export function createSource(input: SourceInput): Promise<Source> {
+  return api<Source>("/sources", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** PATCH is partial; `archived: true/false` archives/restores. The response has no `balance_minor`. */
+export function updateSource(id: string, patch: Partial<SourceInput> & { archived?: boolean }): Promise<Source> {
+  return api<Source>(`/sources/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+/** Archives (the API never hard-deletes a source, so history and balances stay intact). */
+export function archiveSource(id: string): Promise<void> {
+  return api<void>(`/sources/${id}`, { method: "DELETE" });
 }
 
 // --- auth -----------------------------------------------------------------

@@ -469,6 +469,17 @@ test.describe("mobile", () => {
     await expect(sheet).toBeHidden();
     await expect(page.getByTestId("memo-row").filter({ hasText: "Bus pass" })).toContainText("−$7.25");
   });
+
+  test("the tab bar has 5 equal columns with the add button exactly centered", async ({ page, user }) => {
+    void user;
+    await gotoHome(page);
+    const tabs = page.getByRole("navigation", { name: "Tabs" });
+    for (const name of ["Home", "Categories", "Sources", "Account"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
+    const fab = await box(tabs.getByRole("button", { name: "Add memo" }));
+    const vp = page.viewportSize()!;
+    expect(Math.abs(fab.x + fab.width / 2 - vp.width / 2)).toBeLessThanOrEqual(1);
+    await noHorizontalOverflow(page);
+  });
 });
 
 test("no horizontal overflow on home, categories, account, login", async ({ page, api }) => {
@@ -628,6 +639,10 @@ test.describe("responsive", () => {
       await expect(page.getByTestId("memo-row")).toHaveCount(2);
       await noHorizontalOverflow(page);
 
+      // The add button sits dead-center on the 5-column tab bar even at the narrowest supported width.
+      const fab = await box(page.getByRole("button", { name: "Add memo" }));
+      expect(Math.abs(fab.x + fab.width / 2 - 160)).toBeLessThanOrEqual(1);
+
       const dialog = await openNewMemo(page, true);
       const amount = dialog.getByLabel("Amount");
       await amount.fill("1234567.89");
@@ -637,7 +652,7 @@ test.describe("responsive", () => {
       await expect(dialog.getByRole("button", { name: "Save expense" })).toBeInViewport({ ratio: 1 });
       await page.keyboard.press("Escape");
 
-      for (const path of ["/categories", "/account"]) {
+      for (const path of ["/categories", "/sources", "/account"]) {
         await page.goto(path);
         await page.waitForLoadState("networkidle");
         await noHorizontalOverflow(page);

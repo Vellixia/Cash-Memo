@@ -69,6 +69,16 @@ export function signedMoney(amount_minor: number, currency: string): string {
   return sign + formatMoney(Math.abs(amount_minor), currency);
 }
 
+/** A source's balance, worded for its kind: a credit card/pay-later reads "Owed 50.00" when it's
+ * negative (money owed) or "Credit 10.00" when it's positive (paid ahead); everything else just
+ * shows its signed balance. */
+export function balanceLabel(kind: string, balance_minor: number, currency: string): string {
+  if (kind === "credit" || kind === "paylater") {
+    return balance_minor < 0 ? `Owed ${formatMoney(-balance_minor, currency)}` : `Credit ${formatMoney(balance_minor, currency)}`;
+  }
+  return signedMoney(balance_minor, currency);
+}
+
 /** Parses a canonical decimal string ("10.5") into minor units (1050) with string math, so there's no float drift. */
 export function toMinor(input: string, currency: string): number {
   const exp = exponent(currency);
