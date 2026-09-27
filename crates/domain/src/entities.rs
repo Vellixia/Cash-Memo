@@ -58,6 +58,34 @@ pub mod category {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
+pub mod source {
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize)]
+    #[sea_orm(table_name = "sources")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        #[serde(skip)]
+        pub user_id: Uuid,
+        pub name: String,
+        pub kind: String,
+        pub emoji: Option<String>,
+        pub track_balance: bool,
+        pub currency: Option<String>,
+        pub opening_minor: i64,
+        pub archived_at: Option<DateTimeUtc>,
+        #[serde(skip)]
+        pub created_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
 pub mod memo {
     use sea_orm::entity::prelude::*;
     use serde::Serialize;
@@ -74,11 +102,35 @@ pub mod memo {
         pub currency: String,
         pub occurred_at: DateTimeUtc,
         pub category_id: Option<Uuid>,
+        pub source_id: Option<Uuid>,
+        pub to_source_id: Option<Uuid>,
         pub note: Option<String>,
         #[serde(skip)]
         pub deleted_at: Option<DateTimeUtc>,
         pub created_at: DateTimeUtc,
         pub updated_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod email_token {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[sea_orm(table_name = "email_tokens")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub token_hash: Vec<u8>,
+        pub user_id: Uuid,
+        pub purpose: String,
+        pub new_email: Option<String>,
+        pub expires_at: DateTimeUtc,
+        pub used_at: Option<DateTimeUtc>,
+        pub created_at: DateTimeUtc,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

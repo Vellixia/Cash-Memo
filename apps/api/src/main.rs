@@ -1,16 +1,19 @@
 use api::{AppState, app};
-use migration::{Migrator, MigratorTrait};
+use domain::migration::{Migrator, MigratorTrait};
+use std::sync::Arc;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,sqlx=warn".into()),
-        )
-        .init();
+    let _telemetry = telemetry::init(sentry::release_name!());
 
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime")
+        .block_on(run());
+}
+
+async fn run() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
     let mut opts = sea_orm::ConnectOptions::new(url);
     opts.max_connections(20)
@@ -22,13 +25,19 @@ async fn main() {
     let state = AppState {
         db,
         cookie_secure: std::env::var("COOKIE_SECURE").is_ok_and(|v| v == "true"),
+        limiter: Default::default(),
+        storage: domain::storage::Storage::from_env().map(Arc::new),
+        app_url: std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
     };
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
         .expect("bind");
     tracing::info!("listening on {port}");
-    axum::serve(listener, app(state))
+    let app = app(state)
+        .layer(sentry::integrations::tower::SentryHttpLayer::new())
+        .layer(sentry::integrations::tower::NewSentryLayer::new_from_top());
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown())
         .await
         .expect("serve");

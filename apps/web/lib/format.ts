@@ -49,7 +49,8 @@ export function signedAmount(memo: Pick<Memo, "direction" | "amount_minor">): nu
 
 export type DayGroup = { key: string; memos: Memo[]; net: Record<string, number> };
 
-/** Groups memos (already newest-first) by local day, keeping order; `net` is per currency. */
+/** Groups memos (already newest-first) by local day, keeping order; `net` is per currency.
+ * Transfers move money between sources rather than in or out, so they're excluded from `net`. */
 export function groupByDay(memos: Memo[]): DayGroup[] {
   const groups: DayGroup[] = [];
   for (const memo of memos) {
@@ -60,7 +61,7 @@ export function groupByDay(memos: Memo[]): DayGroup[] {
       groups.push(g);
     }
     g.memos.push(memo);
-    g.net[memo.currency] = (g.net[memo.currency] ?? 0) + signedAmount(memo);
+    if (memo.direction !== "transfer") g.net[memo.currency] = (g.net[memo.currency] ?? 0) + signedAmount(memo);
   }
   return groups;
 }

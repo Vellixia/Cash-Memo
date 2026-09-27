@@ -111,7 +111,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               <FieldError errors={[errors.email]} />
             </Field>
             <Field data-invalid={!!errors.password}>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <div className="flex items-baseline justify-between gap-2">
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                {mode === "login" && (
+                  <Link href="/forgot" className="text-xs font-medium text-muted-foreground underline decoration-border underline-offset-4 hover:decoration-foreground">
+                    Forgot password?
+                  </Link>
+                )}
+              </div>
               <div className="relative">
                 <Input
                   id="password"

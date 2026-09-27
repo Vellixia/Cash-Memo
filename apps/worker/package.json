@@ -1,0 +1,7 @@
+{
+  "name": "worker",
+  "private": true,
+  "scripts": {
+    "dev": "cargo run -p worker"
+  }
+}

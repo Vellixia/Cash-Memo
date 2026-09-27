@@ -5,7 +5,8 @@ edition = "2024"
 publish = false
 
 [dependencies]
-migration = { path = "migration" }
+domain = { path = "../../crates/domain" }
+telemetry = { path = "../../crates/telemetry" }
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 sea-orm = { version = "2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
@@ -18,8 +19,8 @@ rand = "0.9"
 sha2 = "0.10"
 tower-http = { version = "0.6", features = ["trace"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15.7"
+sentry = { version = "0.49", default-features = false, features = ["tower", "tower-http"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

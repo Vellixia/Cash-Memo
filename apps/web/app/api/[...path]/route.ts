@@ -11,6 +11,10 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   if (cookie) headers.set("cookie", cookie);
   const contentType = req.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
+  // The API rate-limits auth per client IP. Cloudflare sets CF-Connecting-IP (and overwrites any
+  // client-sent copy); X-Forwarded-For is the fallback when not behind Cloudflare (dev, e2e).
+  const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (ip) headers.set("x-client-ip", ip);
 
   const hasBody = !["GET", "HEAD"].includes(req.method);
 

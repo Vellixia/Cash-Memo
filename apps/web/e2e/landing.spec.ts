@@ -1,4 +1,4 @@
-import { apiFor, expect, gotoHome, noHorizontalOverflow, PASSWORD, test } from "./helpers";
+import { anonRequest, apiFor, expect, gotoHome, noHorizontalOverflow, PASSWORD, test } from "./helpers";
 
 const hero = (page: import("@playwright/test").Page) =>
   page.getByRole("heading", { level: 1, name: "Your private money journal" });
@@ -63,7 +63,7 @@ test.describe("landing (signed out)", () => {
   });
 
   test("landing -> Log in -> signed in lands on the app, not the landing", async ({ page, playwright }) => {
-    const anon = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL });
+    const anon = await anonRequest(playwright);
     const { email } = await apiFor(anon).signup();
     await anon.dispose();
 

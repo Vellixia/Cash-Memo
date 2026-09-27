@@ -6,13 +6,35 @@ export function uniqueEmail(tag = "e2e") {
   return `${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.io`;
 }
 
+type SourceKind = "cash" | "bank" | "ewallet" | "credit" | "paylater" | "other";
 type Category = { id: string; name: string; direction: "income" | "expense"; emoji: string | null };
+type Source = {
+  id: string;
+  name: string;
+  kind: SourceKind;
+  emoji: string | null;
+  track_balance: boolean;
+  currency: string | null;
+  opening_minor: number;
+  archived_at: string | null;
+  balance_minor: number | null;
+};
+type SourceInput = {
+  name: string;
+  kind: SourceKind;
+  emoji?: string | null;
+  track_balance?: boolean;
+  currency?: string | null;
+  opening_minor?: number;
+};
 type MemoInput = {
-  direction: "income" | "expense";
+  direction: "income" | "expense" | "transfer";
   amount_minor: number;
   currency?: string;
   occurred_at?: string;
   category_id?: string | null;
+  source_id?: string | null;
+  to_source_id?: string | null;
   note?: string | null;
 };
 
@@ -27,9 +49,33 @@ export function apiFor(request: APIRequestContext) {
     signup: (email = uniqueEmail(), password = PASSWORD) => call<{ id: string; email: string }>("post", "/auth/signup", { email, password }),
     category: (name: string, direction: "income" | "expense" = "expense", emoji: string | null = null) =>
       call<Category>("post", "/categories", { name, direction, emoji }),
-    memo: (m: MemoInput) =>
-      call<{ id: string }>("post", "/memos", { currency: "USD", occurred_at: new Date().toISOString(), ...m }),
+    source: (input: SourceInput) => call<Source>("post", "/sources", input),
+    memo: async (m: MemoInput) => {
+      let body: MemoInput & { currency: string; occurred_at: string } = {
+        currency: "USD",
+        occurred_at: new Date().toISOString(),
+        ...m,
+      };
+      // An expense now needs a source; default to the account's first active one (every account starts with "Cash").
+      if (body.direction === "expense" && !body.source_id) {
+        const sources = await call<Source[]>("get", "/sources");
+        const active = sources.find((s) => !s.archived_at);
+        if (active) body = { ...body, source_id: active.id };
+      }
+      return call<{ id: string }>("post", "/memos", body);
+    },
   };
+}
+
+/** A random private IP, so each test's auth calls get their own rate-limit bucket. */
+export function fakeIp() {
+  const octet = () => 1 + Math.floor(Math.random() * 254);
+  return `10.${octet()}.${octet()}.${octet()}`;
+}
+
+/** A signed-out API context (its own cookie jar) with its own fake client IP. */
+export function anonRequest(playwright: { request: { newContext: (o: object) => Promise<APIRequestContext> } }) {
+  return playwright.request.newContext({ baseURL: base.info().project.use.baseURL, extraHTTPHeaders: { "x-forwarded-for": fakeIp() } });
 }
 
 /** Each test gets a fresh signed-in user (unless it opts out) and fails on any page or console error. */
@@ -41,7 +87,17 @@ export const test = base.extend<{
   isMobile: boolean;
   /** Two-column desktop dashboard (viewport >= 1024). */
   isWide: boolean;
+  /** A unique fake client IP per test context, so parallel signups/logins never trip the API's per-IP
+   * rate limits (the web proxy trusts `x-forwarded-for` when there's no CF-Connecting-IP). */
+  clientIp: void;
 }>({
+  clientIp: [
+    async ({ page }, provide) => {
+      await page.context().setExtraHTTPHeaders({ "x-forwarded-for": fakeIp() });
+      await provide();
+    },
+    { auto: true },
+  ],
   allowConsole: [
     async ({ page }, provide) => {
       const allowed: RegExp[] = [];
@@ -55,7 +111,11 @@ export const test = base.extend<{
     },
     { auto: true },
   ],
-  api: async ({ page }, provide) => provide(apiFor(page.request)),
+  // Depends on clientIp so the fake IP header is set before any signup/login call.
+  api: async ({ page, clientIp }, provide) => {
+    void clientIp;
+    provide(apiFor(page.request));
+  },
   user: async ({ api }, provide) => provide(await api.signup()),
   isMobile: async ({}, provide, info) => provide(projectWidth(info.project.use.viewport) < 768),
   isWide: async ({}, provide, info) => provide(projectWidth(info.project.use.viewport) >= 1024),

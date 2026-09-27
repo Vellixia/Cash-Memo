@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/offline"];
+const PUBLIC_PATHS = ["/login", "/signup", "/offline", "/forgot", "/reset", "/confirm-email"];
 const PUBLIC_FILES = ["/icon.svg", "/apple-icon.png", "/manifest.webmanifest", "/sw.js"];
 
 export function proxy(req: NextRequest) {

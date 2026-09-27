@@ -1,25 +1,39 @@
+mod account;
 mod auth;
 mod categories;
-mod entities;
+mod data;
 mod error;
+mod limits;
 mod memos;
+mod sources;
+
+pub(crate) use domain::entities;
 
 use axum::{Router, extract::State, http::StatusCode, routing::get};
 use sea_orm::DatabaseConnection;
+use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
     pub cookie_secure: bool,
+    pub limiter: Arc<limits::RateLimiter>,
+    /// Public base URL of the web app, for links in emails.
+    pub app_url: String,
+    /// Object storage for CSV files; None disables export/import.
+    pub storage: Option<Arc<domain::storage::Storage>>,
 }
 
 pub fn app(state: AppState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .merge(auth::routes())
+        .merge(account::routes())
         .merge(memos::routes())
-        .merge(categories::routes());
+        .merge(categories::routes())
+        .merge(sources::routes())
+        .merge(data::routes());
     Router::new()
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())
@@ -45,7 +59,7 @@ pub(crate) fn parse_currency(c: &str) -> error::Result<String> {
     Ok(c)
 }
 
-/// Shared by memos and categories.
+/// Category directions; memos also accept `transfer` (see `memos::parse_direction`).
 pub(crate) fn parse_direction(d: &str) -> error::Result<String> {
     match d {
         "income" | "expense" => Ok(d.to_owned()),

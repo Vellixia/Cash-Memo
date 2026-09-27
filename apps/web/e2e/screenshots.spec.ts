@@ -32,25 +32,32 @@ for (const scheme of ["light", "dark"] as const) {
       fun: await api.category("Fun", "expense", "🎉"),
       salary: await api.category("Salary", "income", "💼"),
     };
+    const bca = await api.source({ name: "BCA", kind: "bank", emoji: "🏦", track_balance: true, currency: "USD", opening_minor: 500000 });
+    const visa = await api.source({ name: "Visa", kind: "credit", emoji: "💳", track_balance: true, currency: "USD", opening_minor: 0 });
     const day = (d: number, h = 12) => {
       const t = new Date();
       t.setDate(Math.max(1, t.getDate() - d));
       t.setHours(h, 15, 0, 0);
       return t.toISOString();
     };
-    await api.memo({ direction: "income", amount_minor: 420000, category_id: cats.salary.id, note: "September pay", occurred_at: day(3, 9) });
-    await api.memo({ direction: "expense", amount_minor: 1450, category_id: cats.food.id, note: "Ramen with Sam", occurred_at: day(0, 13) });
-    await api.memo({ direction: "expense", amount_minor: 275, category_id: cats.transport.id, occurred_at: day(0, 8) });
-    await api.memo({ direction: "expense", amount_minor: 8900, category_id: cats.shopping.id, note: "Running shoes", occurred_at: day(1, 18) });
-    await api.memo({ direction: "expense", amount_minor: 12000, category_id: cats.bills.id, note: "Electricity", occurred_at: day(2, 10) });
-    await api.memo({ direction: "expense", amount_minor: 3200, category_id: cats.fun.id, note: "Cinema", occurred_at: day(2, 20) });
-    await api.memo({ direction: "expense", amount_minor: 640, note: "Parking", occurred_at: day(3, 16) });
+    await api.memo({ direction: "income", amount_minor: 420000, category_id: cats.salary.id, source_id: bca.id, note: "September pay", occurred_at: day(3, 9) });
+    await api.memo({ direction: "expense", amount_minor: 1450, category_id: cats.food.id, source_id: visa.id, note: "Ramen with Sam", occurred_at: day(0, 13) });
+    await api.memo({ direction: "expense", amount_minor: 275, category_id: cats.transport.id, source_id: bca.id, occurred_at: day(0, 8) });
+    await api.memo({ direction: "expense", amount_minor: 8900, category_id: cats.shopping.id, source_id: bca.id, note: "Running shoes", occurred_at: day(1, 18) });
+    await api.memo({ direction: "expense", amount_minor: 12000, category_id: cats.bills.id, source_id: bca.id, note: "Electricity", occurred_at: day(2, 10) });
+    await api.memo({ direction: "expense", amount_minor: 3200, category_id: cats.fun.id, source_id: visa.id, note: "Cinema", occurred_at: day(2, 20) });
+    await api.memo({ direction: "expense", amount_minor: 640, source_id: bca.id, note: "Parking", occurred_at: day(3, 16) });
+    await api.memo({ direction: "transfer", amount_minor: 20000, source_id: bca.id, to_source_id: visa.id, note: "Card payment", occurred_at: day(1, 9) });
 
     await gotoHome(page);
-    await expect(page.getByTestId("memo-row")).toHaveCount(7);
+    await expect(page.getByTestId("memo-row")).toHaveCount(8);
     // Categories load separately; without them the legend briefly reads "Uncategorized".
     await expect(page.getByTestId("donut-legend")).toContainText("Bills");
     await shot("home");
+
+    await page.goto("/sources");
+    await expect(page.getByTestId("source-row").first()).toBeVisible();
+    await shot("sources");
 
     const dialog = await openNewMemo(page, isMobile);
     await dialog.getByLabel("Amount").fill("18.40");

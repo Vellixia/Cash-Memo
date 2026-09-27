@@ -3,6 +3,8 @@ FROM rust:1.98-slim-bookworm AS builder
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY apps/api apps/api
+COPY apps/worker apps/worker
+COPY crates crates
 RUN cargo build --release -p api
 
 FROM debian:bookworm-slim
