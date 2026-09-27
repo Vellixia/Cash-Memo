@@ -102,9 +102,9 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "domain",
  "dotenvy",
  "http-body-util",
- "migration",
  "password-auth",
  "rand 0.9.5",
  "sea-orm",
@@ -835,6 +835,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "domain"
+version = "0.1.0"
+dependencies = [
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+]
+
+[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1550,13 +1559,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "migration"
-version = "0.1.0"
-dependencies = [
- "sea-orm-migration",
 ]
 
 [[package]]

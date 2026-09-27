@@ -1,8 +1,9 @@
 mod auth;
 mod categories;
-mod entities;
 mod error;
 mod memos;
+
+pub(crate) use domain::entities;
 
 use axum::{Router, extract::State, http::StatusCode, routing::get};
 use sea_orm::DatabaseConnection;

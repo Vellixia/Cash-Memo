@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-migration = { path = "migration" }
+domain = { path = "../../crates/domain" }
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 sea-orm = { version = "2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }

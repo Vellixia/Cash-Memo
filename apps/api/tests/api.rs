@@ -5,8 +5,8 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
+use domain::migration::{Migrator, MigratorTrait};
 use http_body_util::BodyExt;
-use migration::{Migrator, MigratorTrait};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 

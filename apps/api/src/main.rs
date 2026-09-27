@@ -1,5 +1,5 @@
 use api::{AppState, app};
-use migration::{Migrator, MigratorTrait};
+use domain::migration::{Migrator, MigratorTrait};
 
 #[tokio::main]
 async fn main() {
