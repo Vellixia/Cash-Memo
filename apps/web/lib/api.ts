@@ -175,3 +175,99 @@ export function updateMe(patch: { default_currency: string }): Promise<User> {
 export function logout(): Promise<void> {
   return api<void>("/auth/logout", { method: "POST" });
 }
+
+export function requestPasswordReset(email: string): Promise<void> {
+  return api<void>("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export function completePasswordReset(token: string, password: string): Promise<void> {
+  return api<void>("/auth/password-reset/complete", { method: "POST", body: JSON.stringify({ token, password }) });
+}
+
+export function changePassword(current_password: string, new_password: string): Promise<void> {
+  return api<void>("/auth/password", { method: "POST", body: JSON.stringify({ current_password, new_password }) });
+}
+
+export function changeEmail(current_password: string, new_email: string): Promise<void> {
+  return api<void>("/auth/email", { method: "POST", body: JSON.stringify({ current_password, new_email }) });
+}
+
+export function confirmEmail(token: string): Promise<User> {
+  return api<User>("/auth/email/confirm", { method: "POST", body: JSON.stringify({ token }) });
+}
+
+export function deleteAccount(password: string): Promise<void> {
+  return api<void>("/auth/delete", { method: "POST", body: JSON.stringify({ password }) });
+}
+
+// --- data: export/import ---------------------------------------------------
+
+export function startExport(): Promise<{ job_id: string }> {
+  return api("/exports", { method: "POST", body: JSON.stringify({ offset: utcOffsetMinutes() }) });
+}
+
+export function startImportUpload(): Promise<{ import_id: string; upload_url: string }> {
+  return api("/imports", { method: "POST" });
+}
+
+/** PUTs the raw file to a presigned S3 URL on another origin: no `/api` prefix, no extra headers. */
+export async function uploadImportFile(uploadUrl: string, file: File): Promise<void> {
+  const res = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": "text/csv" } });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+}
+
+export type DateOrder = "dmy" | "mdy";
+
+export type Mapping = {
+  has_header: boolean;
+  date: number;
+  amount: number;
+  direction?: number | null;
+  currency?: number | null;
+  category?: number | null;
+  source?: number | null;
+  to_source?: number | null;
+  note?: number | null;
+  default_currency: string;
+  decimal: "." | ",";
+  delimiter: "," | ";" | "\t";
+  date_order: DateOrder;
+  offset: number;
+};
+
+export function startValidate(importId: string, mapping: Mapping): Promise<{ job_id: string }> {
+  return api(`/imports/${importId}/validate`, { method: "POST", body: JSON.stringify({ mapping }) });
+}
+
+export function startCommit(validateJobId: string): Promise<{ job_id: string }> {
+  return api(`/imports/${validateJobId}/commit`, { method: "POST" });
+}
+
+export type JobStatus = "queued" | "running" | "done" | "failed";
+export type JobError = { line: number; message: string };
+export type ExportResult = { rows: number; filename: string };
+export type ValidateResult = {
+  rows: number;
+  valid: number;
+  error_count: number;
+  errors: JobError[];
+  duplicates: number;
+  new_categories: string[];
+  new_sources: string[];
+  currencies: Record<string, number>;
+  committed: boolean;
+};
+export type CommitResult = { inserted: number; duplicates: number };
+
+export type Job<R = ExportResult | ValidateResult | CommitResult | undefined> = {
+  id: string;
+  kind: string;
+  status: JobStatus;
+  result: R | null;
+  error: string | null;
+  download_url: string | null;
+};
+
+export function getJob<R = ExportResult | ValidateResult | CommitResult | undefined>(id: string): Promise<Job<R>> {
+  return api(`/jobs/${id}`);
+}

@@ -39,8 +39,8 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.method !== "GET") {
-    // Cached reads belong to whoever was signed in; never let them outlive the session.
-    if (/^\/api\/auth\/(login|signup|logout)$/.test(url.pathname)) {
+    // Cached reads belong to whoever was signed in; never let them outlive the session (delete: account gone too).
+    if (/^\/api\/auth\/(login|signup|logout|delete)$/.test(url.pathname)) {
       generation++;
       event.respondWith(
         fetch(request).finally(() => {
