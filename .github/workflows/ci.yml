@@ -37,8 +37,11 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile
-      - name: Create the S3 bucket
-        run: until curl -sf --aws-sigv4 aws:amz:us-east-1:s3 --user cashmemo:cashmemo-secret -X PUT localhost:9000/cashmemo-files -o /dev/null -w '%{http_code}' | grep -qE '200|409'; do sleep 2; done
+      - name: Create the S3 bucket (+ CORS for direct browser uploads)
+        run: |
+          s3() { curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 --user cashmemo:cashmemo-secret "$@"; }
+          until s3 -X PUT localhost:9000/cashmemo-files | grep -qE '200|409'; do sleep 2; done
+          s3 -X PUT 'localhost:9000/cashmemo-files?cors' -H 'Content-Type: application/xml' --data-binary '<CORSConfiguration><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader></CORSRule></CORSConfiguration>' | grep -q 200
       - run: bun run lint
       - run: bun run test
       - run: bun run build
@@ -74,8 +77,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile
       - run: cargo build --release -p api -p worker
-      - name: Create the S3 bucket
-        run: until curl -sf --aws-sigv4 aws:amz:us-east-1:s3 --user cashmemo:cashmemo-secret -X PUT localhost:9000/cashmemo-files -o /dev/null -w '%{http_code}' | grep -qE '200|409'; do sleep 2; done
+      - name: Create the S3 bucket (+ CORS for direct browser uploads)
+        run: |
+          s3() { curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 --user cashmemo:cashmemo-secret "$@"; }
+          until s3 -X PUT localhost:9000/cashmemo-files | grep -qE '200|409'; do sleep 2; done
+          s3 -X PUT 'localhost:9000/cashmemo-files?cors' -H 'Content-Type: application/xml' --data-binary '<CORSConfiguration><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader></CORSRule></CORSConfiguration>' | grep -q 200
       - run: (./target/release/api &) && (./target/release/worker &) && bun run --cwd apps/web build
       - run: (cd apps/web && PORT=3000 bun run start &) && cd apps/web && bunx playwright install --with-deps chromium
       - run: until curl -sf localhost:3000/login >/dev/null && curl -sf localhost:8080/api/health >/dev/null; do sleep 1; done

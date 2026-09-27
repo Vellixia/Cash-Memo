@@ -67,6 +67,17 @@ export function apiFor(request: APIRequestContext) {
   };
 }
 
+/** A random private IP, so each test's auth calls get their own rate-limit bucket. */
+export function fakeIp() {
+  const octet = () => 1 + Math.floor(Math.random() * 254);
+  return `10.${octet()}.${octet()}.${octet()}`;
+}
+
+/** A signed-out API context (its own cookie jar) with its own fake client IP. */
+export function anonRequest(playwright: { request: { newContext: (o: object) => Promise<APIRequestContext> } }) {
+  return playwright.request.newContext({ baseURL: base.info().project.use.baseURL, extraHTTPHeaders: { "x-forwarded-for": fakeIp() } });
+}
+
 /** Each test gets a fresh signed-in user (unless it opts out) and fails on any page or console error. */
 export const test = base.extend<{
   user: { email: string };
@@ -82,8 +93,7 @@ export const test = base.extend<{
 }>({
   clientIp: [
     async ({ page }, provide) => {
-      const octet = () => 1 + Math.floor(Math.random() * 254);
-      await page.context().setExtraHTTPHeaders({ "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}` });
+      await page.context().setExtraHTTPHeaders({ "x-forwarded-for": fakeIp() });
       await provide();
     },
     { auto: true },

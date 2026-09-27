@@ -19,11 +19,19 @@ services:
     image: curlimages/curl
     depends_on: [s3]
     restart: on-failure
-    # Creates the bucket (409 = already there). curl signs the request itself (SigV4).
-    command: >
-      sh -c "sleep 2; code=$$(curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3
-      --user cashmemo:cashmemo-secret -X PUT http://s3:9000/cashmemo-files);
-      echo bucket $$code; [ $$code = 200 ] || [ $$code = 409 ]"
+    # Creates the bucket (409 = already there) and lets the browser PUT/GET CSV files directly,
+    # like the CORS rule on the R2 bucket in production. curl signs the requests itself (SigV4).
+    command:
+      - sh
+      - -c
+      - |
+        sleep 2
+        s3() { curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 --user cashmemo:cashmemo-secret "$$@"; }
+        code=$$(s3 -X PUT http://s3:9000/cashmemo-files); echo "bucket $$code"
+        [ "$$code" = 200 ] || [ "$$code" = 409 ] || exit 1
+        cors='<CORSConfiguration><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>'
+        code=$$(s3 -X PUT 'http://s3:9000/cashmemo-files?cors' -H 'Content-Type: application/xml' --data-binary "$$cors"); echo "cors $$code"
+        [ "$$code" = 200 ]
 volumes:
   db:
   s3:

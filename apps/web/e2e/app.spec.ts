@@ -1,4 +1,4 @@
-import { apiFor, box, expect, gotoHome, noHorizontalOverflow, openNewMemo, PASSWORD, showCategories, test, uniqueEmail } from "./helpers";
+import { anonRequest, apiFor, box, expect, gotoHome, noHorizontalOverflow, openNewMemo, PASSWORD, showCategories, test, uniqueEmail } from "./helpers";
 
 const monthName = (offset = 0) => {
   const d = new Date();
@@ -53,7 +53,7 @@ test.describe("auth", () => {
 
   test("login with a wrong password shows an error and stays on /login", async ({ page, playwright, allowConsole }) => {
     allowConsole(/status of 401/);
-    const anon = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL });
+    const anon = await anonRequest(playwright);
     const { email } = await apiFor(anon).signup();
     await anon.dispose();
 
@@ -66,7 +66,7 @@ test.describe("auth", () => {
   });
 
   test("login with the right password opens home", async ({ page, playwright }) => {
-    const anon = await playwright.request.newContext({ baseURL: test.info().project.use.baseURL });
+    const anon = await anonRequest(playwright);
     const { email } = await apiFor(anon).signup();
     await anon.dispose();
 
