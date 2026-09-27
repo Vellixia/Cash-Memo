@@ -74,7 +74,7 @@ jobs:
           APP_ID: ${{ secrets[matrix.id_secret] }}
           IMAGE: ghcr.io/vellixia/cashmemo-${{ matrix.app }}:${{ github.event.workflow_run.head_sha }}
         run: |
-          if [ -z "$DOKPLOY_TOKEN" ] || [ -z "$APP_ID" ]; then echo "Dokploy secrets not set; skipping."; exit 0; fi
+          if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_TOKEN" ] || [ -z "$APP_ID" ]; then echo "Dokploy secrets not set; skipping."; exit 0; fi
           api() { curl -fsS -X POST "$DOKPLOY_URL/api/$1" -H "x-api-key: $DOKPLOY_TOKEN" -H 'content-type: application/json' -d "$2"; }
           api application.saveDockerProvider "{\"applicationId\":\"$APP_ID\",\"dockerImage\":\"$IMAGE\",\"username\":null,\"password\":null,\"registryUrl\":null}"
           api application.deploy "{\"applicationId\":\"$APP_ID\"}"
