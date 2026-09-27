@@ -1,8 +1,8 @@
 use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, FixedOffset, Months, NaiveDate, Utc};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, FromQueryResult, IntoActiveModel,
-    QueryFilter, QueryOrder, Set, Statement,
+    ActiveModelTrait, ColumnTrait, Condition, DbBackend, EntityTrait, FromQueryResult,
+    IntoActiveModel, QueryFilter, QueryOrder, Set, Statement,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
@@ -10,9 +10,9 @@ use uuid::Uuid;
 use crate::{
     AppState,
     auth::CurrentUser,
-    entities::{category, memo},
+    entities::{category, memo, source},
     error::{AppError, Json, Path, Query, Result},
-    parse_currency, parse_direction,
+    parse_currency,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -29,6 +29,8 @@ struct MonthQuery {
     #[serde(default)]
     offset: i32,
     category_id: Option<Uuid>,
+    /// Matches either side of a transfer.
+    source_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +41,10 @@ struct MemoIn {
     occurred_at: Option<DateTime<Utc>>,
     #[serde(default, deserialize_with = "present")]
     category_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "present")]
+    source_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "present")]
+    to_source_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "present")]
     note: Option<Option<String>>,
 }
@@ -64,6 +70,13 @@ async fn list(
     if let Some(c) = q.category_id {
         find = find.filter(memo::Column::CategoryId.eq(c));
     }
+    if let Some(src) = q.source_id {
+        find = find.filter(
+            Condition::any()
+                .add(memo::Column::SourceId.eq(src))
+                .add(memo::Column::ToSourceId.eq(src)),
+        );
+    }
     Ok(Json(
         find.order_by_desc(memo::Column::OccurredAt)
             .all(&st.db)
@@ -84,6 +97,8 @@ async fn create(
         created_at: Set(now),
         updated_at: Set(now),
         category_id: Set(None),
+        source_id: Set(None),
+        to_source_id: Set(None),
         note: Set(None),
         ..Default::default()
     };
@@ -97,7 +112,7 @@ async fn create(
             "direction, amount_minor, currency and occurred_at are required",
         ));
     };
-    apply(&st, uid, &mut m, input).await?;
+    apply(&st, uid, &mut m, input, true).await?;
     Ok((StatusCode::CREATED, Json(m.insert(&st.db).await?)))
 }
 
@@ -116,7 +131,7 @@ async fn update(
     Json(input): Json<MemoIn>,
 ) -> Result<Json<memo::Model>> {
     let mut m = owned(&st, uid, id).await?.into_active_model();
-    apply(&st, uid, &mut m, input).await?;
+    apply(&st, uid, &mut m, input, false).await?;
     m.updated_at = Set(Utc::now());
     Ok(Json(m.update(&st.db).await?))
 }
@@ -160,8 +175,10 @@ async fn summary(
     Query(q): Query<MonthQuery>,
 ) -> Result<Json<Summary>> {
     let (start, end) = month_range(&q.month, q.offset)?;
+    // Transfers move money between sources; they are neither income nor expense.
     let scope = "FROM memos
-         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3";
+         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3
+           AND direction <> 'transfer'";
     let stmt = |sql: String| {
         Statement::from_sql_and_values(
             DbBackend::Postgres,
@@ -198,7 +215,16 @@ async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
 }
 
 /// Validates the provided fields and copies them onto the active model.
-async fn apply(st: &AppState, uid: Uuid, m: &mut memo::ActiveModel, input: MemoIn) -> Result<()> {
+/// Rules are checked on the final state, so a partial update can't leave a memo inconsistent.
+async fn apply(
+    st: &AppState,
+    uid: Uuid,
+    m: &mut memo::ActiveModel,
+    input: MemoIn,
+    creating: bool,
+) -> Result<()> {
+    // Legacy memos have no source; only a create or a change to direction/source must pick one.
+    let source_touched = creating || input.direction.is_some() || input.source_id.is_some();
     if let Some(d) = input.direction {
         m.direction = Set(parse_direction(&d)?);
     }
@@ -217,23 +243,86 @@ async fn apply(st: &AppState, uid: Uuid, m: &mut memo::ActiveModel, input: MemoI
     if let Some(cat) = input.category_id {
         m.category_id = Set(cat);
     }
+    // Sources this request newly picks (re-sending the current one doesn't count).
+    let mut newly_set = Vec::new();
+    if let Some(src) = input.source_id {
+        if src != *m.source_id.as_ref() {
+            newly_set.extend(src);
+        }
+        m.source_id = Set(src);
+    }
+    if let Some(to) = input.to_source_id {
+        if to != *m.to_source_id.as_ref() {
+            newly_set.extend(to);
+        }
+        m.to_source_id = Set(to);
+    }
     if let Some(note) = input.note {
         m.note = Set(note.map(|n| n.trim().to_owned()).filter(|n| !n.is_empty()));
     }
-    // Checked on the final state, so changing only the direction can't orphan the category.
+
+    let direction = m.direction.as_ref().clone();
+    if direction == "transfer" {
+        // A transfer has no category; switching to one drops it.
+        m.category_id = Set(None);
+        match (*m.source_id.as_ref(), *m.to_source_id.as_ref()) {
+            (Some(a), Some(b)) if a != b => {}
+            _ => {
+                return Err(AppError::BadRequest(
+                    "a transfer needs two different sources",
+                ));
+            }
+        }
+    } else {
+        m.to_source_id = Set(None);
+        if direction == "expense" && source_touched && m.source_id.as_ref().is_none() {
+            return Err(AppError::BadRequest("an expense needs a source"));
+        }
+    }
+
+    let currency = m.currency.as_ref().clone();
+    for sid in [*m.source_id.as_ref(), *m.to_source_id.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        let s = source::Entity::find_by_id(sid)
+            .filter(source::Column::UserId.eq(uid))
+            .one(&st.db)
+            .await?
+            .ok_or(AppError::BadRequest("unknown source"))?;
+        // Archived sources stay on old memos but can't be picked again.
+        if s.archived_at.is_some() && newly_set.contains(&sid) {
+            return Err(AppError::BadRequest("that source is archived"));
+        }
+        if s.currency.as_ref().is_some_and(|c| *c != currency) {
+            return Err(AppError::BadRequest(
+                "memo currency does not match the source currency",
+            ));
+        }
+    }
+
     if let Some(cid) = *m.category_id.as_ref() {
         let c = category::Entity::find_by_id(cid)
             .filter(category::Column::UserId.eq(uid))
             .one(&st.db)
             .await?
             .ok_or(AppError::BadRequest("unknown category"))?;
-        if &c.direction != m.direction.as_ref() {
+        if c.direction != direction {
             return Err(AppError::BadRequest(
                 "category direction does not match memo direction",
             ));
         }
     }
     Ok(())
+}
+
+fn parse_direction(d: &str) -> Result<String> {
+    match d {
+        "income" | "expense" | "transfer" => Ok(d.to_owned()),
+        _ => Err(AppError::BadRequest(
+            "direction must be income, expense or transfer",
+        )),
+    }
 }
 
 fn month_range(month: &str, offset_minutes: i32) -> Result<(DateTime<Utc>, DateTime<Utc>)> {

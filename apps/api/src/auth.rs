@@ -6,7 +6,9 @@ use axum::{
     routing::{get, post},
 };
 use chrono::{Duration, Utc};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set, TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::LazyLock;
@@ -94,6 +96,7 @@ async fn signup(State(st): State<AppState>, Json(c): Json<Credentials>) -> Resul
         None => "USD".to_owned(),
     };
     let password_hash = blocking(move || password_auth::generate_hash(c.password)).await?;
+    let txn = st.db.begin().await?;
     let u = user::ActiveModel {
         id: Set(Uuid::new_v4()),
         email: Set(email),
@@ -101,12 +104,14 @@ async fn signup(State(st): State<AppState>, Json(c): Json<Credentials>) -> Resul
         created_at: Set(Utc::now()),
         default_currency: Set(default_currency),
     }
-    .insert(&st.db)
+    .insert(&txn)
     .await
     .map_err(|e| match AppError::from(e) {
         AppError::Conflict(_) => AppError::Conflict("email already registered"),
         e => e,
     })?;
+    crate::sources::create_cash(&txn, u.id).await?;
+    txn.commit().await?;
     start_session(&st, u).await
 }
 

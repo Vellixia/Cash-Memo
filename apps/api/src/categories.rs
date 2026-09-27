@@ -106,7 +106,7 @@ async fn update(
     Ok(Json(c.update(&st.db).await?))
 }
 
-fn valid_name(name: &str) -> Result<String> {
+pub(crate) fn valid_name(name: &str) -> Result<String> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 100 {
         return Err(AppError::BadRequest("name must be 1-100 characters"));
@@ -115,7 +115,7 @@ fn valid_name(name: &str) -> Result<String> {
 }
 
 /// Blank means "no emoji"; otherwise a short string (one emoji can be several code points).
-fn valid_emoji(emoji: Option<String>) -> Result<Option<String>> {
+pub(crate) fn valid_emoji(emoji: Option<String>) -> Result<Option<String>> {
     match emoji.as_deref().map(str::trim) {
         None | Some("") => Ok(None),
         Some(e) if e.chars().count() <= 8 => Ok(Some(e.to_owned())),

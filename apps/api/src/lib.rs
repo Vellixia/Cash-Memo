@@ -2,6 +2,7 @@ mod auth;
 mod categories;
 mod error;
 mod memos;
+mod sources;
 
 pub(crate) use domain::entities;
 
@@ -20,7 +21,8 @@ pub fn app(state: AppState) -> Router {
         .route("/health", get(health))
         .merge(auth::routes())
         .merge(memos::routes())
-        .merge(categories::routes());
+        .merge(categories::routes())
+        .merge(sources::routes());
     Router::new()
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())
@@ -46,7 +48,7 @@ pub(crate) fn parse_currency(c: &str) -> error::Result<String> {
     Ok(c)
 }
 
-/// Shared by memos and categories.
+/// Category directions; memos also accept `transfer` (see `memos::parse_direction`).
 pub(crate) fn parse_direction(d: &str) -> error::Result<String> {
     match d {
         "income" | "expense" => Ok(d.to_owned()),
