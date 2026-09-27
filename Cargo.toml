@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/api", "crates/domain"]
+members = ["apps/api", "apps/worker", "crates/domain", "crates/telemetry"]
 
 [profile.release]
 lto = "thin"

@@ -5,13 +5,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY apps/api apps/api
 COPY apps/worker apps/worker
 COPY crates crates
-RUN cargo build --release -p api
+RUN cargo build --release -p worker
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /src/target/release/api /usr/local/bin/api
+COPY --from=builder /src/target/release/worker /usr/local/bin/worker
 USER 10001
-ENV PORT=8080
-EXPOSE 8080
-CMD ["api"]
+CMD ["worker"]

@@ -1,3 +1,4 @@
+mod account;
 mod auth;
 mod categories;
 mod error;
@@ -17,12 +18,15 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub cookie_secure: bool,
     pub limiter: Arc<limits::RateLimiter>,
+    /// Public base URL of the web app, for links in emails.
+    pub app_url: String,
 }
 
 pub fn app(state: AppState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .merge(auth::routes())
+        .merge(account::routes())
         .merge(memos::routes())
         .merge(categories::routes())
         .merge(sources::routes());

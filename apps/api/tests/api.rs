@@ -250,17 +250,23 @@ async fn memo_flow() {
 static MIGRATED: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
 
 async fn test_app() -> Router {
+    test_app_db().await.0
+}
+
+async fn test_app_db() -> (Router, sea_orm::DatabaseConnection) {
     dotenvy::dotenv().ok();
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
     let db = sea_orm::Database::connect(&url).await.unwrap();
     MIGRATED
         .get_or_init(|| async { Migrator::up(&db, None).await.unwrap() })
         .await;
-    app(AppState {
-        db,
+    let router = app(AppState {
+        db: db.clone(),
         cookie_secure: false,
         limiter: Default::default(),
-    })
+        app_url: "https://app.test".into(),
+    });
+    (router, db)
 }
 
 #[tokio::test]
@@ -477,4 +483,242 @@ async fn sources_and_transfers() {
     )
     .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
+}
+
+/// The link in the newest queued email to `to` (the worker isn't running in tests).
+async fn mailed_token(db: &sea_orm::DatabaseConnection, to: &str) -> Option<String> {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let row = db
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT payload->>'text' AS text FROM jobs WHERE kind = 'email' AND payload->>'to' = $1
+             ORDER BY created_at DESC LIMIT 1",
+            [to.into()],
+        ))
+        .await
+        .unwrap()?;
+    let text: String = row.try_get("", "text").unwrap();
+    Some(
+        text.split("token=")
+            .nth(1)?
+            .split_whitespace()
+            .next()?
+            .to_owned(),
+    )
+}
+
+#[tokio::test]
+async fn account_email_flows() {
+    let (app, db) = test_app_db().await;
+    let email = format!("{}@test.dev", uuid::Uuid::new_v4());
+    let creds = json!({ "email": email, "password": "correct horse" });
+    let (_, cookie, _) = call(&app, "POST", "/api/auth/signup", "", Some(creds)).await;
+    let a = cookie.unwrap();
+    let (_, other, _) = call(
+        &app,
+        "POST",
+        "/api/auth/login",
+        "",
+        Some(json!({ "email": email, "password": "correct horse" })),
+    )
+    .await;
+    let other = other.unwrap();
+
+    // Unknown email: same 204, nothing sent.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password-reset/request",
+        "",
+        Some(json!({ "email": "nobody@test.dev" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    assert_eq!(mailed_token(&db, "nobody@test.dev").await, None);
+
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password-reset/request",
+        "",
+        Some(json!({ "email": email.to_uppercase() })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let token = mailed_token(&db, &email).await.expect("reset mail queued");
+    // A second request within a minute is silently dropped.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password-reset/request",
+        "",
+        Some(json!({ "email": email })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    assert_eq!(
+        mailed_token(&db, &email).await.as_deref(),
+        Some(token.as_str())
+    );
+
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password-reset/complete",
+        "",
+        Some(json!({ "token": "nope", "password": "brand new pass" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password-reset/complete",
+        "",
+        Some(json!({ "token": token, "password": "brand new pass" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    // Single use, and every session is signed out.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password-reset/complete",
+        "",
+        Some(json!({ "token": token, "password": "another pass" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    for c in [&a, &other] {
+        let (s, _, _) = call(&app, "GET", "/api/auth/me", c, None).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+    }
+
+    // Change password keeps this session and signs out the others.
+    let (_, a, _) = call(
+        &app,
+        "POST",
+        "/api/auth/login",
+        "",
+        Some(json!({ "email": email, "password": "brand new pass" })),
+    )
+    .await;
+    let (_, other, _) = call(
+        &app,
+        "POST",
+        "/api/auth/login",
+        "",
+        Some(json!({ "email": email, "password": "brand new pass" })),
+    )
+    .await;
+    let (a, other) = (a.unwrap(), other.unwrap());
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password",
+        &a,
+        Some(json!({ "current_password": "wrong one!", "new_password": "third pass!" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/password",
+        &a,
+        Some(json!({ "current_password": "brand new pass", "new_password": "third pass!" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, _, _) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _, _) = call(&app, "GET", "/api/auth/me", &other, None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    // Change email: confirmed from a link sent to the new address.
+    let new_email = format!("new-{}@test.dev", uuid::Uuid::new_v4());
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/email",
+        &a,
+        Some(json!({ "current_password": "third pass!", "new_email": new_email })),
+    )
+    .await;
+    assert_eq!(
+        s,
+        StatusCode::TOO_MANY_REQUESTS,
+        "the reset mail went out less than a minute ago"
+    );
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    db.execute_raw(Statement::from_string(
+        DbBackend::Postgres,
+        format!(
+            "UPDATE email_tokens SET created_at = now() - interval '2 minutes'
+         WHERE user_id = (SELECT id FROM users WHERE email = '{email}')"
+        ),
+    ))
+    .await
+    .unwrap();
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/email",
+        &a,
+        Some(json!({ "current_password": "third pass!", "new_email": new_email })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!(me["email"], json!(email), "unchanged until confirmed");
+    let token = mailed_token(&db, &new_email).await.unwrap();
+    let (s, _, me) = call(
+        &app,
+        "POST",
+        "/api/auth/email/confirm",
+        "",
+        Some(json!({ "token": token })),
+    )
+    .await;
+    assert_eq!((s, me["email"].clone()), (StatusCode::OK, json!(new_email)));
+
+    // Delete account: needs the password, then everything is gone.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/delete",
+        &a,
+        Some(json!({ "password": "nope nope" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/delete",
+        &a,
+        Some(json!({ "password": "third pass!" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/auth/login",
+        "",
+        Some(json!({ "email": new_email, "password": "third pass!" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let left = db
+        .query_one_raw(Statement::from_string(
+            DbBackend::Postgres,
+            format!("SELECT count(*)::bigint AS n FROM jobs WHERE payload->>'to' = '{new_email}'"),
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get::<i64>("", "n")
+        .unwrap();
+    assert_eq!(left, 0, "queued mail for a deleted account is dropped");
 }

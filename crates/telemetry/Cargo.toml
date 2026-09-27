@@ -1,0 +1,9 @@
+[package]
+name = "telemetry"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+sentry = { version = "0.49", default-features = false, features = ["backtrace", "contexts", "panic", "logs", "reqwest", "rustls", "tracing"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }

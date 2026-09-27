@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [api, web]
+        app: [api, web, worker]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,6 +63,8 @@ jobs:
             id_secret: DOKPLOY_APP_API
           - app: web
             id_secret: DOKPLOY_APP_WEB
+          - app: worker
+            id_secret: DOKPLOY_APP_WORKER
     steps:
       - name: Point the app at this commit's image and redeploy
         env:

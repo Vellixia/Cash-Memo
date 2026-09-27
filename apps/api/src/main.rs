@@ -1,36 +1,9 @@
 use api::{AppState, app};
 use domain::migration::{Migrator, MigratorTrait};
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
     dotenvy::dotenv().ok();
-    // Error tracking (GlitchTip, Sentry-compatible). A no-op when SENTRY_DSN is unset.
-    let mut sentry_opts = sentry::ClientOptions::new()
-        .maybe_release(sentry::release_name!())
-        .send_default_pii(false)
-        // Money data never leaves the server: keep only method + path of the request.
-        .before_send(|mut event| {
-            if let Some(req) = event.request.as_mut() {
-                req.data = None;
-                req.query_string = None;
-                req.cookies = None;
-                req.headers.clear();
-                req.env.clear();
-            }
-            Some(event)
-        });
-    if let Ok(dsn) = std::env::var("SENTRY_DSN") {
-        sentry_opts = sentry_opts.dsn(&dsn);
-    }
-    if let Ok(env) = std::env::var("SENTRY_ENVIRONMENT") {
-        sentry_opts = sentry_opts.environment(env);
-    }
-    let _sentry = sentry::init(sentry_opts);
-    tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,sqlx=warn".into()))
-        .with(tracing_subscriber::fmt::layer())
-        .with(sentry::integrations::tracing::layer())
-        .init();
+    let _telemetry = telemetry::init(sentry::release_name!());
 
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -52,6 +25,7 @@ async fn run() {
         db,
         cookie_secure: std::env::var("COOKIE_SECURE").is_ok_and(|v| v == "true"),
         limiter: Default::default(),
+        app_url: std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
     };
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))

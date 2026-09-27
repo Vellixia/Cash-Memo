@@ -22,7 +22,7 @@ use crate::{
     parse_currency,
 };
 
-const COOKIE: &str = "session";
+pub(crate) const COOKIE: &str = "session";
 const SESSION_DAYS: i64 = 30;
 
 /// Verified against when the email is unknown, so login takes the same time either way.
@@ -51,7 +51,7 @@ struct SettingsIn {
 }
 
 #[derive(Serialize)]
-struct UserOut {
+pub(crate) struct UserOut {
     id: Uuid,
     email: String,
     default_currency: String,
@@ -94,13 +94,8 @@ async fn signup(
         5,
         Window::from_secs(600),
     )?;
-    let email = c.email.trim().to_lowercase();
-    if !email.contains('@') || email.len() > 254 {
-        return Err(AppError::BadRequest("invalid email"));
-    }
-    if c.password.len() < 8 || c.password.len() > 256 {
-        return Err(AppError::BadRequest("password must be 8-256 characters"));
-    }
+    let email = valid_email(&c.email)?;
+    valid_password(&c.password)?;
     let default_currency = match c.default_currency.as_deref() {
         Some(cur) => parse_currency(cur)?,
         None => "USD".to_owned(),
@@ -187,16 +182,13 @@ async fn update_me(
     Ok(Json(u.update(&st.db).await?.into()))
 }
 
-async fn start_session(st: &AppState, u: user::Model) -> Result<Response> {
+pub(crate) async fn start_session(st: &AppState, u: user::Model) -> Result<Response> {
     // ponytail: expired sessions are swept on each login; move to a periodic task if the table grows.
     session::Entity::delete_many()
         .filter(session::Column::ExpiresAt.lt(Utc::now()))
         .exec(&st.db)
         .await?;
-    let token: String = rand::random::<[u8; 32]>()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let token = random_token();
     session::ActiveModel {
         token_hash: Set(hash(&token)),
         user_id: Set(u.id),
@@ -213,7 +205,7 @@ async fn start_session(st: &AppState, u: user::Model) -> Result<Response> {
     Ok(([(header::SET_COOKIE, cookie)], body).into_response())
 }
 
-fn session_token(headers: &HeaderMap) -> Option<&str> {
+pub(crate) fn session_token(headers: &HeaderMap) -> Option<&str> {
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -223,12 +215,37 @@ fn session_token(headers: &HeaderMap) -> Option<&str> {
         .filter(|t| !t.is_empty())
 }
 
-fn hash(token: &str) -> Vec<u8> {
+pub(crate) fn valid_email(email: &str) -> Result<String> {
+    let email = email.trim().to_lowercase();
+    if !email.contains('@') || email.len() > 254 {
+        return Err(AppError::BadRequest("invalid email"));
+    }
+    Ok(email)
+}
+
+pub(crate) fn valid_password(password: &str) -> Result<()> {
+    if password.len() < 8 || password.len() > 256 {
+        return Err(AppError::BadRequest("password must be 8-256 characters"));
+    }
+    Ok(())
+}
+
+/// 32 random bytes, hex-encoded. Used for session cookies and email links.
+pub(crate) fn random_token() -> String {
+    rand::random::<[u8; 32]>()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+pub(crate) fn hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
 /// Password hashing is CPU-bound; keep it off the async workers.
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T> {
+pub(crate) async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Result<T> {
     tokio::task::spawn_blocking(f)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))
