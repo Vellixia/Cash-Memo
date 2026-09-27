@@ -1,11 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Fraunces, Geist } from "next/font/google";
+import { Atkinson_Hyperlegible, Fraunces, Geist, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", axes: ["opsz"] });
+// Non-default font pairs ("modern" / "readable"): not needed until chosen in Appearance, so skip preload.
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", preload: false });
+const atkinson = Atkinson_Hyperlegible({ subsets: ["latin"], weight: ["400", "700"], variable: "--font-atkinson", preload: false });
+
+/** Sets data-accent/data-font/data-size from localStorage before paint, so there's no flash. */
+const APPEARANCE_SCRIPT = `(function(){try{var d=document.documentElement,m={accent:"cm-accent",font:"cm-font",size:"cm-size"};for(var k in m){var v=localStorage.getItem(m[k]);if(v)d.setAttribute("data-"+k,v)}}catch(e){}})();`;
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://cashmemo.andresholivin.dev"),
@@ -27,7 +33,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={cn("h-full font-sans", geist.variable, fraunces.variable)} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={cn("h-full font-sans", geist.variable, fraunces.variable, geistMono.variable, atkinson.variable)}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col bg-background text-foreground antialiased">
         <Providers>{children}</Providers>
       </body>

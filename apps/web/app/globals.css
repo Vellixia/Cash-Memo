@@ -5,9 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans: var(--app-sans);
+  --font-heading: var(--app-sans);
+  --font-serif: var(--app-serif);
   --color-income: var(--income);
   --color-income-soft: var(--income-soft);
   --color-expense: var(--expense);
@@ -42,6 +42,11 @@
 
 /* "Calm paper ledger": warm paper, ink, hairlines; green = income, terracotta = expense. */
 :root {
+  /* Appearance: font pair indirection, overridden per [data-font="..."] below. Defaults = "classic". */
+  --app-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --app-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --app-num: var(--font-fraunces), ui-serif, Georgia, serif;
+
   --background: #faf8f4;
   --foreground: #1c1b19;
   --card: #ffffff;
@@ -116,6 +121,91 @@
   --shadow-paper: 0 1px 0 rgb(0 0 0 / 0.2), 0 12px 32px -16px rgb(0 0 0 / 0.6);
 }
 
+/*
+ * Accents: only --primary / --primary-foreground / --ring change. Income/expense stay semantic.
+ * Contrast (WCAG relative-luminance formula) of foreground on primary, both >= 4.5:1:
+ *   ledger  light #1f7a5c / #ffffff = 5.25:1   dark #4cc49a / #0d2219 = 7.67:1
+ *   ocean   light #1c6ea4 / #ffffff = 5.50:1   dark #5aa9e6 / #08202f = 6.56:1
+ *   plum    light #74408f / #ffffff = 7.31:1   dark #c496e8 / #2a1236 = 7.17:1
+ *   amber   light #a15c00 / #ffffff = 5.19:1   dark #e8b64a / #2e1c00 = 8.75:1
+ *   rose    light #b23a5e / #ffffff = 5.74:1   dark #f091ae / #3a0f1e = 7.39:1
+ *   graphite light #4a473f / #ffffff = 9.27:1  dark #c9c4ba / #211f1a = 9.48:1
+ * :root[data-accent] beats bare :root (extra attribute selector); :root.dark[data-accent] beats bare .dark likewise.
+ */
+:root[data-accent="ocean"] {
+  --primary: #1c6ea4;
+  --primary-foreground: #ffffff;
+  --ring: #1c6ea4;
+}
+:root.dark[data-accent="ocean"] {
+  --primary: #5aa9e6;
+  --primary-foreground: #08202f;
+  --ring: #5aa9e6;
+}
+:root[data-accent="plum"] {
+  --primary: #74408f;
+  --primary-foreground: #ffffff;
+  --ring: #74408f;
+}
+:root.dark[data-accent="plum"] {
+  --primary: #c496e8;
+  --primary-foreground: #2a1236;
+  --ring: #c496e8;
+}
+:root[data-accent="amber"] {
+  --primary: #a15c00;
+  --primary-foreground: #ffffff;
+  --ring: #a15c00;
+}
+:root.dark[data-accent="amber"] {
+  --primary: #e8b64a;
+  --primary-foreground: #2e1c00;
+  --ring: #e8b64a;
+}
+:root[data-accent="rose"] {
+  --primary: #b23a5e;
+  --primary-foreground: #ffffff;
+  --ring: #b23a5e;
+}
+:root.dark[data-accent="rose"] {
+  --primary: #f091ae;
+  --primary-foreground: #3a0f1e;
+  --ring: #f091ae;
+}
+:root[data-accent="graphite"] {
+  --primary: #4a473f;
+  --primary-foreground: #ffffff;
+  --ring: #4a473f;
+}
+:root.dark[data-accent="graphite"] {
+  --primary: #c9c4ba;
+  --primary-foreground: #211f1a;
+  --ring: #c9c4ba;
+}
+/* "ledger" is the default (set above in :root/.dark) and needs no override block. */
+
+/* Font pairs: "classic" is the default (set above in :root) and needs no override block. */
+:root[data-font="modern"] {
+  --app-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --app-serif: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --app-num: var(--font-geist-mono), ui-monospace, monospace;
+}
+:root[data-font="readable"] {
+  --app-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --app-serif: var(--font-atkinson), ui-serif, Georgia, serif;
+  --app-num: var(--font-atkinson), ui-serif, Georgia, serif;
+}
+:root[data-font="system"] {
+  --app-sans: ui-sans-serif, system-ui, sans-serif;
+  --app-serif: ui-serif, Georgia, serif;
+  --app-num: ui-serif, Georgia, serif;
+}
+
+/* Text size: "default" is the base html font-size; "large" bumps it 12.5%. */
+:root[data-size="large"] {
+  font-size: 112.5%;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -132,7 +222,7 @@
 
 /* Serif figures that line up in columns everywhere money is shown. */
 @utility num {
-  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-family: var(--app-num);
   font-variant-numeric: tabular-nums lining-nums;
   font-optical-sizing: auto;
   letter-spacing: -0.01em;

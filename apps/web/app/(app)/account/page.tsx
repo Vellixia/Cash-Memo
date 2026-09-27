@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeSelect } from "@/components/theme-select";
+import { AppearanceSettings } from "@/components/appearance-settings";
 import { useLogoutAndLeave } from "@/components/app-shell";
 import { card } from "@/components/summary";
 import { CurrencyPicker } from "@/components/currency-picker";
@@ -80,6 +81,7 @@ export default function AccountPage() {
           Appearance
         </h2>
         <ThemeSelect />
+        <AppearanceSettings />
       </section>
 
       <Link
