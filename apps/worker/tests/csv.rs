@@ -240,7 +240,7 @@ line two' END
     );
 
     // Bad rows are reported by line, and the rest still stage.
-    let bad = "date,amount\n2026-01-01,-10\nnot a date,5\n2026-01-02,0\n";
+    let bad = "date;amount\n2026-01-01;-10\nnot a date;5\n2026-01-02;0\n";
     let key = jobs::import_key(b, Uuid::new_v4());
     ctx.http
         .put(ctx.storage.put_url(&key, Duration::from_secs(60)))
@@ -248,7 +248,7 @@ line two' END
         .send()
         .await
         .unwrap();
-    let m = json!({ "date": 0, "amount": 1, "default_currency": "USD" });
+    let m = json!({ "date": 0, "amount": 1, "default_currency": "USD", "delimiter": ";" });
     let p = run(
         &ctx,
         jobs::IMPORT_VALIDATE,

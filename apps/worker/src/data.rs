@@ -377,7 +377,11 @@ fn parse_file(
     locks: &HashMap<String, String>,
     tx: tokio::sync::mpsc::Sender<Vec<(i32, Row)>>,
 ) -> Result<Report, String> {
+    if ![',', ';', '\t'].contains(&mapping.delimiter) {
+        return Err("the separator must be a comma, semicolon or tab".into());
+    }
     let mut reader = csv::ReaderBuilder::new()
+        .delimiter(mapping.delimiter as u8)
         .has_headers(mapping.has_header)
         .flexible(true)
         .from_path(path)

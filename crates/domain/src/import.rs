@@ -22,6 +22,9 @@ pub struct Mapping {
     pub default_currency: String,
     #[serde(default = "dot")]
     pub decimal: char,
+    /// Field separator: `,` (default), `;` (common in European/Indonesian bank exports) or tab.
+    #[serde(default = "comma")]
+    pub delimiter: char,
     #[serde(default)]
     pub date_order: DateOrder,
     /// Minutes east of UTC, for dates without a time zone.
@@ -34,6 +37,9 @@ fn yes() -> bool {
 }
 fn dot() -> char {
     '.'
+}
+fn comma() -> char {
+    ','
 }
 
 /// How to read ambiguous dates like 03/04/2026.
