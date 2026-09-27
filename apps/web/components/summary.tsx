@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { Category, Summary } from "@/lib/api";
+import type { Category, Source, Summary } from "@/lib/api";
 import { CATEGORY_COLORS } from "@/lib/format";
-import { formatMoney, signedMoney } from "@/lib/money";
+import { balanceLabel, formatMoney, signedMoney } from "@/lib/money";
 import { Segmented } from "@/components/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -191,6 +191,30 @@ export function SpendingCard({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Tracked, non-archived source balances. Shown when there's at least one. */
+export function BalancesCard({ sources }: { sources: Source[] | undefined }) {
+  const tracked = sources?.filter((s) => s.track_balance && !s.archived_at) ?? [];
+  if (tracked.length === 0) return null;
+  return (
+    <section className={cn(card, "p-4 sm:p-6")} aria-labelledby="balances-title" data-testid="balances-card">
+      <h2 id="balances-title" className="font-serif text-lg sm:text-xl">
+        Balances
+      </h2>
+      <ul className="mt-1.5 divide-y divide-border/70">
+        {tracked.map((s) => (
+          <li key={s.id} data-testid="balance-row" className="flex items-center justify-between gap-3 py-2.5">
+            <span className="flex min-w-0 items-center gap-2">
+              {s.emoji && <span aria-hidden>{s.emoji}</span>}
+              <span className="truncate text-sm font-medium">{s.name}</span>
+            </span>
+            <span className="num shrink-0 text-sm [overflow-wrap:anywhere]">{balanceLabel(s.kind, s.balance_minor ?? 0, s.currency!)}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

@@ -2,13 +2,16 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  archiveSource,
   createCategory,
   createMemo,
+  createSource,
   deleteCategory,
   deleteMemo,
   getCategories,
   getMe,
   getMemos,
+  getSources,
   getSummary,
   login,
   logout,
@@ -16,8 +19,10 @@ import {
   updateCategory,
   updateMe,
   updateMemo,
+  updateSource,
   type CategoryInput,
   type MemoInput,
+  type SourceInput,
 } from "@/lib/api";
 import { guessCurrency } from "@/lib/money";
 
@@ -51,8 +56,12 @@ export function useLogout() {
   return useMutation({ mutationFn: logout });
 }
 
-export function useMemos(month: string, categoryId?: string) {
-  return useQuery({ queryKey: ["memos", month, categoryId ?? null], queryFn: () => getMemos(month, categoryId), placeholderData: keepPreviousData });
+export function useMemos(month: string, categoryId?: string, sourceId?: string) {
+  return useQuery({
+    queryKey: ["memos", month, categoryId ?? null, sourceId ?? null],
+    queryFn: () => getMemos(month, categoryId, sourceId),
+    placeholderData: keepPreviousData,
+  });
 }
 
 export function useSummary(month: string) {
@@ -64,6 +73,8 @@ function useInvalidateMoney() {
   return () => {
     qc.invalidateQueries({ queryKey: ["memos"] });
     qc.invalidateQueries({ queryKey: ["summary"] });
+    // Memos move money between sources, so their balances may have changed too.
+    qc.invalidateQueries({ queryKey: ["sources"] });
   };
 }
 
@@ -134,6 +145,38 @@ export function useDeleteCategory() {
       qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["memos"] });
       qc.invalidateQueries({ queryKey: ["summary"] });
+    },
+  });
+}
+
+export function useSources() {
+  return useQuery({ queryKey: ["sources"], queryFn: getSources });
+}
+
+export function useCreateSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SourceInput) => createSource(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sources"] }),
+  });
+}
+
+export function useUpdateSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<SourceInput> & { archived?: boolean } }) => updateSource(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sources"] }),
+  });
+}
+
+/** Archives a source (restoring is `useUpdateSource` with `{ archived: false }`). */
+export function useArchiveSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => archiveSource(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sources"] });
+      qc.invalidateQueries({ queryKey: ["memos"] });
     },
   });
 }

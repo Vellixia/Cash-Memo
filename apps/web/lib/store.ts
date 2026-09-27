@@ -12,6 +12,9 @@ type UiState = {
   /** Last 5 currencies used on saved memos, newest first (the picker's "Recent"). */
   recentCurrencies: string[];
   noteCurrency: (currency: string) => void;
+  /** Last source picked for an expense, so the next one defaults to it. */
+  lastSourceId: string | null;
+  setLastSourceId: (id: string) => void;
   /** Memo editor (sheet on mobile, dialog on desktop). `editorKey` remounts the form per open. */
   editorOpen: boolean;
   editing: Memo | null;
@@ -31,6 +34,8 @@ export const useUiStore = create<UiState>()(
       recentCurrencies: [],
       noteCurrency: (currency) =>
         set((s) => ({ recentCurrencies: [currency, ...s.recentCurrencies.filter((c) => c !== currency)].slice(0, 5) })),
+      lastSourceId: null,
+      setLastSourceId: (id) => set({ lastSourceId: id }),
       editorOpen: false,
       editing: null,
       editorKey: 0,
@@ -40,7 +45,7 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "cashmemo:ui",
-      partialize: (state) => ({ recentCurrencies: state.recentCurrencies }),
+      partialize: (state) => ({ recentCurrencies: state.recentCurrencies, lastSourceId: state.lastSourceId }),
     },
   ),
 );

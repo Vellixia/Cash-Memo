@@ -1,15 +1,15 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, Loader2, Plus, Sparkles } from "lucide-react";
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Segmented } from "@/components/segmented";
 import { card } from "@/components/summary";
-import type { Category, Direction, Memo } from "@/lib/api";
+import type { Category, Direction, Memo, Source } from "@/lib/api";
 import { dayLabel, groupByDay, signedAmount, timeLabel } from "@/lib/format";
-import { signedMoney } from "@/lib/money";
+import { formatMoney, signedMoney } from "@/lib/money";
 import { STARTER_CATEGORIES, useAddStarterSet } from "@/lib/queries";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
@@ -20,26 +20,33 @@ const ALL = "all";
 export function Ledger({
   memos,
   categories,
+  sources,
   direction,
   onDirection,
   categoryId,
   onCategory,
+  sourceId,
+  onSource,
   onSelect,
   onAdd,
 }: {
   memos: Memo[] | undefined;
   categories: Category[];
+  sources: Source[];
   direction: DirectionFilter;
   onDirection: (d: DirectionFilter) => void;
   categoryId: string | undefined;
   onCategory: (id: string | undefined) => void;
+  sourceId: string | undefined;
+  onSource: (id: string | undefined) => void;
   onSelect: (memo: Memo) => void;
   onAdd: () => void;
 }) {
   const byId = new Map(categories.map((c) => [c.id, c]));
+  const sourceById = new Map(sources.map((s) => [s.id, s]));
   const options = categories.filter((c) => direction === "all" || c.direction === direction);
   const shown = memos?.filter((m) => direction === "all" || m.direction === direction);
-  const filtered = direction !== "all" || !!categoryId;
+  const filtered = direction !== "all" || !!categoryId || !!sourceId;
 
   return (
     <section aria-labelledby="ledger-title" className="space-y-4">
@@ -83,6 +90,30 @@ export function Ledger({
               ))}
             </SelectContent>
           </Select>
+          {sources.length > 0 && (
+            <Select
+              value={sourceId ?? ALL}
+              onValueChange={(v) => onSource(!v || v === ALL ? undefined : (v as string))}
+              items={{ [ALL]: "All sources", ...Object.fromEntries(sources.map((s) => [s.id, `${s.emoji ? s.emoji + " " : ""}${s.name}`])) }}
+            >
+              <SelectTrigger
+                size="sm"
+                aria-label="Filter by source"
+                className="max-w-52 shrink-0 snap-start rounded-full bg-card px-3 data-[size=sm]:h-9 data-[size=sm]:rounded-full pointer-coarse:data-[size=sm]:h-11"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false} align="end" className="rounded-xl p-1">
+                <SelectItem value={ALL}>All sources</SelectItem>
+                {sources.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.emoji && <span aria-hidden>{s.emoji}</span>}
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
@@ -105,6 +136,7 @@ export function Ledger({
           onClear={() => {
             onDirection("all");
             onCategory(undefined);
+            onSource(undefined);
           }}
           onAdd={onAdd}
         />
@@ -123,9 +155,21 @@ export function Ledger({
               </div>
               <ul className={cn(card, "divide-y divide-border/70 overflow-hidden rounded-2xl")}>
                 {g.memos.map((m) => {
+                  const isTransfer = m.direction === "transfer";
                   const c = m.category_id ? byId.get(m.category_id) : undefined;
-                  const title = m.note || c?.name || "Untitled";
                   const income = m.direction === "income";
+                  const fromSource = m.source_id ? sourceById.get(m.source_id) : undefined;
+                  const toSource = m.to_source_id ? sourceById.get(m.to_source_id) : undefined;
+                  // Legacy memos with no source: an expense reads "Unspecified"; income just omits it.
+                  const sourcePart = m.source_id
+                    ? (sourceById.get(m.source_id)?.name ?? "Unspecified")
+                    : m.direction === "expense"
+                      ? "Unspecified"
+                      : null;
+                  const title = isTransfer ? m.note || "Transfer" : m.note || c?.name || "Untitled";
+                  const subtitle = isTransfer
+                    ? `${fromSource?.name ?? "Unspecified"} → ${toSource?.name ?? "Unspecified"} · ${timeLabel(m.occurred_at)}`
+                    : [m.note ? c?.name : null, sourcePart, timeLabel(m.occurred_at)].filter(Boolean).join(" · ");
                   return (
                     <li key={m.id}>
                       <button
@@ -137,20 +181,24 @@ export function Ledger({
                         <span
                           className={cn(
                             "flex size-10 shrink-0 items-center justify-center rounded-2xl text-lg",
-                            income ? "bg-income-soft text-income" : "bg-expense-soft text-expense",
+                            isTransfer ? "bg-muted text-muted-foreground" : income ? "bg-income-soft text-income" : "bg-expense-soft text-expense",
                           )}
                           aria-hidden
                         >
-                          {c?.emoji ?? (income ? <ArrowDownLeft className="size-4.5" /> : <ArrowUpRight className="size-4.5" />)}
+                          {isTransfer ? (
+                            <ArrowRightLeft className="size-4.5" />
+                          ) : (
+                            (c?.emoji ?? (income ? <ArrowDownLeft className="size-4.5" /> : <ArrowUpRight className="size-4.5" />))
+                          )}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[0.95rem] font-medium">{title}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {[m.note ? c?.name : null, timeLabel(m.occurred_at)].filter(Boolean).join(" · ")}
-                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
                         </span>
-                        <span className={cn("num shrink-0 text-lg", income ? "text-income" : "text-expense")}>
-                          {signedMoney(signedAmount(m), m.currency)}
+                        <span
+                          className={cn("num shrink-0 text-lg", isTransfer ? "text-muted-foreground" : income ? "text-income" : "text-expense")}
+                        >
+                          {isTransfer ? formatMoney(m.amount_minor, m.currency) : signedMoney(signedAmount(m), m.currency)}
                         </span>
                       </button>
                     </li>

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useController, useForm, useWatch, type Control } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
+import { Check, Loader2, Lock, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,17 +25,18 @@ import { Segmented } from "@/components/segmented";
 import { EmojiField } from "@/components/emoji-field";
 import { OfflineHint } from "@/components/offline-hint";
 import { CurrencyPicker } from "@/components/currency-picker";
-import type { Direction, Memo } from "@/lib/api";
-import { editAmount, exponent, fitAmount, formatAmountInput, fromMinor, toMinor } from "@/lib/money";
+import { AmountField } from "@/components/amount-field";
+import type { Direction, Memo, MemoDirection, Source } from "@/lib/api";
+import { fitAmount, fromMinor, toMinor } from "@/lib/money";
 import { toDatetimeLocal } from "@/lib/format";
-import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useUpdateMemo } from "@/lib/queries";
+import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useSources, useUpdateMemo } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
 
 const schema = z
   .object({
-    direction: z.enum(["expense", "income"]),
+    direction: z.enum(["expense", "income", "transfer"]),
     // Canonical "1234.5" (the field shows it natively grouped); see lib/money.ts editAmount.
     amount: z
       .string()
@@ -43,11 +45,24 @@ const schema = z
     currency: z.string().regex(/^[A-Z]{3}$/, "Pick a currency"),
     occurred_at: z.string().min(1, "Pick a date and time"),
     category_id: z.string().nullable(),
+    source_id: z.string().nullable(),
+    to_source_id: z.string().nullable(),
     note: z.string().max(2000, "Keep notes under 2000 characters"),
   })
   .superRefine((v, ctx) => {
     if (/^[A-Z]{3}$/.test(v.currency) && /\d/.test(v.amount) && toMinor(v.amount, v.currency) <= 0) {
       ctx.addIssue({ code: "custom", path: ["amount"], message: "Amount must be greater than zero" });
+    }
+    // Simplification: an expense always needs a source picked, even a legacy memo that had none.
+    if (v.direction === "expense" && !v.source_id) {
+      ctx.addIssue({ code: "custom", path: ["source_id"], message: "Choose where this came from" });
+    }
+    if (v.direction === "transfer") {
+      if (!v.source_id || !v.to_source_id) {
+        ctx.addIssue({ code: "custom", path: ["to_source_id"], message: "Pick both accounts" });
+      } else if (v.source_id === v.to_source_id) {
+        ctx.addIssue({ code: "custom", path: ["to_source_id"], message: "Pick two different accounts" });
+      }
     }
   });
 type Values = z.infer<typeof schema>;
@@ -113,8 +128,12 @@ function MemoForm({
 }) {
   const recentCurrencies = useUiStore((s) => s.recentCurrencies);
   const noteCurrency = useUiStore((s) => s.noteCurrency);
+  const lastSourceId = useUiStore((s) => s.lastSourceId);
+  const setLastSourceId = useUiStore((s) => s.setLastSourceId);
   const { data: me } = useMe();
   const { data: categories = [] } = useCategories();
+  const { data: sources = [] } = useSources();
+  const activeSources = sources.filter((s) => !s.archived_at);
   const createMemo = useCreateMemo();
   const updateMemo = useUpdateMemo();
   const deleteMemo = useDeleteMemo();
@@ -136,29 +155,56 @@ function MemoForm({
       currency: memo?.currency ?? me?.default_currency ?? recentCurrencies[0] ?? "USD",
       occurred_at: toDatetimeLocal(memo ? new Date(memo.occurred_at) : new Date()),
       category_id: memo?.category_id ?? null,
+      source_id: memo?.source_id ?? null,
+      to_source_id: memo?.to_source_id ?? null,
       note: memo?.note ?? "",
     },
   });
 
-  const [direction, currency, categoryId] = useWatch({ control, name: ["direction", "currency", "category_id"] });
+  const [direction, currency, categoryId, sourceId, toSourceId] = useWatch({
+    control,
+    name: ["direction", "currency", "category_id", "source_id", "to_source_id"],
+  });
   const choices = categories.filter((c) => c.direction === direction);
   const saving = createMemo.isPending || updateMemo.isPending;
 
-  function setDirection(d: Direction) {
+  // A new memo defaults its source to the last one used, falling back to the first active source.
+  const autoSourceApplied = useRef(false);
+  useEffect(() => {
+    if (memo || autoSourceApplied.current || activeSources.length === 0) return;
+    autoSourceApplied.current = true;
+    const fallback = activeSources.find((s) => s.id === lastSourceId) ?? activeSources[0];
+    setValue("source_id", fallback.id);
+  }, [memo, activeSources, lastSourceId, setValue]);
+
+  // A source with a fixed currency locks the memo to it.
+  const sourceById = new Map(sources.map((s) => [s.id, s]));
+  const lockedCurrency = sourceById.get(sourceId ?? "")?.currency ?? sourceById.get(toSourceId ?? "")?.currency ?? null;
+  useEffect(() => {
+    if (lockedCurrency && currency !== lockedCurrency) {
+      setValue("currency", lockedCurrency);
+      setValue("amount", fitAmount(getValues("amount"), lockedCurrency));
+    }
+  }, [lockedCurrency, currency, setValue, getValues]);
+
+  function setDirection(d: MemoDirection) {
     setValue("direction", d);
     const current = categories.find((c) => c.id === categoryId);
-    if (current && current.direction !== d) setValue("category_id", null);
+    if (d !== "transfer" && current && current.direction !== d) setValue("category_id", null);
   }
 
   async function onSubmit(values: Values) {
     if (!online) return;
     const cur = values.currency;
+    const isTransfer = values.direction === "transfer";
     const body = {
       direction: values.direction,
       amount_minor: toMinor(values.amount, cur),
       currency: cur,
       occurred_at: new Date(values.occurred_at).toISOString(),
-      category_id: values.category_id,
+      category_id: isTransfer ? null : values.category_id,
+      source_id: values.source_id,
+      to_source_id: isTransfer ? values.to_source_id : null,
       note: values.note.trim() || null,
     };
     try {
@@ -167,9 +213,10 @@ function MemoForm({
         toast.success("Memo updated");
       } else {
         await createMemo.mutateAsync(body);
-        toast.success(values.direction === "income" ? "Income added" : "Expense added");
+        toast.success(isTransfer ? "Transfer added" : values.direction === "income" ? "Income added" : "Expense added");
       }
       noteCurrency(cur);
+      if (values.source_id) setLastSourceId(values.source_id);
       onDone();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save memo");
@@ -188,7 +235,10 @@ function MemoForm({
     }
   }
 
-  const tone = direction === "income" ? "text-income" : "text-expense";
+  const tone = direction === "income" ? "text-income" : direction === "transfer" ? "text-foreground" : "text-expense";
+  const lockedSourceName = sourceById.get(sourceId ?? "")?.currency
+    ? sourceById.get(sourceId ?? "")?.name
+    : sourceById.get(toSourceId ?? "")?.name;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col" noValidate>
@@ -210,40 +260,81 @@ function MemoForm({
           options={[
             { value: "expense", label: "Expense", tone: "expense" },
             { value: "income", label: "Income", tone: "income" },
+            { value: "transfer", label: "Transfer" },
           ]}
         />
 
         {/* Big amount */}
         <div className="flex flex-col items-center gap-2 py-2">
-          <CurrencyPicker
-            value={currency}
-            defaultCurrency={me?.default_currency}
-            onChange={(c) => {
-              setValue("currency", c);
-              setValue("amount", fitAmount(getValues("amount"), c));
-            }}
-            triggerLabel={`Currency ${currency}, change`}
-            triggerClassName="min-h-8 rounded-full bg-muted px-3 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
-          >
-            {currency}
-          </CurrencyPicker>
-          <AmountField control={control} currency={currency} invalid={!!errors.amount} inputRef={amountRef} className={tone} />
-          <div className="h-5 text-center text-sm" aria-live="polite">
+          {lockedCurrency ? (
+            <span className="inline-flex min-h-8 items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              <Lock className="size-3" aria-hidden /> {currency}
+            </span>
+          ) : (
+            <CurrencyPicker
+              value={currency}
+              defaultCurrency={me?.default_currency}
+              onChange={(c) => {
+                setValue("currency", c);
+                setValue("amount", fitAmount(getValues("amount"), c));
+              }}
+              triggerLabel={`Currency ${currency}, change`}
+              triggerClassName="min-h-8 rounded-full bg-muted px-3 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              {currency}
+            </CurrencyPicker>
+          )}
+          <AmountField control={control} name="amount" currency={currency} invalid={!!errors.amount} inputRef={amountRef} className={tone} />
+          <div className="min-h-5 text-center text-sm" aria-live="polite">
             {errors.amount && <p className="text-destructive">{errors.amount.message}</p>}
             {!errors.amount && errors.currency && <p className="text-destructive">{errors.currency.message}</p>}
+            {!errors.amount && !errors.currency && lockedCurrency && (
+              <p className="text-muted-foreground">Currency locked to {lockedCurrency} by {lockedSourceName}</p>
+            )}
           </div>
         </div>
 
-        {/* Category chips */}
-        <fieldset className="space-y-2.5">
-          <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">Category</legend>
-          <CategoryChips
-            direction={direction}
-            choices={choices}
-            value={categoryId}
-            onChange={(id) => setValue("category_id", id)}
-          />
-        </fieldset>
+        {direction === "transfer" ? (
+          <>
+            <fieldset className="space-y-2.5">
+              <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">From</legend>
+              <SourceChips label="From account" sources={activeSources} value={sourceId} onChange={(id) => setValue("source_id", id)} onNavigate={onDone} />
+            </fieldset>
+            <fieldset className="space-y-2.5">
+              <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">To</legend>
+              <SourceChips label="To account" sources={activeSources} value={toSourceId} onChange={(id) => setValue("to_source_id", id)} onNavigate={onDone} />
+              {errors.to_source_id && <p className="text-sm text-destructive">{errors.to_source_id.message}</p>}
+            </fieldset>
+          </>
+        ) : (
+          <>
+            {/* Category chips */}
+            <fieldset className="space-y-2.5">
+              <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">Category</legend>
+              <CategoryChips
+                direction={direction}
+                choices={choices}
+                value={categoryId}
+                onChange={(id) => setValue("category_id", id)}
+              />
+            </fieldset>
+
+            {/* Source chips */}
+            <fieldset className="space-y-2.5">
+              <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {direction === "income" ? "Received in" : "Paid with"}
+              </legend>
+              <SourceChips
+                label={direction === "income" ? "Received in" : "Paid with"}
+                sources={activeSources}
+                value={sourceId}
+                onChange={(id) => setValue("source_id", id)}
+                onNavigate={onDone}
+              />
+              {errors.source_id && <p className="text-sm text-destructive">{errors.source_id.message}</p>}
+            </fieldset>
+          </>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5">
@@ -289,70 +380,11 @@ function MemoForm({
         )}
         <Button type="submit" size="lg" className="h-11 flex-1 rounded-xl text-[0.95rem]" disabled={saving || !online}>
           {saving && <Loader2 className="animate-spin" />}
-          {memo ? "Save changes" : direction === "income" ? "Save income" : "Save expense"}
+          {memo ? "Save changes" : direction === "income" ? "Save income" : direction === "transfer" ? "Save transfer" : "Save expense"}
         </Button>
         </div>
       </div>
     </form>
-  );
-}
-
-/** The big amount field: shows the canonical form value natively grouped, re-groups as you type and keeps
- * the caret after the same digit (lib/money.ts editAmount does the work). */
-function AmountField({
-  control,
-  currency,
-  invalid,
-  inputRef,
-  className,
-}: {
-  control: Control<Values>;
-  currency: string;
-  invalid: boolean;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  className?: string;
-}) {
-  const { field } = useController({ control, name: "amount" });
-  const text = formatAmountInput(field.value, currency);
-  const el = useRef<HTMLInputElement | null>(null);
-  const caret = useRef<number | null>(null);
-  // Re-render after every edit, even a rejected one, so the caret is restored.
-  const [edits, bump] = useReducer((n: number) => n + 1, 0);
-
-  useLayoutEffect(() => {
-    const node = el.current;
-    if (caret.current !== null && node && document.activeElement === node) node.setSelectionRange(caret.current, caret.current);
-    caret.current = null;
-  }, [edits]);
-
-  return (
-    <input
-      ref={(node) => {
-        el.current = node;
-        inputRef.current = node;
-        field.ref(node);
-      }}
-      name={field.name}
-      value={text}
-      onBlur={field.onBlur}
-      onChange={(e) => {
-        const next = editAmount(text, e.target.value, e.target.selectionStart, currency, (e.nativeEvent as InputEvent).inputType);
-        caret.current = next.caret;
-        field.onChange(next.value);
-        bump();
-      }}
-      aria-label="Amount"
-      aria-invalid={invalid}
-      inputMode={exponent(currency) ? "decimal" : "numeric"}
-      autoComplete="off"
-      placeholder={formatAmountInput(fromMinor(0, currency), currency)}
-      className={cn(
-        // Shrinks as digits pile up so long amounts still fit a 320px-wide sheet.
-        "num w-full min-w-0 bg-transparent text-center leading-none outline-none placeholder:text-muted-foreground/35",
-        text.length > 11 ? "text-3xl" : text.length > 8 ? "text-4xl" : text.length > 6 ? "text-5xl" : "text-6xl",
-        className,
-      )}
-    />
   );
 }
 
@@ -452,6 +484,52 @@ function CategoryChips({
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+const sourceChip =
+  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 pointer-coarse:h-11 pointer-coarse:px-3.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40";
+
+/** A horizontally-scrolling row of active-source chips, with a trailing link to add one. */
+function SourceChips({
+  label,
+  sources,
+  value,
+  onChange,
+  onNavigate,
+}: {
+  label: string;
+  sources: Source[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  onNavigate: () => void;
+}) {
+  return (
+    <div
+      className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      role="group"
+      aria-label={label}
+    >
+      {sources.map((s) => {
+        const active = s.id === value;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(active ? null : s.id)}
+            className={cn(sourceChip, active ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted")}
+          >
+            {s.emoji && <span aria-hidden>{s.emoji}</span>}
+            {s.name}
+            {active && <Check className="size-3.5" aria-hidden />}
+          </button>
+        );
+      })}
+      <Link href="/sources" onClick={onNavigate} aria-label="Add new source" className={cn(sourceChip, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
+        <Plus className="size-4" /> New
+      </Link>
     </div>
   );
 }

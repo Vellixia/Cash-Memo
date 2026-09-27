@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
-import { CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
+import { BalancesCard, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
-import { useCategories, useMe, useMemos, useSummary } from "@/lib/queries";
+import { useCategories, useMe, useMemos, useSources, useSummary } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 
 export default function HomePage() {
@@ -14,10 +14,12 @@ export default function HomePage() {
   const openEditor = useUiStore((s) => s.openEditor);
   const [direction, setDirection] = useState<DirectionFilter>("all");
   const [categoryId, setCategoryId] = useState<string | undefined>();
+  const [sourceId, setSourceId] = useState<string | undefined>();
 
   const { data: summary } = useSummary(month);
-  const { data: memos } = useMemos(month, categoryId);
+  const { data: memos } = useMemos(month, categoryId, sourceId);
   const { data: categories } = useCategories();
+  const { data: sources } = useSources();
   const defaultCurrency = useMe().data?.default_currency ?? "USD";
 
   // The default currency leads the switcher (and is selected) whenever the month has it.
@@ -41,11 +43,13 @@ export default function HomePage() {
           <HeroCard summary={summary} currency={currency} currencies={currencies} onCurrency={setCurrency} />
           <SpendingCard summary={summary} currency={currency} categories={categories ?? []} />
         </div>
+        <BalancesCard sources={sources} />
         {summary && currencies.length >= 2 && <CurrenciesCard summary={summary} currencies={currencies} />}
       </aside>
       <Ledger
         memos={memos}
         categories={categories ?? []}
+        sources={sources ?? []}
         direction={direction}
         onDirection={(d) => {
           setDirection(d);
@@ -54,6 +58,8 @@ export default function HomePage() {
         }}
         categoryId={categoryId}
         onCategory={setCategoryId}
+        sourceId={sourceId}
+        onSource={setSourceId}
         onSelect={(m) => openEditor(m)}
         onAdd={() => openEditor()}
       />

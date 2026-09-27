@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Download, Home, LogOut, Plus, Tags, UserRound } from "lucide-react";
+import { Download, Home, LogOut, Plus, Tags, UserRound, Wallet } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MemoEditor } from "@/components/memo-editor";
 import { THEMES } from "@/components/theme-select";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/", label: "Home", icon: Home },
   { href: "/categories", label: "Categories", icon: Tags },
+  { href: "/sources", label: "Sources", icon: Wallet },
 ] as const;
 
 /** Log out, then hard-navigate so no cached query refetches (and 401s) on the way out. */
@@ -140,6 +141,9 @@ function AccountMenu() {
           <MenuPrimitive.LinkItem render={<Link href="/categories" />} closeOnClick className={menuItem}>
             <Tags /> Categories
           </MenuPrimitive.LinkItem>
+          <MenuPrimitive.LinkItem render={<Link href="/sources" />} closeOnClick className={menuItem}>
+            <Wallet /> Sources
+          </MenuPrimitive.LinkItem>
           <MenuPrimitive.LinkItem render={<Link href="/account" />} closeOnClick className={menuItem}>
             <UserRound /> Account
           </MenuPrimitive.LinkItem>
@@ -180,13 +184,12 @@ function BottomNav({ onNew }: { onNew: () => void }) {
       <Link
         href={href}
         aria-current={active ? "page" : undefined}
-        className={cn(
-          "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl py-1 text-[0.7rem] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-          active ? "text-foreground" : "text-muted-foreground",
-        )}
+        className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl py-1 text-[0.72rem] font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
       >
-        <Icon className={cn("size-[1.35rem]", active && "text-income")} strokeWidth={active ? 2.2 : 1.8} />
-        {label}
+        <span className={cn("flex items-center justify-center rounded-full px-3 py-0.5", active && "bg-primary/10")}>
+          <Icon className={cn("size-[1.35rem]", active && "text-primary")} strokeWidth={active ? 2.2 : 1.8} />
+        </span>
+        <span className={cn(active && "text-primary")}>{label}</span>
       </Link>
     );
   };
@@ -196,7 +199,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
       aria-label="Tabs"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
     >
-      <div className="mx-auto grid h-16 max-w-md grid-cols-4 items-center px-2">
+      <div className="mx-auto grid h-16 max-w-md grid-cols-5 items-center px-1">
         {tab("/", "Home", Home)}
         {tab("/categories", "Categories", Tags)}
         <div className="flex justify-center">
@@ -204,11 +207,12 @@ function BottomNav({ onNew }: { onNew: () => void }) {
             type="button"
             onClick={onNew}
             aria-label="Add memo"
-            className="-mt-7 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_8px_20px_-6px_color-mix(in_oklab,var(--primary)_60%,transparent)] ring-4 ring-background transition-transform outline-none active:scale-95 focus-visible:ring-ring/60"
+            className="-mt-4 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform outline-none active:scale-95 focus-visible:ring-3 focus-visible:ring-ring/60"
           >
             <Plus className="size-6" strokeWidth={2.4} />
           </button>
         </div>
+        {tab("/sources", "Sources", Wallet)}
         {tab("/account", "Account", UserRound)}
       </div>
     </nav>
