@@ -1,0 +1,14 @@
+# Off-host watchdog: GlitchTip's own uptime monitor runs on the same server and dies with it.
+# A failed run emails the repo owner (GitHub's default for scheduled workflows).
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --retry 3 --retry-delay 20 --max-time 15 https://cashmemo.andresholivin.dev/api/health

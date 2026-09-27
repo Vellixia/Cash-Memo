@@ -22,6 +22,8 @@ async fn call(
         .uri(path)
         .header(header::COOKIE, cookie)
         .header(header::CONTENT_TYPE, "application/json")
+        // A fresh client IP per call keeps the auth rate limits out of the way.
+        .header("x-client-ip", uuid::Uuid::new_v4().to_string())
         .body(body.map_or(Body::empty(), |b| Body::from(b.to_string())))
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
@@ -257,7 +259,44 @@ async fn test_app() -> Router {
     app(AppState {
         db,
         cookie_secure: false,
+        limiter: Default::default(),
     })
+}
+
+#[tokio::test]
+async fn auth_is_rate_limited() {
+    let app = test_app().await;
+    let from = |ip: &str, body: Value| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("x-client-ip", ip)
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let ip = uuid::Uuid::new_v4().to_string();
+    let mut statuses = vec![];
+    for i in 0..11 {
+        let body = json!({ "email": format!("{i}-{ip}@test.dev"), "password": "nope-nope" });
+        statuses.push(app.clone().oneshot(from(&ip, body)).await.unwrap().status());
+    }
+    assert!(
+        statuses[..10]
+            .iter()
+            .all(|s| *s == StatusCode::UNAUTHORIZED)
+    );
+    assert_eq!(statuses[10], StatusCode::TOO_MANY_REQUESTS);
+
+    // One email is capped across IPs too.
+    let email = format!("{}@test.dev", uuid::Uuid::new_v4());
+    let mut last = StatusCode::OK;
+    for _ in 0..21 {
+        let body = json!({ "email": email, "password": "nope-nope" });
+        let ip = uuid::Uuid::new_v4().to_string();
+        last = app.clone().oneshot(from(&ip, body)).await.unwrap().status();
+    }
+    assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
 }
 
 #[tokio::test]

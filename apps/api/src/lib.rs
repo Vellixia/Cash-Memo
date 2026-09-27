@@ -1,6 +1,7 @@
 mod auth;
 mod categories;
 mod error;
+mod limits;
 mod memos;
 mod sources;
 
@@ -8,12 +9,14 @@ pub(crate) use domain::entities;
 
 use axum::{Router, extract::State, http::StatusCode, routing::get};
 use sea_orm::DatabaseConnection;
+use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
     pub cookie_secure: bool,
+    pub limiter: Arc<limits::RateLimiter>,
 }
 
 pub fn app(state: AppState) -> Router {

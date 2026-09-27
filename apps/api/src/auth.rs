@@ -11,13 +11,14 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::LazyLock;
+use std::{sync::LazyLock, time::Duration as Window};
 use uuid::Uuid;
 
 use crate::{
     AppState,
     entities::{session, user},
     error::{AppError, Json, Result},
+    limits::client_ip,
     parse_currency,
 };
 
@@ -83,7 +84,16 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
-async fn signup(State(st): State<AppState>, Json(c): Json<Credentials>) -> Result<Response> {
+async fn signup(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Json(c): Json<Credentials>,
+) -> Result<Response> {
+    st.limiter.check(
+        format!("signup:{}", client_ip(&headers)),
+        5,
+        Window::from_secs(600),
+    )?;
     let email = c.email.trim().to_lowercase();
     if !email.contains('@') || email.len() > 254 {
         return Err(AppError::BadRequest("invalid email"));
@@ -115,9 +125,22 @@ async fn signup(State(st): State<AppState>, Json(c): Json<Credentials>) -> Resul
     start_session(&st, u).await
 }
 
-async fn login(State(st): State<AppState>, Json(c): Json<Credentials>) -> Result<Response> {
+async fn login(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Json(c): Json<Credentials>,
+) -> Result<Response> {
+    let email = c.email.trim().to_lowercase();
+    // Per IP against spraying, per email against a distributed guess at one account.
+    st.limiter.check(
+        format!("login:{}", client_ip(&headers)),
+        10,
+        Window::from_secs(60),
+    )?;
+    st.limiter
+        .check(format!("login-email:{email}"), 20, Window::from_secs(900))?;
     let u = user::Entity::find()
-        .filter(user::Column::Email.eq(c.email.trim().to_lowercase()))
+        .filter(user::Column::Email.eq(email))
         .one(&st.db)
         .await?;
     let hash = u

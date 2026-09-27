@@ -17,6 +17,7 @@ pub enum AppError {
     Unauthorized,
     NotFound,
     Conflict(&'static str),
+    TooManyRequests,
     Internal(String),
 }
 
@@ -46,6 +47,10 @@ impl IntoResponse for AppError {
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             AppError::NotFound => (StatusCode::NOT_FOUND, "not found"),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m),
+            AppError::TooManyRequests => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "too many attempts, try again in a few minutes",
+            ),
             AppError::Internal(e) => {
                 tracing::error!("{e}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal error")
