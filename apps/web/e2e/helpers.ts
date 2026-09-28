@@ -16,6 +16,9 @@ type Source = {
   track_balance: boolean;
   currency: string | null;
   opening_minor: number;
+  credit_limit_minor: number | null;
+  statement_day: number | null;
+  due_day: number | null;
   archived_at: string | null;
   balance_minor: number | null;
 };
@@ -26,6 +29,9 @@ type SourceInput = {
   track_balance?: boolean;
   currency?: string | null;
   opening_minor?: number;
+  credit_limit_minor?: number | null;
+  statement_day?: number | null;
+  due_day?: number | null;
 };
 type MemoInput = {
   direction: "income" | "expense" | "transfer";
