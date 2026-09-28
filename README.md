@@ -33,14 +33,21 @@ Live: **https://cashmemo.andresholivin.dev**
   - **Transfers** move money between two sources (bank → GoPay top-up, bank → credit card bill). They never count as income or expense, so paying a card bill doesn't count the spending twice.
   - Every account starts with a "Cash" source. Archived sources stay on old memos.
 - **Any currency, shown the way it's written there**: `Rp 7.500.000`, `$7,500.00`, `7.500,00 €`, `¥7,500`. The amount input follows the same separators and decimals.
-- **Default currency**: set per account. It's guessed from your region at sign-up and can be changed in Account.
+- **Default currency**: set per account. It's guessed from your region at sign-up and can be changed in Settings.
 - **Month at a glance**: net for the month, an income-vs-expense bar, a spending-by-category donut, a card per currency when you use several, balances of tracked sources, and a ledger grouped by day with income/expense, category and source filters.
+- **Search** across every month: notes, categories and sources, from the top bar, the Home header or `/`.
+- **Keyboard shortcuts** on desktop: `n` new memo, `←`/`→` previous/next month, `/` search.
+- **Undo**: deleting a memo or archiving a source shows a short-lived Undo.
+- **Receipts**: attach one photo per memo, from the camera or a file. It's downscaled and re-encoded in the browser (which also strips EXIF) and stored privately.
+- **Credit & paylater**: credit limit, statement and due days on a card; buy in 3/6/12 (or any 2–36) installments with an optional fee; owed vs limit and due reminders on Home.
+- **Reports**: a separate page with income vs expense per month, spending by top categories over time, and this month vs last per category (6 or 12 months).
 - **Emoji categories**: separate lists for income and expense, with a one-click starter set on first run and rename/emoji/delete on the Categories page.
-- **Appearance**: light, dark or system theme, six accent colors (each checked for readable contrast in both themes), four font pairs (Classic, Modern, Readable, System) and a larger text size. Saved per device, applied before first paint.
+- **Appearance**: light, dark or system theme, six accent palettes that tint the whole app (background, cards, borders, controls; income/expense colors stay fixed), six font pairs (Classic, Modern, Readable, System, Rounded, Mono) with live previews, and a larger text size. Saved on the account so it follows you across devices, and applied before first paint.
+- **Settings vs Account**: Settings holds appearance, default currency, categories, recurring memos and your data. Account holds identity and security.
 - **Account**: password reset by email, change password (other devices are signed out), change email (confirmed from the new address), delete the account and everything in it.
 - **Your data**: export everything as CSV, and import CSV from another app or your bank, with a preview before anything is saved.
 - **Works everywhere**: responsive from 320px phones to wide desktops.
-  - Bottom tabs on phones (Home · Categories · **+** · Sources · Account), a top bar from tablet size up.
+  - Bottom tabs on phones (Home · Reports · **+** · Sources · Settings), a top bar from tablet size up.
   - A two-column dashboard on desktop.
 - **Installable & offline-readable (PWA)**:
   - Install it like an app. The install entry is offered quietly in the account menu and on the Account page, never as a popup.
@@ -205,7 +212,7 @@ All routes are under `/api` and use JSON. Errors are always `{ "error": string }
 | POST | `/auth/signup` | `{ email, password (8–256), default_currency? }` | `User` + cookie · 409 if the email is taken · 429 (5 per 10 min per IP) |
 | POST | `/auth/login` | `{ email, password }` | `User` + cookie · 401 · 429 (10/min per IP, 20 per 15 min per email) |
 | POST | `/auth/logout` | | 204, clears the cookie |
-| GET / PATCH | `/auth/me` | PATCH `{ default_currency }` | `User` |
+| GET / PATCH | `/auth/me` | PATCH `{ default_currency?, preferences? }` (`preferences` is a partial merge of `{ theme, accent, font, size }`, validated) | `User` |
 | POST | `/auth/password-reset/request` | `{ email }` | always 204; a 1-hour single-use link is emailed if the account exists |
 | POST | `/auth/password-reset/complete` | `{ token, password }` | 204, signs out every session · 400 invalid/expired |
 | POST | `/auth/password` | `{ current_password, new_password }` | 204, signs out other sessions |
@@ -215,9 +222,16 @@ All routes are under `/api` and use JSON. Errors are always `{ "error": string }
 | GET | `/memos` | `?month=YYYY-MM&offset=<min east of UTC>[&category_id=][&source_id=]` | `Memo[]`, newest first (`source_id` matches either side of a transfer) |
 | POST | `/memos` | `{ direction, amount_minor>0, currency, occurred_at, category_id?, source_id?, to_source_id?, note? }` | 201 `Memo` |
 | GET / PATCH / DELETE | `/memos/:id` | PATCH takes any subset; `null` clears `category_id` / `source_id` / `note` | `Memo` / 204 (soft delete) |
+| POST | `/memos/:id/restore` | | `Memo`, undoes a soft delete (404 if not deleted) |
+| GET | `/search` | `?q=` (≥ 2 chars) `[&before=<occurred_at>,<id>][&limit≤100]` | `Memo[]` matching note, category or source, newest first, keyset paged |
+| POST | `/memos/:id/attachment` | `{ content_type: image/jpeg \| image/webp }` | `{ upload_url, key }`: PUT the image there (5 min) |
+| PUT / GET / DELETE | `/memos/:id/attachment` | PUT `{ key }` confirms (≤ 5 MB, replaces the old one) | `{ has_attachment }` / `{ url }` (5 min) / 204 |
+| GET / POST | `/installments` | POST `{ source_id, currency, principal_minor, fee_minor?, months (2–36), first_date, offset, category_id?, note? }` | plans with paid/remaining counts / 201, creates every installment memo |
+| DELETE | `/installments/:id` | | 204, removes the plan and its future installments (past ones stay) |
+| GET | `/reports/trend` | `?months=6\|12&offset=` | `{ months[], totals[], by_category[] }` per local month; transfers excluded |
 | GET | `/sources` | | `Source[]` (archived included) |
 | POST | `/sources` | `{ name, kind, emoji?, track_balance?, currency?, opening_minor? }` | 201 `Source` · 409 on a duplicate name |
-| PATCH | `/sources/:id` | `{ name?, kind?, emoji?, track_balance?, currency?, opening_minor?, archived? }` | `Source` |
+| PATCH | `/sources/:id` | `{ name?, kind?, emoji?, track_balance?, currency?, opening_minor?, archived?, credit_limit_minor?, statement_day?, due_day? }` (the last three only for credit/paylater) | `Source` |
 | DELETE | `/sources/:id` | | 204, archives it (400 for the last active source) |
 | GET | `/categories` | | `Category[]` |
 | POST | `/categories` | `{ name, direction, emoji? }` | 201 `Category` · 409 on a duplicate |
@@ -231,13 +245,16 @@ All routes are under `/api` and use JSON. Errors are always `{ "error": string }
 | GET | `/jobs/:id` | | `{ id, kind, status, result, error, download_url? }` |
 
 ```ts
-type User     = { id: string; email: string; default_currency: string };
+type User     = { id: string; email: string; default_currency: string;
+                  preferences: { theme?; accent?; font?; size? } };
 type Memo     = { id; direction: "income" | "expense" | "transfer"; amount_minor: number; currency: string;
                   occurred_at: string; category_id: string | null; source_id: string | null;
-                  to_source_id: string | null; note: string | null; created_at: string; updated_at: string };
+                  to_source_id: string | null; note: string | null; has_attachment: boolean;
+                  created_at: string; updated_at: string };
 type Source   = { id; name: string; kind: "cash" | "bank" | "ewallet" | "credit" | "paylater" | "other";
                   emoji: string | null; track_balance: boolean; currency: string | null;
-                  opening_minor: number; archived_at: string | null; balance_minor: number | null };
+                  opening_minor: number; archived_at: string | null; balance_minor: number | null;
+                  credit_limit_minor: number | null; statement_day: number | null; due_day: number | null };
 type Category = { id: string; name: string; direction: "income" | "expense"; emoji: string | null };
 ```
 
@@ -254,16 +271,17 @@ Memo rules, checked on the final state of every create or update:
 
 | Table | Key columns |
 |---|---|
-| `users` | `id uuid`, `email` (unique, lowercase), `password_hash` (argon2id), `default_currency char(3)`, `created_at` |
+| `users` | `id uuid`, `email` (unique, lowercase), `password_hash` (argon2id), `default_currency char(3)`, `preferences jsonb` (appearance), `created_at` |
 | `sessions` | `token_hash bytea` (sha256 of the cookie token), `user_id` → users (cascade), `expires_at` (30 days) |
 | `categories` | `id`, `user_id`, `name` (1–100), `direction` (income/expense), `emoji` (≤ 8 chars), unique `(user_id, name, direction)` |
-| `sources` | `id`, `user_id`, `name` (1–100, unique per user), `kind`, `emoji`, `track_balance`, `currency` (required when tracking), `opening_minor`, `archived_at` |
-| `memos` | `id`, `user_id`, `direction` (income/expense/transfer), `amount_minor bigint > 0`, `currency char(3)`, `occurred_at timestamptz`, `category_id` (set null on delete), `source_id`, `to_source_id` (CHECK: a transfer has both, different, and no category), `note`, `deleted_at` (soft delete), timestamps, index `(user_id, occurred_at desc, id desc)` |
+| `sources` | `id`, `user_id`, `name` (1–100, unique per user), `kind`, `emoji`, `track_balance`, `currency` (required when tracking), `opening_minor`, `archived_at`, `credit_limit_minor`, `statement_day`, `due_day` |
+| `memos` | `id`, `user_id`, `direction` (income/expense/transfer), `amount_minor bigint > 0`, `currency char(3)`, `occurred_at timestamptz`, `category_id` (set null on delete), `source_id`, `to_source_id` (CHECK: a transfer has both, different, and no category), `note`, `installment_plan_id`, `attachment_key` (never returned), `deleted_at` (soft delete), timestamps, index `(user_id, occurred_at desc, id desc)`, trigram index on `note` for search |
+| `installment_plans` | `id`, `user_id`, `source_id` (credit/paylater), `category_id`, `note`, `currency`, `principal_minor`, `fee_minor`, `months`, `first_date` |
 | `jobs` | `id`, `kind`, `payload jsonb`, `status` (queued/running/done/failed), `attempts`, `run_after`, `locked_at`, `error`, `result jsonb`, `user_id` (cascade) |
 | `email_tokens` | `token_hash` (sha256), `user_id`, `purpose` (reset/change_email), `new_email`, `expires_at` (1 h), `used_at` |
 | `import_rows` | unlogged staging for import previews: parsed rows keyed by `import_id`, swept after a day |
 
-Balance of a tracked source = `opening_minor` + income − expense − transfers out + transfers in. Credit and paylater sources usually sit below zero, which the app shows as "Owed".
+Balance of a tracked source = `opening_minor` + income − expense − transfers out + transfers in, counting memos dated up to now (future installments don't count yet). Credit and paylater sources usually sit below zero, which the app shows as "Owed".
 
 Migrations live in `crates/domain/src/migration` and run automatically when the API starts.
 
@@ -279,14 +297,14 @@ Migrations live in `crates/domain/src/migration` and run automatically when the 
 
 The design goal is that **no file, however large, can slow the database down for everyone else**.
 
-- **Export** (Account → Your data):
+- **Export** (Settings → Your data):
   1. The API queues a job and returns immediately.
   2. The worker reads the user's memos in **keyset pages of 1,000** (`(occurred_at, id) < last`, using the index). Each page is a short query with a 30 s statement timeout and a 50 ms pause after it, so there's no long transaction and memory stays flat.
   3. Rows stream into a temp file (UTF-8 with BOM for spreadsheets; cells starting with `= + - @` are neutralized), which is uploaded to R2.
   4. The page polls the job and gets a 1-hour download link.
   5. Columns are `date` (ISO 8601 with your offset), `direction`, `amount` (decimal), `currency`, `category`, `source`, `to_source`, `note`.
   6. 50k memos export in about 4 seconds.
-- **Import** (Account → Import from CSV):
+- **Import** (Settings → Import from CSV):
   1. The browser reads the first rows locally to propose a column mapping (our own export columns and common bank headers are recognized).
   2. The browser uploads the file straight to R2 (≤ 50 MB, ≤ 200k rows).
   3. **Preview**: the worker streams the file to disk, parses it on a blocking thread, and validates each row with the same rules as the API:
@@ -301,8 +319,8 @@ The design goal is that **no file, however large, can slow the database down for
   - 5 exports and 20 previews per day;
   - the worker has at most **2 DB connections** and runs one data job at a time;
   - jobs retry 3 times and then report to GlitchTip.
-- **Storage**: private bucket `cashmemo-files`, keys under `users/<id>/`, **1-day lifecycle rule** so files delete themselves. Deleting an account also sweeps that prefix.
-- **R2 CORS** (needed because the browser PUTs/GETs directly): allow origin `https://cashmemo.andresholivin.dev`, methods `GET, PUT`, header `content-type`.
+- **Storage**: private bucket `cashmemo-files`, CSV keys under `users/<id>/`, with a **1-day lifecycle rule limited to the `users/` prefix** so they delete themselves. Receipt photos live under `attachments/<id>/` and are kept. Deleting an account sweeps both prefixes.
+- **R2 CORS** (needed because the browser PUTs/GETs directly): allow origin `https://cashmemo.andresholivin.dev`, methods `GET, PUT`, header `content-type` (CSV and `image/jpeg`/`image/webp` uploads sign it).
 
 ## Security & privacy
 
