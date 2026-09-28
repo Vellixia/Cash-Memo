@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use rusty_s3::{
     Bucket, Credentials, S3Action, UrlStyle,
-    actions::{DeleteObject, GetObject, ListObjectsV2, PutObject},
+    actions::{DeleteObject, GetObject, HeadObject, ListObjectsV2, PutObject},
 };
 
 pub struct Storage {
@@ -39,6 +39,30 @@ impl Storage {
             .to_string()
     }
 
+    /// Like `put_url`, but signs `content-type` too: R2/S3 then rejects a PUT whose header
+    /// doesn't match exactly, so an attachment upload can only ever land as the type we chose.
+    pub fn put_url_typed(&self, key: &str, content_type: &str, ttl: Duration) -> String {
+        let mut a = PutObject::new(&self.bucket, Some(&self.creds), key);
+        a.headers_mut().insert("content-type", content_type);
+        a.sign(ttl).to_string()
+    }
+
+    /// Rendered inline (no `Content-Disposition`), unlike `get_url`'s forced download — for
+    /// viewing an attachment image directly.
+    pub fn get_inline_url(&self, key: &str, ttl: Duration) -> String {
+        GetObject::new(&self.bucket, Some(&self.creds), key)
+            .sign(ttl)
+            .to_string()
+    }
+
+    /// Presigned HEAD, so the API can confirm an upload landed (and check its size) without
+    /// the object's bytes ever passing through it.
+    pub fn head_url(&self, key: &str, ttl: Duration) -> String {
+        HeadObject::new(&self.bucket, Some(&self.creds), key)
+            .sign(ttl)
+            .to_string()
+    }
+
     pub fn delete_url(&self, key: &str, ttl: Duration) -> String {
         DeleteObject::new(&self.bucket, Some(&self.creds), key)
             .sign(ttl)
@@ -60,6 +84,14 @@ impl Storage {
 }
 
 /// Everything a user owns lives under this prefix, so deleting an account can sweep it.
+/// **Scope stays `users/`**: the production bucket's 1-day lifecycle rule (for CSV exports and
+/// import uploads) is keyed off this prefix and must never be widened to the whole bucket.
 pub fn user_prefix(user_id: uuid::Uuid) -> String {
     format!("users/{user_id}/")
+}
+
+/// Receipt/photo attachments live outside `users/` on purpose, so the CSV lifecycle rule above
+/// can never expire them. Deleting an account sweeps this prefix too (see apps/api account.rs).
+pub fn attachment_prefix(user_id: uuid::Uuid) -> String {
+    format!("attachments/{user_id}/")
 }

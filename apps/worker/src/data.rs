@@ -537,7 +537,10 @@ async fn commit(ctx: &Ctx, job: &Job) -> Result<Json, String> {
 
 async fn purge(ctx: &Ctx, job: &Job) -> Result<Json, String> {
     let p: PurgePayload = payload(job)?;
-    if !p.prefix.starts_with("users/") || p.prefix.len() < "users/x/".len() {
+    // Both a CSV prefix (`users/<id>/`) and an attachment prefix (`attachments/<id>/`) can be purged.
+    let valid = (p.prefix.starts_with("users/") && p.prefix.len() >= "users/x/".len())
+        || (p.prefix.starts_with("attachments/") && p.prefix.len() >= "attachments/x/".len());
+    if !valid {
         return Err("refusing to purge outside a user prefix".into());
     }
     let mut deleted = 0;

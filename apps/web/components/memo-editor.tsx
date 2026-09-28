@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Check, Loader2, Lock, Plus, Trash2, X } from "lucide-react";
+import { Camera, Check, ImagePlus, Loader2, Lock, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +27,23 @@ import { OfflineHint } from "@/components/offline-hint";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
 import type { Direction, Memo, MemoDirection, Source } from "@/lib/api";
+import { uploadAttachmentFile } from "@/lib/api";
+import { processAttachment } from "@/lib/attachment";
 import { fitAmount, fromMinor, toMinor } from "@/lib/money";
 import { toDatetimeLocal } from "@/lib/format";
-import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useSources, useUpdateMemo } from "@/lib/queries";
+import {
+  useAttachmentUrl,
+  useCategories,
+  useConfirmAttachment,
+  useCreateCategory,
+  useCreateMemo,
+  useDeleteAttachment,
+  useDeleteMemo,
+  useMe,
+  useSources,
+  useStartAttachmentUpload,
+  useUpdateMemo,
+} from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
@@ -137,8 +151,12 @@ function MemoForm({
   const createMemo = useCreateMemo();
   const updateMemo = useUpdateMemo();
   const deleteMemo = useDeleteMemo();
+  const startUpload = useStartAttachmentUpload();
+  const confirmUpload = useConfirmAttachment();
   const online = useOnline();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // A new memo has no id yet: a picked photo waits here until save creates one, then uploads.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const {
     control,
@@ -208,18 +226,32 @@ function MemoForm({
       note: values.note.trim() || null,
     };
     try {
+      let saved: Memo;
       if (memo) {
-        await updateMemo.mutateAsync({ id: memo.id, input: body });
+        saved = await updateMemo.mutateAsync({ id: memo.id, input: body });
         toast.success("Memo updated");
       } else {
-        await createMemo.mutateAsync(body);
+        saved = await createMemo.mutateAsync(body);
         toast.success(isTransfer ? "Transfer added" : values.direction === "income" ? "Income added" : "Expense added");
       }
       noteCurrency(cur);
       if (values.source_id) setLastSourceId(values.source_id);
+      // The memo is saved either way; a failed attachment upload never blocks or undoes that.
+      if (pendingFile) await uploadPending(saved.id, pendingFile);
       onDone();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save memo");
+    }
+  }
+
+  async function uploadPending(memoId: string, file: File) {
+    try {
+      const { blob, contentType } = await processAttachment(file);
+      const { upload_url, key } = await startUpload.mutateAsync({ memoId, contentType });
+      await uploadAttachmentFile(upload_url, blob, contentType);
+      await confirmUpload.mutateAsync({ memoId, key });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not attach that image");
     }
   }
 
@@ -348,6 +380,13 @@ function MemoForm({
             {errors.note && <span className="text-sm text-destructive">{errors.note.message}</span>}
           </label>
         </div>
+
+        <AttachmentField
+          memoId={memo?.id ?? null}
+          hasAttachment={memo?.has_attachment ?? false}
+          pendingFile={pendingFile}
+          onPendingFile={setPendingFile}
+        />
       </div>
 
       {/* Outside the scroll area, so Save stays put above the keyboard / home indicator. */}
@@ -385,6 +424,137 @@ function MemoForm({
         </div>
       </div>
     </form>
+  );
+}
+
+/** Optional receipt/photo. Without a memo id yet (a new memo), a picked file just stages via
+ * `onPendingFile`; MemoForm uploads it once Save creates the memo. With an id, it uploads (or
+ * replaces/removes) right away, independent of the Save button. */
+function AttachmentField({
+  memoId,
+  hasAttachment,
+  pendingFile,
+  onPendingFile,
+}: {
+  memoId: string | null;
+  hasAttachment: boolean;
+  pendingFile: File | null;
+  onPendingFile: (file: File | null) => void;
+}) {
+  const online = useOnline();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const startUpload = useStartAttachmentUpload();
+  const confirmUpload = useConfirmAttachment();
+  const deleteAttachment = useDeleteAttachment();
+  const [attached, setAttached] = useState(hasAttachment);
+  const [busy, setBusy] = useState(false);
+  const attachmentUrl = useAttachmentUrl(memoId ?? undefined, attached && !pendingFile);
+  const previewUrl = useMemo(() => (pendingFile ? URL.createObjectURL(pendingFile) : null), [pendingFile]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function pick(file: File | null) {
+    if (!file) return;
+    if (!memoId) {
+      onPendingFile(file);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { blob, contentType } = await processAttachment(file);
+      const { upload_url, key } = await startUpload.mutateAsync({ memoId, contentType });
+      await uploadAttachmentFile(upload_url, blob, contentType);
+      await confirmUpload.mutateAsync({ memoId, key });
+      setAttached(true);
+      toast.success("Attachment saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not attach that image");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (pendingFile) {
+      onPendingFile(null);
+      return;
+    }
+    if (!memoId) return;
+    setBusy(true);
+    try {
+      await deleteAttachment.mutateAsync(memoId);
+      setAttached(false);
+      toast.success("Attachment removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove attachment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const shown = !!pendingFile || attached;
+  const thumbUrl = previewUrl ?? attachmentUrl.data?.url;
+
+  return (
+    <fieldset className="space-y-2.5">
+      <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">Attachment</legend>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => {
+          void pick(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(e) => {
+          void pick(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      {shown ? (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => thumbUrl && window.open(thumbUrl, "_blank")}
+            disabled={!thumbUrl}
+            className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border"
+            aria-label="View attachment full size"
+          >
+            {thumbUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- a presigned/blob URL, not a static asset
+              <img src={thumbUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
+            )}
+          </button>
+          <div className="flex flex-1 flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy || !online} onClick={() => fileRef.current?.click()}>
+              Replace
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="rounded-full text-destructive" disabled={busy || !online} onClick={remove}>
+              Remove
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy || !online} onClick={() => cameraRef.current?.click()}>
+            <Camera className="size-4" /> Take photo
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy || !online} onClick={() => fileRef.current?.click()}>
+            <ImagePlus className="size-4" /> Choose image
+          </Button>
+        </div>
+      )}
+    </fieldset>
   );
 }
 

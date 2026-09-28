@@ -1,4 +1,5 @@
 mod account;
+mod attachments;
 mod auth;
 mod categories;
 mod data;
@@ -21,8 +22,11 @@ pub struct AppState {
     pub limiter: Arc<limits::RateLimiter>,
     /// Public base URL of the web app, for links in emails.
     pub app_url: String,
-    /// Object storage for CSV files; None disables export/import.
+    /// Object storage for CSV files and attachments; None disables export/import/attachments.
     pub storage: Option<Arc<domain::storage::Storage>>,
+    /// For the one HTTP call the API makes itself: confirming an attachment upload (HEAD) and
+    /// deleting a replaced one. Everything else about file storage stays presigned-URL only.
+    pub http: reqwest::Client,
 }
 
 pub fn app(state: AppState) -> Router {
@@ -33,7 +37,8 @@ pub fn app(state: AppState) -> Router {
         .merge(memos::routes())
         .merge(categories::routes())
         .merge(sources::routes())
-        .merge(data::routes());
+        .merge(data::routes())
+        .merge(attachments::routes());
     Router::new()
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())

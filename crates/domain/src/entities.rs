@@ -105,6 +105,10 @@ pub mod memo {
         pub source_id: Option<Uuid>,
         pub to_source_id: Option<Uuid>,
         pub note: Option<String>,
+        /// S3 key of the one optional receipt/photo attachment. Never serialized directly —
+        /// callers see `has_attachment` (added by `apps/api/src/memos.rs::MemoOut`) instead.
+        #[serde(skip)]
+        pub attachment_key: Option<String>,
         #[serde(skip)]
         pub deleted_at: Option<DateTimeUtc>,
         pub created_at: DateTimeUtc,
