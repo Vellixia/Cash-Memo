@@ -34,10 +34,10 @@ struct MonthQuery {
 }
 
 #[derive(Deserialize)]
-struct MemoIn {
-    direction: Option<String>,
-    amount_minor: Option<i64>,
-    currency: Option<String>,
+pub(crate) struct MemoIn {
+    pub(crate) direction: Option<String>,
+    pub(crate) amount_minor: Option<i64>,
+    pub(crate) currency: Option<String>,
     occurred_at: Option<DateTime<Utc>>,
     #[serde(default, deserialize_with = "present")]
     category_id: Option<Option<Uuid>>,
@@ -205,7 +205,7 @@ async fn summary(
     }))
 }
 
-async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
+pub(crate) async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
     memo::Entity::find_by_id(id)
         .filter(memo::Column::UserId.eq(uid))
         .filter(memo::Column::DeletedAt.is_null())
@@ -216,7 +216,7 @@ async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
 
 /// Validates the provided fields and copies them onto the active model.
 /// Rules are checked on the final state, so a partial update can't leave a memo inconsistent.
-async fn apply(
+pub(crate) async fn apply(
     st: &AppState,
     uid: Uuid,
     m: &mut memo::ActiveModel,
@@ -325,12 +325,21 @@ fn parse_direction(d: &str) -> Result<String> {
     }
 }
 
-fn month_range(month: &str, offset_minutes: i32) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+/// First day of `YYYY-MM` and first day of the month after.
+pub(crate) fn month_days(month: &str) -> Result<(NaiveDate, NaiveDate)> {
     let start = NaiveDate::parse_from_str(&format!("{month}-01"), "%Y-%m-%d")
         .map_err(|_| AppError::BadRequest("month must be YYYY-MM"))?;
     let end = start
         .checked_add_months(Months::new(1))
         .ok_or(AppError::BadRequest("month out of range"))?;
+    Ok((start, end))
+}
+
+pub(crate) fn month_range(
+    month: &str,
+    offset_minutes: i32,
+) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    let (start, end) = month_days(month)?;
     let tz = offset_minutes
         .checked_mul(60)
         .and_then(FixedOffset::east_opt)

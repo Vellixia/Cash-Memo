@@ -785,3 +785,225 @@ async fn data_endpoints_queue_and_guard() {
     let (s, _, _) = call(&app, "GET", &job, &b, None).await;
     assert_eq!(s, StatusCode::NOT_FOUND);
 }
+
+async fn rule_user(db: &sea_orm::DatabaseConnection, rule: &Value) -> uuid::Uuid {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let id: uuid::Uuid = rule["id"].as_str().unwrap().parse().unwrap();
+    db.query_one_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT user_id FROM recurring_rules WHERE id = $1",
+        [id.into()],
+    ))
+    .await
+    .unwrap()
+    .unwrap()
+    .try_get("", "user_id")
+    .unwrap()
+}
+
+async fn set_next_date(db: &sea_orm::DatabaseConnection, rule: &Value, date: &str) {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let id: uuid::Uuid = rule["id"].as_str().unwrap().parse().unwrap();
+    db.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "UPDATE recurring_rules SET next_date = $2::date WHERE id = $1",
+        [id.into(), date.into()],
+    ))
+    .await
+    .unwrap();
+}
+
+fn at(s: &str) -> chrono::DateTime<chrono::Utc> {
+    s.parse().unwrap()
+}
+
+#[tokio::test]
+async fn recurring_rules() {
+    use domain::recurring::materialize;
+    let (app, db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, rent) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Rent", "direction": "expense" })),
+    )
+    .await;
+
+    let base = json!({ "direction": "expense", "amount_minor": 1000, "currency": "USD", "category_id": rent["id"], "source_id": cash, "cadence": "monthly", "next_date": "2099-01-31", "offset_minutes": 420 });
+    let with = |k: &str, v: Value| {
+        let mut b = base.clone();
+        b[k] = v;
+        b
+    };
+    for (bad, msg) in [
+        (
+            with("cadence", json!("daily")),
+            "cadence must be weekly, monthly or yearly",
+        ),
+        (
+            with("next_date", Value::Null),
+            "direction, amount_minor, currency and next_date are required",
+        ),
+        (
+            with("direction", json!("income")),
+            "category direction does not match memo direction",
+        ),
+        (with("source_id", Value::Null), "an expense needs a source"),
+        (
+            json!({ "direction": "transfer", "amount_minor": 5, "currency": "USD", "source_id": cash, "cadence": "weekly", "next_date": "2099-01-01" }),
+            "a transfer needs two different sources",
+        ),
+        (
+            with("next_date", json!("1900-01-01")),
+            "next_date out of range",
+        ),
+    ] {
+        let (s, _, err) = call(&app, "POST", "/api/recurring", &a, Some(bad)).await;
+        assert_eq!(
+            (s, err["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some(msg))
+        );
+    }
+
+    let (s, _, rule) = call(&app, "POST", "/api/recurring", &a, Some(base.clone())).await;
+    assert_eq!(s, StatusCode::CREATED, "{rule}");
+    assert_eq!(
+        (rule["anchor_day"].clone(), rule["next_date"].clone()),
+        (json!(31), json!("2099-01-31"))
+    );
+    let uid = rule_user(&db, &rule).await;
+
+    // Catch-up from Jan 31: clamps to month end and returns to the 31st, at local noon (+07:00).
+    set_next_date(&db, &rule, "2026-01-31").await;
+    let now = at("2026-05-01T00:00:00Z");
+    assert_eq!(materialize(&db, Some(uid), now).await.unwrap(), 4);
+    assert_eq!(materialize(&db, Some(uid), now).await.unwrap(), 0);
+    // Even re-running the same occurrences (a racing or replayed run) creates no duplicates.
+    set_next_date(&db, &rule, "2026-01-31").await;
+    assert_eq!(materialize(&db, Some(uid), now).await.unwrap(), 0);
+    let (_, _, rules) = call(&app, "GET", "/api/recurring", &a, None).await;
+    assert_eq!(rules[0]["next_date"], "2026-05-31");
+    let mut days = vec![];
+    for m in ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05"] {
+        let (_, _, memos) = call(
+            &app,
+            "GET",
+            &format!("/api/memos?month={m}&offset=420"),
+            &a,
+            None,
+        )
+        .await;
+        for memo in memos.as_array().unwrap() {
+            assert_eq!(memo["recurring_rule_id"], rule["id"]);
+            days.push(memo["occurred_at"].as_str().unwrap().to_owned());
+        }
+    }
+    assert_eq!(
+        days,
+        [
+            "2026-01-31T05:00:00Z",
+            "2026-02-28T05:00:00Z",
+            "2026-03-31T05:00:00Z",
+            "2026-04-30T05:00:00Z"
+        ]
+    );
+
+    // Paused rules create nothing; resuming skips what was missed.
+    let path = format!("/api/recurring/{}", rule["id"].as_str().unwrap());
+    let (s, _, paused) = call(&app, "PATCH", &path, &a, Some(json!({ "paused": true }))).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(paused["paused_at"].is_string());
+    assert_eq!(
+        materialize(&db, Some(uid), at("2026-08-01T00:00:00Z"))
+            .await
+            .unwrap(),
+        0
+    );
+    let (_, _, resumed) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "paused": false, "amount_minor": 1500 })),
+    )
+    .await;
+    assert!(resumed["paused_at"].is_null());
+    assert_eq!(resumed["amount_minor"], 1500);
+    let today = domain::recurring::local_date(chrono::Utc::now(), 420).to_string();
+    let next = resumed["next_date"].as_str().unwrap().to_owned();
+    assert!(next > today, "{next} vs {today}");
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "category_id": null, "direction": "income" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "direction": "expense", "category_id": rent["id"], "source_id": cash })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    // The next occurrence shows up as upcoming in its month.
+    let (_, _, up) = call(
+        &app,
+        "GET",
+        &format!("/api/recurring/upcoming?month={}&offset=420", &next[..7]),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(up[0]["id"], rule["id"]);
+    assert_eq!(up[0]["date"], next);
+
+    // Make an existing memo recurring: it's the first occurrence and links to the rule.
+    let (_, _, memo) = call(&app, "POST", "/api/memos", &a, Some(json!({ "direction": "expense", "amount_minor": 99, "currency": "USD", "occurred_at": "2099-06-10T03:00:00Z", "source_id": cash }))).await;
+    let (s, _, weekly) = call(
+        &app,
+        "POST",
+        "/api/recurring",
+        &a,
+        Some(json!({ "memo_id": memo["id"], "cadence": "weekly", "offset_minutes": 420 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{weekly}");
+    assert_eq!(
+        (weekly["next_date"].clone(), weekly["amount_minor"].clone()),
+        (json!("2099-06-17"), json!(99))
+    );
+    let (_, _, memo) = call(
+        &app,
+        "GET",
+        &format!("/api/memos/{}", memo["id"].as_str().unwrap()),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(memo["recurring_rule_id"], weekly["id"]);
+
+    // Other users can't see or touch it.
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "PATCH", &path, &b, Some(json!({ "paused": true }))).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, _, none) = call(&app, "GET", "/api/recurring", &b, None).await;
+    assert_eq!(none, json!([]));
+
+    // Stopping keeps the memos it made.
+    let (s, _, _) = call(&app, "DELETE", &path, &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, _, feb) = call(&app, "GET", "/api/memos?month=2026-02&offset=420", &a, None).await;
+    assert_eq!(feb[0]["recurring_rule_id"], Value::Null);
+    let (_, _, rules) = call(&app, "GET", "/api/recurring", &a, None).await;
+    assert_eq!(rules.as_array().unwrap().len(), 1);
+}

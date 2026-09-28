@@ -5,6 +5,7 @@ mod data;
 mod error;
 mod limits;
 mod memos;
+mod recurring;
 mod sources;
 
 pub(crate) use domain::entities;
@@ -33,6 +34,7 @@ pub fn app(state: AppState) -> Router {
         .merge(memos::routes())
         .merge(categories::routes())
         .merge(sources::routes())
+        .merge(recurring::routes())
         .merge(data::routes());
     Router::new()
         .nest("/api", api)
