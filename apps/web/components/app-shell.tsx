@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Download, Home, LogOut, Plus, Tags, UserRound, Wallet } from "lucide-react";
+import { Download, Home, LogOut, Plus, Search, Tags, UserRound, Wallet } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MemoEditor } from "@/components/memo-editor";
+import { Shortcuts } from "@/components/shortcuts";
 import { THEMES } from "@/components/theme-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <BottomNav onNew={() => openEditor()} />
       <MemoEditor />
+      <Shortcuts />
     </div>
   );
 }
@@ -99,7 +101,10 @@ function TopBar({ onNew }: { onNew: () => void }) {
           ))}
         </nav>
         <div className="ml-auto hidden items-center gap-2 md:flex">
-          <Button onClick={onNew} className="h-9 rounded-full px-4">
+          <Button variant="ghost" size="icon" render={<Link href="/search" />} className="size-9 rounded-full" aria-label="Search" title="Search (/)" aria-keyshortcuts="/">
+            <Search />
+          </Button>
+          <Button onClick={onNew} className="h-9 rounded-full px-4" title="New memo (n)" aria-keyshortcuts="n">
             <Plus /> New memo
           </Button>
           <AccountMenu />

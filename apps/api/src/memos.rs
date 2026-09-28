@@ -19,6 +19,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/memos", get(list).post(create))
         .route("/memos/{id}", get(read).patch(update).delete(remove))
+        .route("/memos/{id}/restore", axum::routing::post(restore))
         .route("/summary", get(summary))
 }
 
@@ -145,6 +146,23 @@ async fn remove(
     m.deleted_at = Set(Some(Utc::now()));
     m.update(&st.db).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Undoes a soft delete. Only the memo's own owner can, and only while it's still deleted.
+async fn restore(
+    State(st): State<AppState>,
+    CurrentUser(uid): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<memo::Model>> {
+    let m = memo::Entity::find_by_id(id)
+        .filter(memo::Column::UserId.eq(uid))
+        .filter(memo::Column::DeletedAt.is_not_null())
+        .one(&st.db)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let mut m = m.into_active_model();
+    m.deleted_at = Set(None);
+    Ok(Json(m.update(&st.db).await?))
 }
 
 #[derive(Serialize, FromQueryResult)]

@@ -254,7 +254,19 @@ function SourceRow({ source }: { source: Source }) {
     try {
       await archive.mutateAsync(source.id);
       setConfirm(false);
-      toast.success(`Archived “${source.name}”`);
+      toast.success("Source archived", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await update.mutateAsync({ id: source.id, patch: { archived: false } });
+              toast.success(`Restored “${source.name}”`);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not restore source");
+            }
+          },
+        },
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not archive source");
     }
