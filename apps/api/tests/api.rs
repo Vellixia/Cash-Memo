@@ -785,3 +785,110 @@ async fn data_endpoints_queue_and_guard() {
     let (s, _, _) = call(&app, "GET", &job, &b, None).await;
     assert_eq!(s, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn search_and_restore() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+    let b = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, cat) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Groceries", "direction": "expense" })),
+    )
+    .await;
+    let mut ids = vec![];
+    for (at, note) in [
+        ("2026-01-05T12:00:00Z", "100% coffee"),
+        ("2026-03-05T12:00:00Z", "rent"),
+        ("2026-05-05T12:00:00Z", "espresso COFFEE"),
+    ] {
+        let body = json!({ "direction": "expense", "amount_minor": 100, "currency": "USD", "occurred_at": at, "source_id": cash, "category_id": cat["id"], "note": note });
+        let (s, _, m) = call(&app, "POST", "/api/memos", &a, Some(body)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        ids.push(m["id"].as_str().unwrap().to_owned());
+    }
+
+    // Note matches across months, newest first; category and source names match too.
+    let (s, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        found
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [&ids[2], &ids[0]]
+    );
+    let (_, _, found) = call(&app, "GET", "/api/search?q=grocer", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 3);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=cash", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 3);
+    // Wildcards are literal; short queries are rejected; other users see nothing.
+    let (_, _, found) = call(&app, "GET", "/api/search?q=%25%20c", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 1);
+    let (s, _, _) = call(&app, "GET", "/api/search?q=c", &a, None).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &b, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 0);
+
+    // Keyset paging: page 1 has the newest row, page 2 continues after it.
+    let (_, _, p1) = call(&app, "GET", "/api/search?q=grocer&limit=1", &a, None).await;
+    assert_eq!(p1[0]["id"], ids[2].as_str());
+    let cursor = format!("{},{}", p1[0]["occurred_at"].as_str().unwrap(), ids[2])
+        .replace('+', "%2B")
+        .replace(':', "%3A");
+    let (_, _, p2) = call(
+        &app,
+        "GET",
+        &format!("/api/search?q=grocer&limit=5&before={cursor}"),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(p2.as_array().unwrap().len(), 2);
+    assert_eq!(p2[0]["id"], ids[1].as_str());
+
+    // Deleted memos drop out of search; restore brings them back, owner only, deleted only.
+    let (s, _, _) = call(&app, "DELETE", &format!("/api/memos/{}", ids[0]), &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 1);
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &format!("/api/memos/{}/restore", ids[0]),
+        &b,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, m) = call(
+        &app,
+        "POST",
+        &format!("/api/memos/{}/restore", ids[0]),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(
+        (s, m["id"].as_str()),
+        (StatusCode::OK, Some(ids[0].as_str()))
+    );
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &format!("/api/memos/{}/restore", ids[0]),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 2);
+}
