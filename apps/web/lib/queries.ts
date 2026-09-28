@@ -6,15 +6,18 @@ import {
   changeEmail,
   changePassword,
   completePasswordReset,
+  confirmAttachment,
   confirmEmail,
   createCategory,
   createMemo,
   createPlan,
   createSource,
   deleteAccount,
+  deleteAttachment,
   deleteCategory,
   deleteMemo,
   deletePlan,
+  getAttachmentUrl,
   getCategories,
   getJob,
   getMe,
@@ -22,6 +25,7 @@ import {
   getPlans,
   getSources,
   getSummary,
+  getTrend,
   login,
   logout,
   requestPasswordReset,
@@ -30,6 +34,7 @@ import {
   searchMemos,
   SEARCH_PAGE_SIZE,
   signup,
+  startAttachmentUpload,
   startCommit,
   startExport,
   startImportUpload,
@@ -38,6 +43,7 @@ import {
   updateMe,
   updateMemo,
   updateSource,
+  type AttachmentContentType,
   type CategoryInput,
   type CommitResult,
   type ExportResult,
@@ -324,3 +330,40 @@ export function useInvalidateAfterImport() {
 }
 
 export type { CommitResult, ExportResult, Job, Mapping, ValidateResult };
+
+// --- memo attachments -------------------------------------------------------
+
+export function useStartAttachmentUpload() {
+  return useMutation({
+    mutationFn: ({ memoId, contentType }: { memoId: string; contentType: AttachmentContentType }) =>
+      startAttachmentUpload(memoId, contentType),
+  });
+}
+
+export function useConfirmAttachment() {
+  const invalidate = useInvalidateMoney();
+  return useMutation({
+    mutationFn: ({ memoId, key }: { memoId: string; key: string }) => confirmAttachment(memoId, key),
+    onSuccess: invalidate,
+  });
+}
+
+/** The attachment's presigned view URL; `enabled` so it's only fetched once there's one to show. */
+export function useAttachmentUrl(memoId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["attachment", memoId],
+    queryFn: () => getAttachmentUrl(memoId!),
+    enabled: !!memoId && enabled,
+  });
+}
+
+export function useDeleteAttachment() {
+  const invalidate = useInvalidateMoney();
+  return useMutation({ mutationFn: (memoId: string) => deleteAttachment(memoId), onSuccess: invalidate });
+}
+
+// --- reports -----------------------------------------------------------------
+
+export function useTrend(months: 6 | 12) {
+  return useQuery({ queryKey: ["reports-trend", months], queryFn: () => getTrend(months), placeholderData: keepPreviousData });
+}

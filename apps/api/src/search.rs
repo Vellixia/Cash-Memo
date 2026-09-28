@@ -9,6 +9,7 @@ use crate::{
     auth::CurrentUser,
     entities::memo,
     error::{AppError, Json, Query, Result},
+    memos::MemoOut,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -29,7 +30,7 @@ async fn search(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Query(q): Query<SearchQuery>,
-) -> Result<Json<Vec<memo::Model>>> {
+) -> Result<Json<Vec<MemoOut>>> {
     let term = q.q.trim();
     if term.chars().count() < 2 {
         return Err(AppError::BadRequest("search needs at least 2 characters"));
@@ -69,7 +70,7 @@ async fn search(
     ))
     .all(&st.db)
     .await?;
-    Ok(Json(memos))
+    Ok(Json(memos.into_iter().map(MemoOut::from).collect()))
 }
 
 fn parse_cursor(s: &str) -> Result<(DateTime<Utc>, Uuid)> {

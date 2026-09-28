@@ -23,6 +23,23 @@ pub fn routes() -> Router<AppState> {
         .route("/summary", get(summary))
 }
 
+/// A memo as the API shows it: never the raw attachment key, just whether there is one.
+#[derive(Serialize)]
+pub(crate) struct MemoOut {
+    #[serde(flatten)]
+    memo: memo::Model,
+    has_attachment: bool,
+}
+
+impl From<memo::Model> for MemoOut {
+    fn from(memo: memo::Model) -> Self {
+        MemoOut {
+            has_attachment: memo.attachment_key.is_some(),
+            memo,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct MonthQuery {
     month: String,
@@ -61,7 +78,7 @@ async fn list(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Query(q): Query<MonthQuery>,
-) -> Result<Json<Vec<memo::Model>>> {
+) -> Result<Json<Vec<MemoOut>>> {
     let (start, end) = month_range(&q.month, q.offset)?;
     let mut find = memo::Entity::find()
         .filter(memo::Column::UserId.eq(uid))
@@ -78,18 +95,18 @@ async fn list(
                 .add(memo::Column::ToSourceId.eq(src)),
         );
     }
-    Ok(Json(
-        find.order_by_desc(memo::Column::OccurredAt)
-            .all(&st.db)
-            .await?,
-    ))
+    let memos = find
+        .order_by_desc(memo::Column::OccurredAt)
+        .all(&st.db)
+        .await?;
+    Ok(Json(memos.into_iter().map(Into::into).collect()))
 }
 
 async fn create(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Json(input): Json<MemoIn>,
-) -> Result<(StatusCode, Json<memo::Model>)> {
+) -> Result<(StatusCode, Json<MemoOut>)> {
     let now = Utc::now();
     let mut m = memo::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -115,15 +132,15 @@ async fn create(
         ));
     };
     apply(&st, uid, &mut m, input, true).await?;
-    Ok((StatusCode::CREATED, Json(m.insert(&st.db).await?)))
+    Ok((StatusCode::CREATED, Json(m.insert(&st.db).await?.into())))
 }
 
 async fn read(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<memo::Model>> {
-    Ok(Json(owned(&st, uid, id).await?))
+) -> Result<Json<MemoOut>> {
+    Ok(Json(owned(&st, uid, id).await?.into()))
 }
 
 async fn update(
@@ -131,11 +148,11 @@ async fn update(
     CurrentUser(uid): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<MemoIn>,
-) -> Result<Json<memo::Model>> {
+) -> Result<Json<MemoOut>> {
     let mut m = owned(&st, uid, id).await?.into_active_model();
     apply(&st, uid, &mut m, input, false).await?;
     m.updated_at = Set(Utc::now());
-    Ok(Json(m.update(&st.db).await?))
+    Ok(Json(m.update(&st.db).await?.into()))
 }
 
 async fn remove(
@@ -154,7 +171,7 @@ async fn restore(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<memo::Model>> {
+) -> Result<Json<MemoOut>> {
     let m = memo::Entity::find_by_id(id)
         .filter(memo::Column::UserId.eq(uid))
         .filter(memo::Column::DeletedAt.is_not_null())
@@ -163,7 +180,7 @@ async fn restore(
         .ok_or(AppError::NotFound)?;
     let mut m = m.into_active_model();
     m.deleted_at = Set(None);
-    Ok(Json(m.update(&st.db).await?))
+    Ok(Json(m.update(&st.db).await?.into()))
 }
 
 #[derive(Serialize, FromQueryResult)]

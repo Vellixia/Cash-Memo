@@ -111,6 +111,10 @@ pub mod memo {
         pub note: Option<String>,
         /// Set when this memo was created by an installment plan.
         pub installment_plan_id: Option<Uuid>,
+        /// S3 key of the one optional receipt/photo attachment. Never serialized directly —
+        /// callers see `has_attachment` (added by `apps/api/src/memos.rs::MemoOut`) instead.
+        #[serde(skip)]
+        pub attachment_key: Option<String>,
         #[serde(skip)]
         pub deleted_at: Option<DateTimeUtc>,
         pub created_at: DateTimeUtc,

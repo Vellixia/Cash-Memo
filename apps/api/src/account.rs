@@ -219,9 +219,14 @@ async fn delete_account(
     check_password(&st, &u, input.password).await?;
     let txn = st.db.begin().await?;
     if st.storage.is_some() {
-        // Not tied to the user row, so it survives the cascade below.
-        let prefix = domain::storage::user_prefix(uid);
-        jobs::enqueue(&txn, jobs::PURGE_FILES, jobs::PurgePayload { prefix }, None).await?;
+        // Not tied to the user row, so they survive the cascade below. Two prefixes: CSV files
+        // and attachments live under separate roots (see domain::storage).
+        for prefix in [
+            domain::storage::user_prefix(uid),
+            domain::storage::attachment_prefix(uid),
+        ] {
+            jobs::enqueue(&txn, jobs::PURGE_FILES, jobs::PurgePayload { prefix }, None).await?;
+        }
     }
     user::Entity::delete_by_id(uid).exec(&txn).await?;
     txn.commit().await?;

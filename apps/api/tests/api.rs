@@ -266,6 +266,7 @@ async fn test_app_db() -> (Router, sea_orm::DatabaseConnection) {
         limiter: Default::default(),
         app_url: "https://app.test".into(),
         storage: domain::storage::Storage::from_env().map(std::sync::Arc::new),
+        http: reqwest::Client::new(),
     });
     (router, db)
 }
@@ -891,4 +892,297 @@ async fn search_and_restore() {
     assert_eq!(s, StatusCode::NOT_FOUND);
     let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
     assert_eq!(found.as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn attachment_upload_confirm_view_delete() {
+    let app = test_app().await;
+    let Some(storage) = domain::storage::Storage::from_env() else {
+        eprintln!("S3_* not set; skipping");
+        return;
+    };
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let memo = |amount: i64, day: &str| {
+        json!({ "direction": "expense", "amount_minor": amount, "currency": "USD",
+                "occurred_at": format!("2026-09-{day}T12:00:00Z"), "source_id": cash })
+    };
+    let (_, _, m1) = call(&app, "POST", "/api/memos", &a, Some(memo(1000, "10"))).await;
+    let (_, _, m2) = call(&app, "POST", "/api/memos", &a, Some(memo(500, "11"))).await;
+    let m1_id = m1["id"].as_str().unwrap();
+    let m2_id = m2["id"].as_str().unwrap();
+    assert_eq!(m1["has_attachment"], json!(false));
+    assert!(
+        m1.get("attachment_key").is_none(),
+        "the raw storage key must never be exposed"
+    );
+
+    let http = reqwest::Client::new();
+    let attach = |id: &str| format!("/api/memos/{id}/attachment");
+
+    // Only jpeg/webp are accepted.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "content_type": "image/png" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // Happy path: start -> PUT bytes -> confirm -> view -> matches what was uploaded.
+    let (s, _, start) = call(
+        &app,
+        "POST",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "content_type": "image/jpeg" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let key = start["key"].as_str().unwrap().to_owned();
+    assert!(
+        key.starts_with("attachments/"),
+        "must live outside the CSV lifecycle prefix `users/`"
+    );
+    let bytes = vec![7u8; 1024];
+    let put = http
+        .put(start["upload_url"].as_str().unwrap())
+        .header("content-type", "image/jpeg")
+        .body(bytes.clone())
+        .send()
+        .await
+        .unwrap();
+    assert!(put.status().is_success(), "{}", put.status());
+
+    let (s, _, confirmed) =
+        call(&app, "PUT", &attach(m1_id), &a, Some(json!({ "key": key }))).await;
+    assert_eq!(
+        (s, confirmed["has_attachment"].clone()),
+        (StatusCode::OK, json!(true))
+    );
+    let (_, _, m1_after) = call(&app, "GET", &format!("/api/memos/{m1_id}"), &a, None).await;
+    assert_eq!(m1_after["has_attachment"], json!(true));
+
+    let (s, _, view) = call(&app, "GET", &attach(m1_id), &a, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let fetched = http
+        .get(view["url"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap();
+    assert!(fetched.status().is_success());
+    assert_eq!(fetched.bytes().await.unwrap().to_vec(), bytes);
+
+    // A key that's really under a different memo's prefix is rejected.
+    let (_, _, start2) = call(
+        &app,
+        "POST",
+        &attach(m2_id),
+        &a,
+        Some(json!({ "content_type": "image/jpeg" })),
+    )
+    .await;
+    let key2 = start2["key"].as_str().unwrap();
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "key": key2 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "wrong memo prefix");
+
+    // Oversize: rejected, and the object is deleted rather than left behind.
+    let (_, _, start3) = call(
+        &app,
+        "POST",
+        &attach(m2_id),
+        &a,
+        Some(json!({ "content_type": "image/jpeg" })),
+    )
+    .await;
+    let big_key = start3["key"].as_str().unwrap().to_owned();
+    let big = vec![0u8; 6 * 1024 * 1024];
+    let put = http
+        .put(start3["upload_url"].as_str().unwrap())
+        .header("content-type", "image/jpeg")
+        .body(big)
+        .send()
+        .await
+        .unwrap();
+    assert!(put.status().is_success());
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m2_id),
+        &a,
+        Some(json!({ "key": big_key })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "over 5 MB");
+    let head = http
+        .head(storage.head_url(&big_key, std::time::Duration::from_secs(60)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        head.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "oversize object must be deleted, not left behind"
+    );
+
+    // Another user can't see it, or plant an attachment on it.
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "GET", &attach(m1_id), &b, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m1_id),
+        &b,
+        Some(json!({ "key": "attachments/other/x.jpg" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "not this user's memo");
+
+    // Delete: gone from storage and from the memo.
+    let (s, _, _) = call(&app, "DELETE", &attach(m1_id), &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, _, _) = call(&app, "GET", &attach(m1_id), &a, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, _, m1_final) = call(&app, "GET", &format!("/api/memos/{m1_id}"), &a, None).await;
+    assert_eq!(m1_final["has_attachment"], json!(false));
+}
+
+#[tokio::test]
+async fn reports_trend_across_months_excludes_transfers() {
+    let (app, _db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, bank) = call(
+        &app,
+        "POST",
+        "/api/sources",
+        &a,
+        Some(json!({ "name": "Bank", "kind": "bank" })),
+    )
+    .await;
+    let (_, _, cat) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Food", "direction": "expense" })),
+    )
+    .await;
+
+    // Computed off `now`, not hardcoded, so the test doesn't depend on which month it runs in.
+    let now = chrono::Utc::now();
+    let this_month = now.format("%Y-%m").to_string();
+    let last_month = (now - chrono::Duration::days(32))
+        .format("%Y-%m")
+        .to_string();
+
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "income", "amount_minor": 100000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-05T12:00:00Z") }),
+        ),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "expense", "amount_minor": 30000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-06T12:00:00Z"),
+                     "source_id": cash, "category_id": cat["id"] }),
+        ),
+    )
+    .await;
+    // A transfer moves money between sources; it must never show up as income or expense.
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "transfer", "amount_minor": 50000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-07T12:00:00Z"),
+                     "source_id": cash, "to_source_id": bank["id"] }),
+        ),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "expense", "amount_minor": 10000, "currency": "USD",
+                     "occurred_at": format!("{last_month}-05T12:00:00Z"),
+                     "source_id": cash, "category_id": cat["id"] }),
+        ),
+    )
+    .await;
+
+    let (s, _, trend) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=6&offset=0",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let months = trend["months"].as_array().unwrap();
+    assert_eq!(months.len(), 6);
+    assert_eq!(months.last().unwrap(), &json!(this_month));
+
+    let totals = trend["totals"].as_array().unwrap();
+    let total = |month: &str, direction: &str| {
+        totals
+            .iter()
+            .find(|t| t["month"] == month && t["currency"] == "USD" && t["direction"] == direction)
+            .map(|t| t["total_minor"].as_i64().unwrap())
+            .unwrap_or(0)
+    };
+    assert_eq!(total(&this_month, "income"), 100000);
+    assert_eq!(total(&this_month, "expense"), 30000);
+    assert_eq!(total(&last_month, "expense"), 10000);
+    assert!(
+        !totals.iter().any(|t| t["direction"] == "transfer"),
+        "transfers must be excluded"
+    );
+
+    let by_category = trend["by_category"].as_array().unwrap();
+    let category_total = |month: &str| {
+        by_category
+            .iter()
+            .find(|r| r["month"] == month && r["category_id"] == cat["id"])
+            .map(|r| r["total_minor"].as_i64().unwrap())
+    };
+    assert_eq!(category_total(&this_month), Some(30000));
+    assert_eq!(category_total(&last_month), Some(10000));
+
+    let (s, _, _) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=3&offset=0",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 6 or 12");
 }

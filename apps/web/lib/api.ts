@@ -11,6 +11,7 @@ export type Memo = {
   source_id: string | null;
   to_source_id: string | null;
   note: string | null;
+  has_attachment: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -337,4 +338,41 @@ export type Job<R = ExportResult | ValidateResult | CommitResult | undefined> = 
 
 export function getJob<R = ExportResult | ValidateResult | CommitResult | undefined>(id: string): Promise<Job<R>> {
   return api(`/jobs/${id}`);
+}
+
+// --- memo attachments -------------------------------------------------------
+
+export type AttachmentContentType = "image/jpeg" | "image/webp";
+
+export function startAttachmentUpload(memoId: string, contentType: AttachmentContentType): Promise<{ upload_url: string; key: string }> {
+  return api(`/memos/${memoId}/attachment`, { method: "POST", body: JSON.stringify({ content_type: contentType }) });
+}
+
+/** PUTs the processed image straight to the presigned URL: same pattern as `uploadImportFile`. */
+export async function uploadAttachmentFile(uploadUrl: string, blob: Blob, contentType: AttachmentContentType): Promise<void> {
+  const res = await fetch(uploadUrl, { method: "PUT", body: blob, headers: { "Content-Type": contentType } });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+}
+
+export function confirmAttachment(memoId: string, key: string): Promise<{ has_attachment: boolean }> {
+  return api(`/memos/${memoId}/attachment`, { method: "PUT", body: JSON.stringify({ key }) });
+}
+
+export function getAttachmentUrl(memoId: string): Promise<{ url: string }> {
+  return api(`/memos/${memoId}/attachment`);
+}
+
+export function deleteAttachment(memoId: string): Promise<void> {
+  return api(`/memos/${memoId}/attachment`, { method: "DELETE" });
+}
+
+// --- reports -----------------------------------------------------------------
+
+export type TrendTotal = { month: string; currency: string; direction: MemoDirection; total_minor: number };
+export type TrendCategoryTotal = { month: string; category_id: string | null; currency: string; total_minor: number };
+export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[] };
+
+export function getTrend(months: 6 | 12): Promise<Trend> {
+  const params = new URLSearchParams({ months: String(months), offset: String(utcOffsetMinutes()) });
+  return api<Trend>(`/reports/trend?${params}`);
 }

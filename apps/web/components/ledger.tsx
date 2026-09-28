@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Plus, Sparkles } from "lucide-react";
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Paperclip, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -215,7 +215,10 @@ export function MemoRow({
           )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[0.95rem] font-medium">{title}</span>
+          <span className="flex items-center gap-1 truncate text-[0.95rem] font-medium">
+            <span className="truncate">{title}</span>
+            {m.has_attachment && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label="Has an attachment" />}
+          </span>
           <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
         </span>
         <span className={cn("num shrink-0 text-lg", isTransfer ? "text-muted-foreground" : income ? "text-income" : "text-expense")}>
