@@ -95,7 +95,9 @@ fn merge_preferences(
             .iter()
             .find(|(k, _)| *k == key)
             .ok_or(AppError::BadRequest("unknown preference key"))?;
-        let s = value.as_str().ok_or(AppError::BadRequest("preference value must be a string"))?;
+        let s = value
+            .as_str()
+            .ok_or(AppError::BadRequest("preference value must be a string"))?;
         if !values.contains(&s) {
             return Err(AppError::BadRequest("invalid preference value"));
         }

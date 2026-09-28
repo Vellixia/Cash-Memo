@@ -8,7 +8,9 @@ impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .get_connection()
-            .execute_unprepared("ALTER TABLE users ADD COLUMN preferences jsonb NOT NULL DEFAULT '{}'")
+            .execute_unprepared(
+                "ALTER TABLE users ADD COLUMN preferences jsonb NOT NULL DEFAULT '{}'",
+            )
             .await?;
         Ok(())
     }

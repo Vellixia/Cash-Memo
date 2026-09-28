@@ -806,7 +806,10 @@ async fn preferences_sync() {
     .await;
     assert_eq!(
         (s, &me["preferences"]),
-        (StatusCode::OK, &json!({ "accent": "ocean", "font": "modern" })),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern" })
+        ),
     );
     let (s, _, me) = call(
         &app,
@@ -838,7 +841,14 @@ async fn preferences_sync() {
         json!({ "accent": "neon" }),
         json!({ "size": 1 }),
     ] {
-        let (s, _, _) = call(&app, "PATCH", "/api/auth/me", &a, Some(json!({ "preferences": bad }))).await;
+        let (s, _, _) = call(
+            &app,
+            "PATCH",
+            "/api/auth/me",
+            &a,
+            Some(json!({ "preferences": bad })),
+        )
+        .await;
         assert_eq!(s, StatusCode::BAD_REQUEST);
     }
     // A rejected patch never partially applies.
