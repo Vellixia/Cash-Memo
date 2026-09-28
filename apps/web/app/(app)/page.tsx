@@ -4,7 +4,8 @@ import { useState } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { BalancesCard, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
-import { useCategories, useMe, useMemos, useSources, useSummary } from "@/lib/queries";
+import { BudgetsCard } from "@/components/budgets-card";
+import { useCategories, useMe, useMemos, useSources, useSummary, useUpcoming } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 
 export default function HomePage() {
@@ -20,6 +21,7 @@ export default function HomePage() {
   const { data: memos } = useMemos(month, categoryId, sourceId);
   const { data: categories } = useCategories();
   const { data: sources } = useSources();
+  const { data: upcoming } = useUpcoming(month);
   const defaultCurrency = useMe().data?.default_currency ?? "USD";
 
   // The default currency leads the switcher (and is selected) whenever the month has it.
@@ -44,6 +46,7 @@ export default function HomePage() {
           <SpendingCard summary={summary} currency={currency} categories={categories ?? []} />
         </div>
         <BalancesCard sources={sources} />
+        <BudgetsCard month={month} categories={categories ?? []} />
         {summary && currencies.length >= 2 && <CurrenciesCard summary={summary} currencies={currencies} />}
       </aside>
       <Ledger
@@ -62,6 +65,7 @@ export default function HomePage() {
         onSource={setSourceId}
         onSelect={(m) => openEditor(m)}
         onAdd={() => openEditor()}
+        upcoming={upcoming}
       />
     </div>
   );

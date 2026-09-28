@@ -1,12 +1,14 @@
 mod account;
 mod attachments;
 mod auth;
+mod budgets;
 mod categories;
 mod data;
 mod error;
 mod installments;
 mod limits;
 mod memos;
+mod recurring;
 mod reports;
 mod search;
 mod sources;
@@ -40,6 +42,8 @@ pub fn app(state: AppState) -> Router {
         .merge(memos::routes())
         .merge(categories::routes())
         .merge(sources::routes())
+        .merge(recurring::routes())
+        .merge(budgets::routes())
         .merge(search::routes())
         .merge(installments::routes())
         .merge(data::routes())

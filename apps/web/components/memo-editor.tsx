@@ -6,7 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Camera, Check, ImagePlus, Loader2, Lock, Plus, Trash2, X } from "lucide-react";
+import { Camera, Check, ImagePlus, Loader2, Lock, Plus, Repeat, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ import { EmojiField } from "@/components/emoji-field";
 import { OfflineHint } from "@/components/offline-hint";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
-import type { Direction, Memo, MemoDirection, Source } from "@/lib/api";
+import type { Cadence, Direction, Memo, MemoDirection, Source } from "@/lib/api";
 import { uploadAttachmentFile } from "@/lib/api";
 import { processAttachment } from "@/lib/attachment";
 import { fitAmount, fromMinor, toMinor } from "@/lib/money";
@@ -37,6 +37,7 @@ import {
   useConfirmAttachment,
   useCreateCategory,
   useCreateMemo,
+  useCreateRecurring,
   useDeleteAttachment,
   useDeleteMemo,
   useMe,
@@ -159,6 +160,8 @@ function MemoForm({
   const [confirmDelete, setConfirmDelete] = useState(false);
   // A new memo has no id yet: a picked photo waits here until save creates one, then uploads.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [repeat, setRepeat] = useState<Cadence | "never">("never");
+  const createRecurring = useCreateRecurring();
 
   const {
     control,
@@ -186,7 +189,7 @@ function MemoForm({
     name: ["direction", "currency", "category_id", "source_id", "to_source_id"],
   });
   const choices = categories.filter((c) => c.direction === direction);
-  const saving = createMemo.isPending || updateMemo.isPending;
+  const saving = createMemo.isPending || updateMemo.isPending || createRecurring.isPending;
 
   // A new memo defaults its source to the last one used, falling back to the first active source.
   const autoSourceApplied = useRef(false);
@@ -231,9 +234,12 @@ function MemoForm({
       let saved: Memo;
       if (memo) {
         saved = await updateMemo.mutateAsync({ id: memo.id, input: body });
+        if (repeat !== "never") await createRecurring.mutateAsync({ memo_id: memo.id, cadence: repeat });
         toast.success("Memo updated");
       } else {
         saved = await createMemo.mutateAsync(body);
+        // The memo is the first occurrence; the rule takes it from there.
+        if (repeat !== "never") await createRecurring.mutateAsync({ memo_id: saved.id, cadence: repeat });
         toast.success(isTransfer ? "Transfer added" : values.direction === "income" ? "Income added" : "Expense added");
       }
       noteCurrency(cur);
@@ -396,6 +402,27 @@ function MemoForm({
           </label>
         </div>
 
+        {memo?.recurring_rule_id ? (
+          <Link href="/recurring" onClick={onDone} className="inline-flex min-h-9 items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            <Repeat className="size-4" aria-hidden /> Repeats · Manage
+          </Link>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{memo ? "Make recurring" : "Repeat"}</span>
+            <Segmented
+              size="sm"
+              label={memo ? "Make recurring" : "Repeat"}
+              value={repeat}
+              onChange={setRepeat}
+              options={[
+                { value: "never", label: "Never" },
+                { value: "weekly", label: "Weekly" },
+                { value: "monthly", label: "Monthly" },
+                { value: "yearly", label: "Yearly" },
+              ]}
+            />
+          </div>
+        )}
         <AttachmentField
           memoId={memo?.id ?? null}
           hasAttachment={memo?.has_attachment ?? false}

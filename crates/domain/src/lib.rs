@@ -4,4 +4,5 @@ pub mod import;
 pub mod jobs;
 pub mod migration;
 pub mod money;
+pub mod recurring;
 pub mod storage;

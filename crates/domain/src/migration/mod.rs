@@ -6,6 +6,8 @@ mod m20260925_000003_default_currency;
 mod m20261001_000004_sources;
 mod m20261002_000005_jobs_email;
 mod m20261003_000006_csv;
+mod m20261004_000007_recurring;
+mod m20261005_000008_budgets;
 mod m20261006_000009_credit;
 mod m20261007_000010_search;
 mod m20261008_000011_preferences;
@@ -23,6 +25,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20261001_000004_sources::Migration),
             Box::new(m20261002_000005_jobs_email::Migration),
             Box::new(m20261003_000006_csv::Migration),
+            Box::new(m20261004_000007_recurring::Migration),
+            Box::new(m20261005_000008_budgets::Migration),
             Box::new(m20261006_000009_credit::Migration),
             Box::new(m20261007_000010_search::Migration),
             Box::new(m20261008_000011_preferences::Migration),

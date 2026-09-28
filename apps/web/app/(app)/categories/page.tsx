@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Loader2, Pencil, PiggyBank, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,10 @@ import { OfflineHint } from "@/components/offline-hint";
 import { useOnline } from "@/lib/use-online";
 import { card } from "@/components/summary";
 import { StarterCard } from "@/components/ledger";
-import { useCategories, useCreateCategory, useDeleteCategory, useUpdateCategory } from "@/lib/queries";
-import type { Category, Direction } from "@/lib/api";
+import { useBudgets, useCategories, useCreateCategory, useDeleteBudget, useDeleteCategory, useMe, useSaveBudget, useUpdateCategory } from "@/lib/queries";
+import type { Budget, Category, Direction } from "@/lib/api";
+import { currentMonth } from "@/lib/format";
+import { formatMoney, fromMinor, parseAmount, toMinor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 const DIRECTIONS: Direction[] = ["expense", "income"];
@@ -33,6 +35,9 @@ const TITLE = { expense: "Expense", income: "Income" } as const;
 export default function CategoriesPage() {
   const [direction, setDirection] = useState<Direction>("expense");
   const { data: categories, isLoading } = useCategories();
+  const { data: budgets } = useBudgets(currentMonth());
+  // Budgets are set in the default currency (the API allows one per currency).
+  const currency = useMe().data?.default_currency ?? "USD";
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -64,6 +69,8 @@ export default function CategoriesPage() {
             list={categories?.filter((c) => c.direction === d) ?? []}
             loading={isLoading}
             className={d === direction ? undefined : "hidden lg:block"}
+            budgets={d === "expense" ? (budgets ?? []) : undefined}
+            currency={currency}
           />
         ))}
       </div>
@@ -76,11 +83,16 @@ function CategoryList({
   list,
   loading,
   className,
+  budgets,
+  currency,
 }: {
   direction: Direction;
   list: Category[];
   loading: boolean;
   className?: string;
+  /** Expense lists only. */
+  budgets?: Budget[];
+  currency: string;
 }) {
   return (
     <section aria-label={`${TITLE[direction]} categories`} className={cn("space-y-4", className)}>
@@ -97,7 +109,12 @@ function CategoryList({
       ) : (
         <ul className={cn(card, "divide-y divide-border/70 overflow-hidden rounded-2xl")} aria-label={`${direction} categories`}>
           {list.map((c) => (
-            <CategoryRow key={c.id} category={c} />
+            <CategoryRow
+              key={c.id}
+              category={c}
+              currency={currency}
+              budget={budgets && (budgets.find((b) => b.category_id === c.id && b.currency === currency) ?? null)}
+            />
           ))}
         </ul>
       )}
@@ -157,7 +174,7 @@ function AddCategory({ direction }: { direction: Direction }) {
   );
 }
 
-function CategoryRow({ category }: { category: Category }) {
+function CategoryRow({ category, budget, currency }: { category: Category; budget?: Budget | null; currency: string }) {
   const update = useUpdateCategory();
   const remove = useDeleteCategory();
   const online = useOnline();
@@ -165,6 +182,7 @@ function CategoryRow({ category }: { category: Category }) {
   const [name, setName] = useState(category.name);
   const [emoji, setEmoji] = useState<string | null>(category.emoji);
   const [confirm, setConfirm] = useState(false);
+  const [budgeting, setBudgeting] = useState(false);
 
   async function save(patch: { name?: string; emoji?: string | null }, done?: () => void) {
     try {
@@ -185,6 +203,8 @@ function CategoryRow({ category }: { category: Category }) {
       toast.error(err instanceof Error ? err.message : "Could not delete category");
     }
   }
+
+  if (budgeting) return <BudgetForm category={category} budget={budget ?? null} currency={currency} onDone={() => setBudgeting(false)} />;
 
   if (editing) {
     return (
@@ -224,7 +244,21 @@ function CategoryRow({ category }: { category: Category }) {
         disabled={!online}
         className="size-10 rounded-2xl border-transparent bg-muted"
       />
-      <span className="min-w-0 flex-1 truncate font-medium">{category.name}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{category.name}</span>
+        {budget && <span className="block truncate text-xs text-muted-foreground">Budget {formatMoney(budget.limit_minor, budget.currency)} a month</span>}
+      </span>
+      {budget !== undefined && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-11 rounded-xl text-muted-foreground md:size-9"
+          aria-label={`Budget for ${category.name}`}
+          onClick={() => setBudgeting(true)}
+        >
+          <PiggyBank />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"
@@ -266,6 +300,67 @@ function CategoryRow({ category }: { category: Category }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </li>
+  );
+}
+
+function BudgetForm({ category, budget, currency, onDone }: { category: Category; budget: Budget | null; currency: string; onDone: () => void }) {
+  const save = useSaveBudget();
+  const remove = useDeleteBudget();
+  const online = useOnline();
+  const [limit, setLimit] = useState(budget ? fromMinor(budget.limit_minor, currency) : "");
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const limit_minor = toMinor(parseAmount(limit, currency), currency);
+    if (!(limit_minor > 0)) return toast.error("Enter a monthly limit above zero");
+    try {
+      await save.mutateAsync({ id: budget?.id, category_id: category.id, currency, limit_minor });
+      toast.success(`Budget set for “${category.name}”`);
+      onDone();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save budget");
+    }
+  }
+
+  async function onRemove() {
+    if (!budget) return;
+    try {
+      await remove.mutateAsync(budget.id);
+      toast.success(`Budget removed from “${category.name}”`);
+      onDone();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove budget");
+    }
+  }
+
+  return (
+    <li>
+      <form className="flex items-center gap-2 px-3 py-2.5" onSubmit={onSubmit} onKeyDown={(e) => e.key === "Escape" && onDone()}>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted" aria-hidden>
+          {category.emoji ?? <PiggyBank className="size-4" />}
+        </span>
+        <Input
+          autoFocus
+          inputMode="decimal"
+          aria-label={`Monthly budget for ${category.name} (${currency})`}
+          placeholder={`Monthly limit, ${currency}`}
+          value={limit}
+          onChange={(e) => setLimit(e.target.value)}
+          className="h-10 rounded-xl bg-card"
+        />
+        <Button type="submit" size="icon" className="size-10 rounded-xl" aria-label="Save budget" disabled={save.isPending || !online}>
+          {save.isPending ? <Loader2 className="animate-spin" /> : <Check />}
+        </Button>
+        {budget && (
+          <Button type="button" variant="ghost" size="icon" className="size-10 rounded-xl text-muted-foreground hover:text-destructive" aria-label="Remove budget" onClick={onRemove} disabled={remove.isPending || !online}>
+            <Trash2 />
+          </Button>
+        )}
+        <Button type="button" variant="ghost" size="icon" className="size-10 rounded-xl" aria-label="Cancel budget" onClick={onDone}>
+          <X />
+        </Button>
+      </form>
     </li>
   );
 }
