@@ -35,6 +35,8 @@ Live: **https://cashmemo.andresholivin.dev**
 - **Any currency, shown the way it's written there**: `Rp 7.500.000`, `$7,500.00`, `7.500,00 €`, `¥7,500`. The amount input follows the same separators and decimals.
 - **Default currency**: set per account. It's guessed from your region at sign-up and can be changed in Settings.
 - **Month at a glance**: net for the month, an income-vs-expense bar, a spending-by-category donut, a card per currency when you use several, balances of tracked sources, and a ledger grouped by day with income/expense, category and source filters.
+- **Recurring memos**: repeat any memo weekly, monthly or yearly (the 31st clamps to month end). Upcoming ones show in the ledger, and the worker creates each one when it's due. Pause, edit or stop them on the Recurring page.
+- **Budgets**: a monthly limit per expense category and currency, with progress on Home (recurring memos still to come are shown as projected) and a nudge at 80% and 100%.
 - **Search** across every month: notes, categories and sources, from the top bar, the Home header or `/`.
 - **Keyboard shortcuts** on desktop: `n` new memo, `←`/`→` previous/next month, `/` search.
 - **Undo**: deleting a memo or archiving a source shows a short-lived Undo.
@@ -78,7 +80,7 @@ Live: **https://cashmemo.andresholivin.dev**
    │  same origin: cashmemo.andresholivin.dev                     ┌──────────────────────┐
    ▼                                                              │ Cloudflare R2        │
  ┌──────────────────────────────┐    presigned PUT/GET (CSV) ────▶│ cashmemo-files       │
- │  web  (Next.js on Bun)       │                                 │ (1-day lifecycle)    │
+ │  web  (Next.js on Bun)       │                                 │ (1-day on users/)    │
  │  /api/* ── runtime proxy ────┼──┐                              └──────────▲───────────┘
  └──────────────────────────────┘  │ cookie, body, client IP                 │
                                    ▼                                         │ export upload,
@@ -226,6 +228,11 @@ All routes are under `/api` and use JSON. Errors are always `{ "error": string }
 | GET | `/search` | `?q=` (≥ 2 chars) `[&before=<occurred_at>,<id>][&limit≤100]` | `Memo[]` matching note, category or source, newest first, keyset paged |
 | POST | `/memos/:id/attachment` | `{ content_type: image/jpeg \| image/webp }` | `{ upload_url, key }`: PUT the image there (5 min) |
 | PUT / GET / DELETE | `/memos/:id/attachment` | PUT `{ key }` confirms (≤ 5 MB, replaces the old one) | `{ has_attachment }` / `{ url }` (5 min) / 204 |
+| GET / POST | `/recurring` | POST `{ memo_id, cadence, offset_minutes }` or memo fields + `{ next_date, cadence, offset_minutes }` | rules / 201 (anything already due is created at once) |
+| PATCH / DELETE | `/recurring/:id` | PATCH any memo field, `cadence`, `next_date`, `paused` | rule / 204 (stops it; memos it created stay) |
+| GET | `/recurring/upcoming` | `?month=YYYY-MM&offset=` | occurrences still to come this month |
+| GET / POST | `/budgets` | GET `?month=&offset=` · POST `{ category_id, currency, limit_minor }` | budgets with `spent_minor`, `projected_minor` / 201 · 409 duplicate |
+| PATCH / DELETE | `/budgets/:id` | `{ limit_minor }` | budget / 204 |
 | GET / POST | `/installments` | POST `{ source_id, currency, principal_minor, fee_minor?, months (2–36), first_date, offset, category_id?, note? }` | plans with paid/remaining counts / 201, creates every installment memo |
 | DELETE | `/installments/:id` | | 204, removes the plan and its future installments (past ones stay) |
 | GET | `/reports/trend` | `?months=6\|12&offset=` | `{ months[], totals[], by_category[] }` per local month; transfers excluded |
@@ -275,7 +282,9 @@ Memo rules, checked on the final state of every create or update:
 | `sessions` | `token_hash bytea` (sha256 of the cookie token), `user_id` → users (cascade), `expires_at` (30 days) |
 | `categories` | `id`, `user_id`, `name` (1–100), `direction` (income/expense), `emoji` (≤ 8 chars), unique `(user_id, name, direction)` |
 | `sources` | `id`, `user_id`, `name` (1–100, unique per user), `kind`, `emoji`, `track_balance`, `currency` (required when tracking), `opening_minor`, `archived_at`, `credit_limit_minor`, `statement_day`, `due_day` |
-| `memos` | `id`, `user_id`, `direction` (income/expense/transfer), `amount_minor bigint > 0`, `currency char(3)`, `occurred_at timestamptz`, `category_id` (set null on delete), `source_id`, `to_source_id` (CHECK: a transfer has both, different, and no category), `note`, `installment_plan_id`, `attachment_key` (never returned), `deleted_at` (soft delete), timestamps, index `(user_id, occurred_at desc, id desc)`, trigram index on `note` for search |
+| `memos` | `id`, `user_id`, `direction` (income/expense/transfer), `amount_minor bigint > 0`, `currency char(3)`, `occurred_at timestamptz`, `category_id` (set null on delete), `source_id`, `to_source_id` (CHECK: a transfer has both, different, and no category), `note`, `recurring_rule_id` (unique with `occurred_at`, so creation is idempotent), `installment_plan_id`, `attachment_key` (never returned), `deleted_at` (soft delete), timestamps, index `(user_id, occurred_at desc, id desc)`, trigram index on `note` for search |
+| `recurring_rules` | `id`, `user_id`, memo fields, `cadence` (weekly/monthly/yearly), `anchor_day`, `next_date`, `offset_minutes`, `paused_at` |
+| `budgets` | `id`, `user_id`, `category_id` (cascade), `currency`, `limit_minor > 0`, unique `(category_id, currency)` |
 | `installment_plans` | `id`, `user_id`, `source_id` (credit/paylater), `category_id`, `note`, `currency`, `principal_minor`, `fee_minor`, `months`, `first_date` |
 | `jobs` | `id`, `kind`, `payload jsonb`, `status` (queued/running/done/failed), `attempts`, `run_after`, `locked_at`, `error`, `result jsonb`, `user_id` (cascade) |
 | `email_tokens` | `token_hash` (sha256), `user_id`, `purpose` (reset/change_email), `new_email`, `expires_at` (1 h), `used_at` |
@@ -445,19 +454,20 @@ AI features are **opt-in**: they use your own history first, send only the minim
 - [x] **Ops**: `apps/worker` + Postgres job queue, auth rate limits, GlitchTip errors/logs/uptime, off-host watchdog, auto-deploy after green CI, R2 backups with a restore drill
 - Dropped: sign-up email verification. It adds friction for little gain in a private journal: a reset link only ever goes to the address itself, and changing email is confirmed from the new address.
 
-### v1.2: Less typing, more planning
-- [ ] **Recurring memos** (runs in `apps/worker`)
-  - [ ] `recurring_rules` table: amount, currency, category, source, cadence (weekly/monthly/yearly), next date
-  - [ ] Daily job materializes due memos (idempotent) and shows "upcoming" rows in the ledger
-  - [ ] Create from the editor ("Repeat monthly") or from an existing memo; pause, edit, stop
-- [ ] **Credit & paylater plans**: installments (3/6/12×) with fees, statement and due dates, reminders, credit limit on the balances card
-- [ ] **Budgets per category**
-  - [ ] Monthly limit per category and currency
-  - [ ] Progress bars on the home page, with recurring memos included in the projection
-  - [ ] Nudge at 80% and 100% (in-app; push notifications later)
-- [ ] **Search**: full-text search over notes, categories and sources across months
-- [ ] **Keyboard shortcuts** on desktop (`n` new memo, `←/→` month, `/` search)
-- [ ] **Appearance sync** across devices (saved on the account)
+### ✅ v1.2: Less typing, more planning
+- [x] **Recurring memos** (runs in `apps/worker`)
+  - [x] `recurring_rules` table: amount, currency, category, source, cadence (weekly/monthly/yearly), next date
+  - [x] The worker creates due memos every 15 minutes (idempotent, with catch-up), and the ledger shows "upcoming" rows
+  - [x] Create from the editor ("Repeat") or from an existing memo; pause, edit, stop
+- [x] **Credit & paylater plans**: installments (3/6/12×, or 2–36) with fees, statement and due dates, in-app reminders, credit limit on the balances card
+- [x] **Budgets per category**
+  - [x] Monthly limit per category and currency
+  - [x] Progress bars on the home page, with recurring memos included in the projection
+  - [x] Nudge at 80% and 100% (in-app; push notifications later)
+- [x] **Search**: search over notes, categories and sources across months
+- [x] **Keyboard shortcuts** on desktop (`n` new memo, `←/→` month, `/` search)
+- [x] **Appearance sync** across devices (saved on the account)
+- [x] From issues: **Settings** split from Account (#14), accent palettes for the whole app (#12), font previews and two more pairs (#13), live emoji preview (#11), **Undo** for deletes and archives (#17), **receipt photos** (#15), a **Reports** page (#16)
 
 ### v1.3: Smart assist (AI, opt-in)
 - [ ] **Settings**: "Smart suggestions" toggle (off by default) with a plain-language data notice
@@ -473,12 +483,11 @@ AI features are **opt-in**: they use your own history first, send only the minim
 - [ ] **Monthly recap**: a short plain-language summary generated from aggregated numbers only (no notes or names)
 
 ### v2: Bigger features
-- [ ] **Insights & reports**: year view, trends, month-to-month comparison, category and source history
+- [ ] **Insights & reports**: year view and source history (6/12-month trends and month-to-month comparison shipped in v1.2)
 - [ ] **Voice capture**: speak a memo, which goes into quick add; audio is transcribed and immediately discarded
 - [ ] **Converted totals (optional)**: one combined total in your default currency using daily reference rates, with originals always kept; cross-currency transfers
 - [ ] **Offline editing + sync**: queue changes offline and resolve conflicts on reconnect
 - [ ] **Shared spaces**: a household or trip journal with invites, roles and per-member attribution
-- [ ] **Attachments**: receipt photos (private object storage, stripped EXIF)
 - [ ] **Push notifications**: budget nudges and recurring reminders (opt-in)
 
 Have an idea or a different priority? Open an issue.
