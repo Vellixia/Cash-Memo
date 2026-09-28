@@ -10,6 +10,9 @@ pub mod user {
         pub password_hash: String,
         pub created_at: DateTimeUtc,
         pub default_currency: String,
+        // Appearance sync across devices: { theme, accent, font, size }; the API rejects unknown keys/values.
+        #[sea_orm(column_type = "Json")]
+        pub preferences: serde_json::Value,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

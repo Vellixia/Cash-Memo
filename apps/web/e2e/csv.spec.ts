@@ -3,7 +3,7 @@ import { expect, gotoHome, test } from "./helpers";
 test("export: the download link serves our CSV", async ({ page, api }) => {
   await api.signup();
   await api.memo({ direction: "expense", amount_minor: 1250, note: "Lunch" });
-  await page.goto("/account");
+  await page.goto("/settings");
   await page.getByRole("button", { name: "Export my data" }).click();
   const link = page.getByRole("link", { name: /Download \(1 rows?\)/ });
   await expect(link).toBeVisible({ timeout: 20_000 });
@@ -16,7 +16,7 @@ test("import: preview flags the bad row, then the good ones land on Home", async
   await api.signup();
   const month = new Date().toISOString().slice(0, 7);
   const csv = ["date,amount,note", `${month}-01,-12.50,Imported lunch`, `${month}-02,300,Imported pay`, `nope,5,Broken`].join("\n");
-  await page.goto("/account/import");
+  await page.goto("/settings/import");
   await page.locator('input[type="file"]').setInputFiles({ name: "bank.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
   await page.getByRole("button", { name: "Continue" }).click();
 

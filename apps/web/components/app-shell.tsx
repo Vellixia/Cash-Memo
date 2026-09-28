@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
-import { Download, Home, LogOut, Plus, Tags, UserRound, Wallet } from "lucide-react";
+import { ChartColumn, Download, Home, LogOut, Plus, Settings, Tags, UserRound, Wallet } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MemoEditor } from "@/components/memo-editor";
 import { THEMES } from "@/components/theme-select";
@@ -20,16 +19,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { useAppearance } from "@/lib/appearance";
 import { useInstall } from "@/lib/install";
 import { useLogout, useMe } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
 
+// Desktop top nav. /reports is being built by another worker; just link it.
 const NAV = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/categories", label: "Categories", icon: Tags },
+  { href: "/reports", label: "Reports", icon: ChartColumn },
   { href: "/sources", label: "Sources", icon: Wallet },
+  { href: "/categories", label: "Categories", icon: Tags },
 ] as const;
 
 /** Log out, then hard-navigate so no cached query refetches (and 401s) on the way out. */
@@ -111,7 +113,7 @@ function TopBar({ onNew }: { onNew: () => void }) {
 
 function AccountMenu() {
   const { data: me } = useMe();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme } = useAppearance();
   const logout = useLogoutAndLeave();
   const { canInstall, install } = useInstall();
   const initial = me?.email?.[0]?.toUpperCase() ?? "·";
@@ -138,14 +140,17 @@ function AccountMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <MenuPrimitive.LinkItem render={<Link href="/settings" />} closeOnClick className={menuItem}>
+            <Settings /> Settings
+          </MenuPrimitive.LinkItem>
+          <MenuPrimitive.LinkItem render={<Link href="/account" />} closeOnClick className={menuItem}>
+            <UserRound /> Account
+          </MenuPrimitive.LinkItem>
           <MenuPrimitive.LinkItem render={<Link href="/categories" />} closeOnClick className={menuItem}>
             <Tags /> Categories
           </MenuPrimitive.LinkItem>
           <MenuPrimitive.LinkItem render={<Link href="/sources" />} closeOnClick className={menuItem}>
             <Wallet /> Sources
-          </MenuPrimitive.LinkItem>
-          <MenuPrimitive.LinkItem render={<Link href="/account" />} closeOnClick className={menuItem}>
-            <UserRound /> Account
           </MenuPrimitive.LinkItem>
           {canInstall && (
             <DropdownMenuItem className="px-2 py-1.5" onClick={install}>
@@ -156,7 +161,7 @@ function AccountMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel className="px-2">Theme</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme ?? "system"} onValueChange={(v) => setTheme(v as string)}>
+          <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as string)}>
             {THEMES.map(({ value, label, icon: Icon }) => (
               <DropdownMenuRadioItem key={value} value={value} className="px-2 py-1.5">
                 <Icon /> {label}
@@ -201,7 +206,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
     >
       <div className="mx-auto grid h-16 max-w-md grid-cols-5 items-center px-1">
         {tab("/", "Home", Home)}
-        {tab("/categories", "Categories", Tags)}
+        {tab("/reports", "Reports", ChartColumn)}
         <div className="flex justify-center">
           <button
             type="button"
@@ -213,7 +218,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
           </button>
         </div>
         {tab("/sources", "Sources", Wallet)}
-        {tab("/account", "Account", UserRound)}
+        {tab("/settings", "Settings", Settings)}
       </div>
     </nav>
   );

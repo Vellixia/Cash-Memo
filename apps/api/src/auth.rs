@@ -48,6 +48,8 @@ struct Credentials {
 #[derive(Deserialize)]
 struct SettingsIn {
     default_currency: Option<String>,
+    /// Partial merge into the stored preferences; unknown keys/values are rejected.
+    preferences: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Serialize)]
@@ -55,6 +57,7 @@ pub(crate) struct UserOut {
     id: Uuid,
     email: String,
     default_currency: String,
+    preferences: serde_json::Value,
 }
 
 impl From<user::Model> for UserOut {
@@ -63,8 +66,42 @@ impl From<user::Model> for UserOut {
             id: u.id,
             email: u.email,
             default_currency: u.default_currency,
+            preferences: u.preferences,
         }
     }
+}
+
+/// Allowed appearance preference keys and their allowed values — kept in one place so the API and the
+/// web client's ACCENTS/FONTS/SIZES lists can be compared by eye.
+const PREF_THEME: &[&str] = &["light", "dark", "system"];
+const PREF_ACCENT: &[&str] = &["ledger", "ocean", "plum", "amber", "rose", "graphite"];
+const PREF_FONT: &[&str] = &["classic", "modern", "readable", "system", "rounded", "mono"];
+const PREF_SIZE: &[&str] = &["default", "large"];
+
+/// Validates a partial preferences patch against the allowed keys/values, then merges it into `current`.
+fn merge_preferences(
+    current: &serde_json::Value,
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> Result<serde_json::Value> {
+    let allowed: &[(&str, &[&str])] = &[
+        ("theme", PREF_THEME),
+        ("accent", PREF_ACCENT),
+        ("font", PREF_FONT),
+        ("size", PREF_SIZE),
+    ];
+    let mut merged = current.as_object().cloned().unwrap_or_default();
+    for (key, value) in patch {
+        let (_, values) = allowed
+            .iter()
+            .find(|(k, _)| *k == key)
+            .ok_or(AppError::BadRequest("unknown preference key"))?;
+        let s = value.as_str().ok_or(AppError::BadRequest("preference value must be a string"))?;
+        if !values.contains(&s) {
+            return Err(AppError::BadRequest("invalid preference value"));
+        }
+        merged.insert(key, value);
+    }
+    Ok(serde_json::Value::Object(merged))
 }
 
 /// Authenticated user id, resolved from the session cookie.
@@ -108,6 +145,7 @@ async fn signup(
         password_hash: Set(password_hash),
         created_at: Set(Utc::now()),
         default_currency: Set(default_currency),
+        preferences: Set(serde_json::json!({})),
     }
     .insert(&txn)
     .await
@@ -178,6 +216,10 @@ async fn update_me(
         .into_active_model();
     if let Some(c) = input.default_currency {
         u.default_currency = Set(parse_currency(&c)?);
+    }
+    if let Some(patch) = input.preferences {
+        let current = u.preferences.as_ref();
+        u.preferences = Set(merge_preferences(current, patch)?);
     }
     Ok(Json(u.update(&st.db).await?.into()))
 }

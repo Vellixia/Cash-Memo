@@ -6,6 +6,7 @@ mod m20260925_000003_default_currency;
 mod m20261001_000004_sources;
 mod m20261002_000005_jobs_email;
 mod m20261003_000006_csv;
+mod m20261008_000011_preferences;
 
 pub struct Migrator;
 
@@ -19,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261001_000004_sources::Migration),
             Box::new(m20261002_000005_jobs_email::Migration),
             Box::new(m20261003_000006_csv::Migration),
+            Box::new(m20261008_000011_preferences::Migration),
         ]
     }
 }
