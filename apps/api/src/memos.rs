@@ -19,7 +19,25 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/memos", get(list).post(create))
         .route("/memos/{id}", get(read).patch(update).delete(remove))
+        .route("/memos/{id}/restore", axum::routing::post(restore))
         .route("/summary", get(summary))
+}
+
+/// A memo as the API shows it: never the raw attachment key, just whether there is one.
+#[derive(Serialize)]
+pub(crate) struct MemoOut {
+    #[serde(flatten)]
+    memo: memo::Model,
+    has_attachment: bool,
+}
+
+impl From<memo::Model> for MemoOut {
+    fn from(memo: memo::Model) -> Self {
+        MemoOut {
+            has_attachment: memo.attachment_key.is_some(),
+            memo,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -34,10 +52,10 @@ struct MonthQuery {
 }
 
 #[derive(Deserialize)]
-struct MemoIn {
-    direction: Option<String>,
-    amount_minor: Option<i64>,
-    currency: Option<String>,
+pub(crate) struct MemoIn {
+    pub(crate) direction: Option<String>,
+    pub(crate) amount_minor: Option<i64>,
+    pub(crate) currency: Option<String>,
     occurred_at: Option<DateTime<Utc>>,
     #[serde(default, deserialize_with = "present")]
     category_id: Option<Option<Uuid>>,
@@ -60,7 +78,7 @@ async fn list(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Query(q): Query<MonthQuery>,
-) -> Result<Json<Vec<memo::Model>>> {
+) -> Result<Json<Vec<MemoOut>>> {
     let (start, end) = month_range(&q.month, q.offset)?;
     let mut find = memo::Entity::find()
         .filter(memo::Column::UserId.eq(uid))
@@ -77,18 +95,18 @@ async fn list(
                 .add(memo::Column::ToSourceId.eq(src)),
         );
     }
-    Ok(Json(
-        find.order_by_desc(memo::Column::OccurredAt)
-            .all(&st.db)
-            .await?,
-    ))
+    let memos = find
+        .order_by_desc(memo::Column::OccurredAt)
+        .all(&st.db)
+        .await?;
+    Ok(Json(memos.into_iter().map(Into::into).collect()))
 }
 
 async fn create(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Json(input): Json<MemoIn>,
-) -> Result<(StatusCode, Json<memo::Model>)> {
+) -> Result<(StatusCode, Json<MemoOut>)> {
     let now = Utc::now();
     let mut m = memo::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -100,6 +118,7 @@ async fn create(
         source_id: Set(None),
         to_source_id: Set(None),
         note: Set(None),
+        installment_plan_id: Set(None),
         ..Default::default()
     };
     let (Some(_), Some(_), Some(_), Some(_)) = (
@@ -113,15 +132,15 @@ async fn create(
         ));
     };
     apply(&st, uid, &mut m, input, true).await?;
-    Ok((StatusCode::CREATED, Json(m.insert(&st.db).await?)))
+    Ok((StatusCode::CREATED, Json(m.insert(&st.db).await?.into())))
 }
 
 async fn read(
     State(st): State<AppState>,
     CurrentUser(uid): CurrentUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<memo::Model>> {
-    Ok(Json(owned(&st, uid, id).await?))
+) -> Result<Json<MemoOut>> {
+    Ok(Json(owned(&st, uid, id).await?.into()))
 }
 
 async fn update(
@@ -129,11 +148,11 @@ async fn update(
     CurrentUser(uid): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<MemoIn>,
-) -> Result<Json<memo::Model>> {
+) -> Result<Json<MemoOut>> {
     let mut m = owned(&st, uid, id).await?.into_active_model();
     apply(&st, uid, &mut m, input, false).await?;
     m.updated_at = Set(Utc::now());
-    Ok(Json(m.update(&st.db).await?))
+    Ok(Json(m.update(&st.db).await?.into()))
 }
 
 async fn remove(
@@ -145,6 +164,23 @@ async fn remove(
     m.deleted_at = Set(Some(Utc::now()));
     m.update(&st.db).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Undoes a soft delete. Only the memo's own owner can, and only while it's still deleted.
+async fn restore(
+    State(st): State<AppState>,
+    CurrentUser(uid): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<MemoOut>> {
+    let m = memo::Entity::find_by_id(id)
+        .filter(memo::Column::UserId.eq(uid))
+        .filter(memo::Column::DeletedAt.is_not_null())
+        .one(&st.db)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let mut m = m.into_active_model();
+    m.deleted_at = Set(None);
+    Ok(Json(m.update(&st.db).await?.into()))
 }
 
 #[derive(Serialize, FromQueryResult)]
@@ -205,7 +241,7 @@ async fn summary(
     }))
 }
 
-async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
+pub(crate) async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
     memo::Entity::find_by_id(id)
         .filter(memo::Column::UserId.eq(uid))
         .filter(memo::Column::DeletedAt.is_null())
@@ -216,7 +252,7 @@ async fn owned(st: &AppState, uid: Uuid, id: Uuid) -> Result<memo::Model> {
 
 /// Validates the provided fields and copies them onto the active model.
 /// Rules are checked on the final state, so a partial update can't leave a memo inconsistent.
-async fn apply(
+pub(crate) async fn apply(
     st: &AppState,
     uid: Uuid,
     m: &mut memo::ActiveModel,
@@ -325,12 +361,21 @@ fn parse_direction(d: &str) -> Result<String> {
     }
 }
 
-fn month_range(month: &str, offset_minutes: i32) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+/// First day of `YYYY-MM` and first day of the month after.
+pub(crate) fn month_days(month: &str) -> Result<(NaiveDate, NaiveDate)> {
     let start = NaiveDate::parse_from_str(&format!("{month}-01"), "%Y-%m-%d")
         .map_err(|_| AppError::BadRequest("month must be YYYY-MM"))?;
     let end = start
         .checked_add_months(Months::new(1))
         .ok_or(AppError::BadRequest("month out of range"))?;
+    Ok((start, end))
+}
+
+pub(crate) fn month_range(
+    month: &str,
+    offset_minutes: i32,
+) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    let (start, end) = month_days(month)?;
     let tz = offset_minutes
         .checked_mul(60)
         .and_then(FixedOffset::east_opt)

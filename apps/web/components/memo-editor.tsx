@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Check, Loader2, Lock, Plus, Trash2, X } from "lucide-react";
+import { Camera, Check, ImagePlus, Loader2, Lock, Plus, Repeat, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,13 +26,33 @@ import { EmojiField } from "@/components/emoji-field";
 import { OfflineHint } from "@/components/offline-hint";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
-import type { Direction, Memo, MemoDirection, Source } from "@/lib/api";
+import { Switch } from "@/components/ui/switch";
+import type { Cadence, Direction, Memo, MemoDirection, Source } from "@/lib/api";
+import { uploadAttachmentFile, utcOffsetMinutes } from "@/lib/api";
+import { processAttachment } from "@/lib/attachment";
 import { fitAmount, fromMinor, toMinor } from "@/lib/money";
 import { toDatetimeLocal } from "@/lib/format";
-import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useSources, useUpdateMemo } from "@/lib/queries";
+import {
+  useAttachmentUrl,
+  useCategories,
+  useConfirmAttachment,
+  useCreateCategory,
+  useCreateMemo,
+  useCreatePlan,
+  useCreateRecurring,
+  useDeleteAttachment,
+  useDeleteMemo,
+  useMe,
+  useRestoreMemo,
+  useSources,
+  useStartAttachmentUpload,
+  useUpdateMemo,
+} from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
+
+const isDebtKind = (kind: string) => kind === "credit" || kind === "paylater";
 
 const schema = z
   .object({
@@ -48,6 +68,10 @@ const schema = z
     source_id: z.string().nullable(),
     to_source_id: z.string().nullable(),
     note: z.string().max(2000, "Keep notes under 2000 characters"),
+    // Pay-in-installments (credit/paylater sources only; see `isDebtKind`).
+    installments: z.boolean(),
+    months: z.string().regex(/^\d*$/, "Enter a number"),
+    fee: z.string().regex(/^\d*(\.\d*)?$/, "Enter a number"),
   })
   .superRefine((v, ctx) => {
     if (/^[A-Z]{3}$/.test(v.currency) && /\d/.test(v.amount) && toMinor(v.amount, v.currency) <= 0) {
@@ -63,6 +87,10 @@ const schema = z
       } else if (v.source_id === v.to_source_id) {
         ctx.addIssue({ code: "custom", path: ["to_source_id"], message: "Pick two different accounts" });
       }
+    }
+    if (v.installments) {
+      const n = Number(v.months);
+      if (!v.months || n < 2 || n > 36) ctx.addIssue({ code: "custom", path: ["months"], message: "2-36 months" });
     }
   });
 type Values = z.infer<typeof schema>;
@@ -136,9 +164,17 @@ function MemoForm({
   const activeSources = sources.filter((s) => !s.archived_at);
   const createMemo = useCreateMemo();
   const updateMemo = useUpdateMemo();
+  const createPlan = useCreatePlan();
   const deleteMemo = useDeleteMemo();
+  const restoreMemo = useRestoreMemo();
+  const startUpload = useStartAttachmentUpload();
+  const confirmUpload = useConfirmAttachment();
   const online = useOnline();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // A new memo has no id yet: a picked photo waits here until save creates one, then uploads.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [repeat, setRepeat] = useState<Cadence | "never">("never");
+  const createRecurring = useCreateRecurring();
 
   const {
     control,
@@ -158,6 +194,9 @@ function MemoForm({
       source_id: memo?.source_id ?? null,
       to_source_id: memo?.to_source_id ?? null,
       note: memo?.note ?? "",
+      installments: false,
+      months: "3",
+      fee: "",
     },
   });
 
@@ -165,8 +204,9 @@ function MemoForm({
     control,
     name: ["direction", "currency", "category_id", "source_id", "to_source_id"],
   });
+  const [installments, months] = useWatch({ control, name: ["installments", "months"] });
   const choices = categories.filter((c) => c.direction === direction);
-  const saving = createMemo.isPending || updateMemo.isPending;
+  const saving = createMemo.isPending || updateMemo.isPending || createRecurring.isPending || createPlan.isPending;
 
   // A new memo defaults its source to the last one used, falling back to the first active source.
   const autoSourceApplied = useRef(false);
@@ -187,6 +227,12 @@ function MemoForm({
     }
   }, [lockedCurrency, currency, setValue, getValues]);
 
+  // Installments: a new expense paid with a credit/paylater source only.
+  const canInstallments = !memo && direction === "expense" && isDebtKind(sourceById.get(sourceId ?? "")?.kind ?? "");
+  useEffect(() => {
+    if (installments && !canInstallments) setValue("installments", false);
+  }, [installments, canInstallments, setValue]);
+
   function setDirection(d: MemoDirection) {
     setValue("direction", d);
     const current = categories.find((c) => c.id === categoryId);
@@ -197,6 +243,32 @@ function MemoForm({
     if (!online) return;
     const cur = values.currency;
     const isTransfer = values.direction === "transfer";
+    const note = values.note.trim() || null;
+
+    if (canInstallments && values.installments) {
+      try {
+        const n = Number(values.months);
+        await createPlan.mutateAsync({
+          source_id: values.source_id!,
+          category_id: values.category_id,
+          note,
+          currency: cur,
+          principal_minor: toMinor(values.amount, cur),
+          fee_minor: values.fee ? toMinor(values.fee, cur) : 0,
+          months: n,
+          first_date: values.occurred_at.slice(0, 10),
+          offset: utcOffsetMinutes(),
+        });
+        noteCurrency(cur);
+        setLastSourceId(values.source_id!);
+        toast.success(`Split into ${n} payments`);
+        onDone();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not set up the plan");
+      }
+      return;
+    }
+
     const body = {
       direction: values.direction,
       amount_minor: toMinor(values.amount, cur),
@@ -205,31 +277,61 @@ function MemoForm({
       category_id: isTransfer ? null : values.category_id,
       source_id: values.source_id,
       to_source_id: isTransfer ? values.to_source_id : null,
-      note: values.note.trim() || null,
+      note,
     };
     try {
+      let saved: Memo;
       if (memo) {
-        await updateMemo.mutateAsync({ id: memo.id, input: body });
+        saved = await updateMemo.mutateAsync({ id: memo.id, input: body });
+        if (repeat !== "never") await createRecurring.mutateAsync({ memo_id: memo.id, cadence: repeat });
         toast.success("Memo updated");
       } else {
-        await createMemo.mutateAsync(body);
+        saved = await createMemo.mutateAsync(body);
+        // The memo is the first occurrence; the rule takes it from there.
+        if (repeat !== "never") await createRecurring.mutateAsync({ memo_id: saved.id, cadence: repeat });
         toast.success(isTransfer ? "Transfer added" : values.direction === "income" ? "Income added" : "Expense added");
       }
       noteCurrency(cur);
       if (values.source_id) setLastSourceId(values.source_id);
+      // The memo is saved either way; a failed attachment upload never blocks or undoes that.
+      if (pendingFile) await uploadPending(saved.id, pendingFile);
       onDone();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save memo");
     }
   }
 
+  async function uploadPending(memoId: string, file: File) {
+    try {
+      const { blob, contentType } = await processAttachment(file);
+      const { upload_url, key } = await startUpload.mutateAsync({ memoId, contentType });
+      await uploadAttachmentFile(upload_url, blob, contentType);
+      await confirmUpload.mutateAsync({ memoId, key });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not attach that image");
+    }
+  }
+
   async function onDelete() {
     if (!memo) return;
+    const id = memo.id;
     try {
-      await deleteMemo.mutateAsync(memo.id);
-      toast.success("Memo deleted");
+      await deleteMemo.mutateAsync(id);
       setConfirmDelete(false);
       onDone();
+      toast.success("Memo deleted", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await restoreMemo.mutateAsync(id);
+              toast.success("Memo restored");
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not restore memo");
+            }
+          },
+        },
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete memo");
     }
@@ -333,6 +435,53 @@ function MemoForm({
               />
               {errors.source_id && <p className="text-sm text-destructive">{errors.source_id.message}</p>}
             </fieldset>
+
+            {canInstallments && (
+              <fieldset className="space-y-3 rounded-2xl bg-muted/50 p-3.5">
+                <label className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium">Pay in installments</span>
+                  <Switch checked={installments} onCheckedChange={(v) => setValue("installments", v)} aria-label="Pay in installments" />
+                </label>
+                {installments && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[3, 6, 12].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          aria-pressed={months === String(n)}
+                          onClick={() => setValue("months", String(n))}
+                          className={cn(sourceChip, months === String(n) ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted")}
+                        >
+                          {n}×
+                        </button>
+                      ))}
+                      <Input
+                        type="number"
+                        min={2}
+                        max={36}
+                        aria-label="Custom number of months"
+                        placeholder="Custom"
+                        className="h-9 w-24 rounded-full bg-card text-center text-sm"
+                        {...register("months")}
+                      />
+                    </div>
+                    {errors.months && <p className="text-sm text-destructive">{errors.months.message}</p>}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Fee (optional)</span>
+                      <AmountField
+                        control={control}
+                        name="fee"
+                        currency={currency}
+                        invalid={!!errors.fee}
+                        big={false}
+                        className="h-10 rounded-xl border border-input bg-card px-3.5 text-left text-base"
+                      />
+                    </div>
+                  </div>
+                )}
+              </fieldset>
+            )}
           </>
         )}
 
@@ -348,6 +497,36 @@ function MemoForm({
             {errors.note && <span className="text-sm text-destructive">{errors.note.message}</span>}
           </label>
         </div>
+
+        {memo?.recurring_rule_id ? (
+          <Link href="/recurring" onClick={onDone} className="inline-flex min-h-9 items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            <Repeat className="size-4" aria-hidden /> Repeats · Manage
+          </Link>
+        ) : canInstallments && installments ? null : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{memo ? "Make recurring" : "Repeat"}</span>
+            <Segmented
+              size="sm"
+              label={memo ? "Make recurring" : "Repeat"}
+              value={repeat}
+              onChange={setRepeat}
+              options={[
+                { value: "never", label: "Never" },
+                { value: "weekly", label: "Weekly" },
+                { value: "monthly", label: "Monthly" },
+                { value: "yearly", label: "Yearly" },
+              ]}
+            />
+          </div>
+        )}
+        {!(canInstallments && installments) && (
+          <AttachmentField
+            memoId={memo?.id ?? null}
+            hasAttachment={memo?.has_attachment ?? false}
+            pendingFile={pendingFile}
+            onPendingFile={setPendingFile}
+          />
+        )}
       </div>
 
       {/* Outside the scroll area, so Save stays put above the keyboard / home indicator. */}
@@ -385,6 +564,137 @@ function MemoForm({
         </div>
       </div>
     </form>
+  );
+}
+
+/** Optional receipt/photo. Without a memo id yet (a new memo), a picked file just stages via
+ * `onPendingFile`; MemoForm uploads it once Save creates the memo. With an id, it uploads (or
+ * replaces/removes) right away, independent of the Save button. */
+function AttachmentField({
+  memoId,
+  hasAttachment,
+  pendingFile,
+  onPendingFile,
+}: {
+  memoId: string | null;
+  hasAttachment: boolean;
+  pendingFile: File | null;
+  onPendingFile: (file: File | null) => void;
+}) {
+  const online = useOnline();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const startUpload = useStartAttachmentUpload();
+  const confirmUpload = useConfirmAttachment();
+  const deleteAttachment = useDeleteAttachment();
+  const [attached, setAttached] = useState(hasAttachment);
+  const [busy, setBusy] = useState(false);
+  const attachmentUrl = useAttachmentUrl(memoId ?? undefined, attached && !pendingFile);
+  const previewUrl = useMemo(() => (pendingFile ? URL.createObjectURL(pendingFile) : null), [pendingFile]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function pick(file: File | null) {
+    if (!file) return;
+    if (!memoId) {
+      onPendingFile(file);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { blob, contentType } = await processAttachment(file);
+      const { upload_url, key } = await startUpload.mutateAsync({ memoId, contentType });
+      await uploadAttachmentFile(upload_url, blob, contentType);
+      await confirmUpload.mutateAsync({ memoId, key });
+      setAttached(true);
+      toast.success("Attachment saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not attach that image");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (pendingFile) {
+      onPendingFile(null);
+      return;
+    }
+    if (!memoId) return;
+    setBusy(true);
+    try {
+      await deleteAttachment.mutateAsync(memoId);
+      setAttached(false);
+      toast.success("Attachment removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove attachment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const shown = !!pendingFile || attached;
+  const thumbUrl = previewUrl ?? attachmentUrl.data?.url;
+
+  return (
+    <fieldset className="space-y-2.5">
+      <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">Attachment</legend>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => {
+          void pick(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(e) => {
+          void pick(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      {shown ? (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => thumbUrl && window.open(thumbUrl, "_blank")}
+            disabled={!thumbUrl}
+            className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border"
+            aria-label="View attachment full size"
+          >
+            {thumbUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- a presigned/blob URL, not a static asset
+              <img src={thumbUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
+            )}
+          </button>
+          <div className="flex flex-1 flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy || !online} onClick={() => fileRef.current?.click()}>
+              Replace
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="rounded-full text-destructive" disabled={busy || !online} onClick={remove}>
+              Remove
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy || !online} onClick={() => cameraRef.current?.click()}>
+            <Camera className="size-4" /> Take photo
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy || !online} onClick={() => fileRef.current?.click()}>
+            <ImagePlus className="size-4" /> Choose image
+          </Button>
+        </div>
+      )}
+    </fieldset>
   );
 }
 

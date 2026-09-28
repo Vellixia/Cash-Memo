@@ -194,7 +194,7 @@ export default function WelcomePage() {
           />
           <div
             aria-hidden
-            className="absolute top-1/3 left-1/2 -z-10 size-[42rem] -translate-x-1/2 rounded-full bg-income-soft opacity-70 blur-3xl lg:left-3/4"
+            className="absolute top-1/3 left-1/2 -z-10 size-168 -translate-x-1/2 rounded-full bg-income-soft opacity-70 blur-3xl lg:left-3/4"
           />
           <div className={cn(wrap, "grid items-center gap-14 pt-12 pb-16 sm:pt-20 lg:grid-cols-[1fr_1.1fr] lg:gap-8 lg:pt-24 lg:pb-28")}>
             <div className="text-center lg:text-left">

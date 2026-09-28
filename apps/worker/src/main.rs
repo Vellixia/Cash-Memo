@@ -57,8 +57,20 @@ async fn run() {
             }
         }
     };
+    // Due rules are checked often, not once a day, so a restart or an offset never skips a day.
+    let recurring = async {
+        loop {
+            match domain::recurring::materialize(&db, None, chrono::Utc::now()).await {
+                Ok(n) if n > 0 => tracing::info!("created {n} recurring memos"),
+                Ok(_) => {}
+                Err(e) => tracing::error!("materialize recurring memos: {e}"),
+            }
+            tokio::time::sleep(Duration::from_secs(15 * 60)).await;
+        }
+    };
     tokio::select! {
         _ = email::run(db.clone(), mailer) => {},
+        _ = recurring => {},
         _ = data => {},
         _ = shutdown() => tracing::info!("shutting down"),
     }

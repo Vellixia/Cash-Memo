@@ -266,6 +266,7 @@ async fn test_app_db() -> (Router, sea_orm::DatabaseConnection) {
         limiter: Default::default(),
         app_url: "https://app.test".into(),
         storage: domain::storage::Storage::from_env().map(std::sync::Arc::new),
+        http: reqwest::Client::new(),
     });
     (router, db)
 }
@@ -484,6 +485,183 @@ async fn sources_and_transfers() {
     )
     .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn installment_plans() {
+    use chrono::Datelike;
+    use sea_orm::{DbBackend, FromQueryResult, Statement};
+
+    let (app, db) = test_app_db().await;
+    let a = signup(&app).await;
+    let src = |body: Value| {
+        let app = app.clone();
+        let a = a.clone();
+        async move { call(&app, "POST", "/api/sources", &a, Some(body)).await }
+    };
+    let install = |body: Value| {
+        let app = app.clone();
+        let a = a.clone();
+        async move { call(&app, "POST", "/api/installments", &a, Some(body)).await }
+    };
+
+    // Credit limit/statement/due day only apply to a credit or pay-later source.
+    let (s, _, _) = src(json!({ "name": "Jar", "kind": "cash", "credit_limit_minor": 100 })).await;
+    assert_eq!(
+        s,
+        StatusCode::BAD_REQUEST,
+        "credit fields need a credit/paylater kind"
+    );
+
+    let (_, _, bca) =
+        src(json!({ "name": "BCA", "kind": "bank", "track_balance": true, "currency": "USD" }))
+            .await;
+    let (_, _, visa) = src(json!({
+        "name": "Visa", "kind": "credit", "track_balance": true, "currency": "USD",
+        "opening_minor": 0, "credit_limit_minor": 500_000, "due_day": 15,
+    }))
+    .await;
+    let bca_id = bca["id"].clone();
+    let visa_id = visa["id"].clone();
+
+    // Adding credit fields to an already-non-credit source is rejected too.
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &format!("/api/sources/{}", bca_id.as_str().unwrap()),
+        &a,
+        Some(json!({ "credit_limit_minor": 500 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // A plan needs a credit/paylater source.
+    let (s, _, _) = install(json!({
+        "source_id": bca_id, "currency": "USD", "principal_minor": 1000, "months": 3,
+        "first_date": "2026-01-01", "offset": 0,
+    }))
+    .await;
+    assert_eq!(
+        s,
+        StatusCode::BAD_REQUEST,
+        "installments need a credit/paylater source"
+    );
+
+    // `first_date` placed so exactly 2 of 4 monthly installments are already due and 2 are still
+    // ahead, however late in the day this test happens to run — each lands a few days off the
+    // today/future boundary, never right on it.
+    let today = chrono::Utc::now().date_naive();
+    let first_date =
+        today.checked_sub_months(chrono::Months::new(2)).unwrap() + chrono::Duration::days(3);
+    let (s, _, plan) = install(json!({
+        "source_id": visa_id, "note": "New phone", "currency": "USD",
+        "principal_minor": 10_000, "fee_minor": 3, "months": 4,
+        "first_date": first_date.format("%Y-%m-%d").to_string(), "offset": 0,
+    }))
+    .await;
+    assert_eq!(s, StatusCode::CREATED);
+    assert_eq!(plan["paid"], json!(2), "2 of 4 installments already due");
+    assert_eq!(plan["remaining"], json!(2));
+    let plan_id = plan["id"].as_str().unwrap().to_owned();
+
+    #[derive(FromQueryResult)]
+    struct Row {
+        id: uuid::Uuid,
+        amount_minor: i64,
+        occurred_at: chrono::DateTime<chrono::Utc>,
+    }
+    let rows = Row::find_by_statement(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT id, amount_minor, occurred_at FROM memos WHERE installment_plan_id = $1 ORDER BY occurred_at",
+        [uuid::Uuid::parse_str(&plan_id).unwrap().into()],
+    ))
+    .all(&db)
+    .await
+    .unwrap();
+    // The whole-minor-unit remainder (10,003 / 4 = 2,500 r3) lands on the first installment.
+    assert_eq!(
+        rows.iter().map(|r| r.amount_minor).collect::<Vec<_>>(),
+        vec![2503, 2500, 2500, 2500]
+    );
+    let now = chrono::Utc::now();
+    assert_eq!(rows.iter().filter(|r| r.occurred_at <= now).count(), 2);
+    assert_eq!(rows.iter().filter(|r| r.occurred_at > now).count(), 2);
+
+    // The balance only counts installments already due; the 2 not-yet-due ones don't count yet.
+    let (_, _, list) = call(&app, "GET", "/api/sources", &a, None).await;
+    let visa_balance = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == visa_id)
+        .unwrap()["balance_minor"]
+        .clone();
+    assert_eq!(visa_balance, json!(-2503 - 2500));
+
+    // Month-end clamping: Jan 31 -> Feb 28/29 -> Mar 31, whichever "next January" comes up.
+    let jan31 = chrono::NaiveDate::from_ymd_opt(today.year() + 1, 1, 31).unwrap();
+    let (s, _, clamped) = install(json!({
+        "source_id": visa_id, "currency": "USD", "principal_minor": 300, "months": 3,
+        "first_date": jan31.format("%Y-%m-%d").to_string(), "offset": 0,
+    }))
+    .await;
+    assert_eq!(s, StatusCode::CREATED);
+    let clamped_id = clamped["id"].as_str().unwrap().to_owned();
+    let clamped_rows = Row::find_by_statement(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT id, amount_minor, occurred_at FROM memos WHERE installment_plan_id = $1 ORDER BY occurred_at",
+        [uuid::Uuid::parse_str(&clamped_id).unwrap().into()],
+    ))
+    .all(&db)
+    .await
+    .unwrap();
+    let feb_last_day = if chrono::NaiveDate::from_ymd_opt(today.year() + 1, 2, 29).is_some() {
+        29
+    } else {
+        28
+    };
+    assert_eq!(
+        clamped_rows
+            .iter()
+            .map(|r| r.occurred_at.day())
+            .collect::<Vec<_>>(),
+        vec![31, feb_last_day, 31]
+    );
+
+    // Cancelling a plan soft-deletes only its not-yet-due memos; past ones stay untouched.
+    let (s, _, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/installments/{plan_id}"),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    #[derive(FromQueryResult)]
+    struct Deleted {
+        deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    }
+    for r in &rows {
+        let after = Deleted::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT deleted_at FROM memos WHERE id = $1",
+            [r.id.into()],
+        ))
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            after.deleted_at.is_some(),
+            r.occurred_at > now,
+            "future installments are soft-deleted, past ones stay"
+        );
+    }
+
+    // The plan itself is gone.
+    let (_, _, plans) = call(&app, "GET", "/api/installments", &a, None).await;
+    assert!(plans.as_array().unwrap().iter().all(|p| p["id"] != plan_id));
 }
 
 /// The link in the newest queued email to `to` (the worker isn't running in tests).
@@ -784,4 +962,874 @@ async fn data_endpoints_queue_and_guard() {
     let b = signup(&app).await;
     let (s, _, _) = call(&app, "GET", &job, &b, None).await;
     assert_eq!(s, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn search_and_restore() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+    let b = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, cat) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Groceries", "direction": "expense" })),
+    )
+    .await;
+    let mut ids = vec![];
+    for (at, note) in [
+        ("2026-01-05T12:00:00Z", "100% coffee"),
+        ("2026-03-05T12:00:00Z", "rent"),
+        ("2026-05-05T12:00:00Z", "espresso COFFEE"),
+    ] {
+        let body = json!({ "direction": "expense", "amount_minor": 100, "currency": "USD", "occurred_at": at, "source_id": cash, "category_id": cat["id"], "note": note });
+        let (s, _, m) = call(&app, "POST", "/api/memos", &a, Some(body)).await;
+        assert_eq!(s, StatusCode::CREATED);
+        ids.push(m["id"].as_str().unwrap().to_owned());
+    }
+
+    // Note matches across months, newest first; category and source names match too.
+    let (s, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        found
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [&ids[2], &ids[0]]
+    );
+    let (_, _, found) = call(&app, "GET", "/api/search?q=grocer", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 3);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=cash", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 3);
+    // Wildcards are literal; short queries are rejected; other users see nothing.
+    let (_, _, found) = call(&app, "GET", "/api/search?q=%25%20c", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 1);
+    let (s, _, _) = call(&app, "GET", "/api/search?q=c", &a, None).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &b, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 0);
+
+    // Keyset paging: page 1 has the newest row, page 2 continues after it.
+    let (_, _, p1) = call(&app, "GET", "/api/search?q=grocer&limit=1", &a, None).await;
+    assert_eq!(p1[0]["id"], ids[2].as_str());
+    let cursor = format!("{},{}", p1[0]["occurred_at"].as_str().unwrap(), ids[2])
+        .replace('+', "%2B")
+        .replace(':', "%3A");
+    let (_, _, p2) = call(
+        &app,
+        "GET",
+        &format!("/api/search?q=grocer&limit=5&before={cursor}"),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(p2.as_array().unwrap().len(), 2);
+    assert_eq!(p2[0]["id"], ids[1].as_str());
+
+    // Deleted memos drop out of search; restore brings them back, owner only, deleted only.
+    let (s, _, _) = call(&app, "DELETE", &format!("/api/memos/{}", ids[0]), &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 1);
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &format!("/api/memos/{}/restore", ids[0]),
+        &b,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, m) = call(
+        &app,
+        "POST",
+        &format!("/api/memos/{}/restore", ids[0]),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(
+        (s, m["id"].as_str()),
+        (StatusCode::OK, Some(ids[0].as_str()))
+    );
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &format!("/api/memos/{}/restore", ids[0]),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, _, found) = call(&app, "GET", "/api/search?q=coffee", &a, None).await;
+    assert_eq!(found.as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn attachment_upload_confirm_view_delete() {
+    let app = test_app().await;
+    let Some(storage) = domain::storage::Storage::from_env() else {
+        eprintln!("S3_* not set; skipping");
+        return;
+    };
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let memo = |amount: i64, day: &str| {
+        json!({ "direction": "expense", "amount_minor": amount, "currency": "USD",
+                "occurred_at": format!("2026-09-{day}T12:00:00Z"), "source_id": cash })
+    };
+    let (_, _, m1) = call(&app, "POST", "/api/memos", &a, Some(memo(1000, "10"))).await;
+    let (_, _, m2) = call(&app, "POST", "/api/memos", &a, Some(memo(500, "11"))).await;
+    let m1_id = m1["id"].as_str().unwrap();
+    let m2_id = m2["id"].as_str().unwrap();
+    assert_eq!(m1["has_attachment"], json!(false));
+    assert!(
+        m1.get("attachment_key").is_none(),
+        "the raw storage key must never be exposed"
+    );
+
+    let http = reqwest::Client::new();
+    let attach = |id: &str| format!("/api/memos/{id}/attachment");
+
+    // Only jpeg/webp are accepted.
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "content_type": "image/png" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // Happy path: start -> PUT bytes -> confirm -> view -> matches what was uploaded.
+    let (s, _, start) = call(
+        &app,
+        "POST",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "content_type": "image/jpeg" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let key = start["key"].as_str().unwrap().to_owned();
+    assert!(
+        key.starts_with("attachments/"),
+        "must live outside the CSV lifecycle prefix `users/`"
+    );
+    let bytes = vec![7u8; 1024];
+    let put = http
+        .put(start["upload_url"].as_str().unwrap())
+        .header("content-type", "image/jpeg")
+        .body(bytes.clone())
+        .send()
+        .await
+        .unwrap();
+    assert!(put.status().is_success(), "{}", put.status());
+
+    let (s, _, confirmed) =
+        call(&app, "PUT", &attach(m1_id), &a, Some(json!({ "key": key }))).await;
+    assert_eq!(
+        (s, confirmed["has_attachment"].clone()),
+        (StatusCode::OK, json!(true))
+    );
+    let (_, _, m1_after) = call(&app, "GET", &format!("/api/memos/{m1_id}"), &a, None).await;
+    assert_eq!(m1_after["has_attachment"], json!(true));
+
+    let (s, _, view) = call(&app, "GET", &attach(m1_id), &a, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let fetched = http
+        .get(view["url"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap();
+    assert!(fetched.status().is_success());
+    assert_eq!(fetched.bytes().await.unwrap().to_vec(), bytes);
+
+    // A key that's really under a different memo's prefix is rejected.
+    let (_, _, start2) = call(
+        &app,
+        "POST",
+        &attach(m2_id),
+        &a,
+        Some(json!({ "content_type": "image/jpeg" })),
+    )
+    .await;
+    let key2 = start2["key"].as_str().unwrap();
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "key": key2 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "wrong memo prefix");
+    let traversal = format!("{}../../x.jpg", &key[..key.rfind('/').unwrap() + 1]);
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "key": traversal })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "no path traversal");
+
+    // Oversize: rejected, and the object is deleted rather than left behind.
+    let (_, _, start3) = call(
+        &app,
+        "POST",
+        &attach(m2_id),
+        &a,
+        Some(json!({ "content_type": "image/jpeg" })),
+    )
+    .await;
+    let big_key = start3["key"].as_str().unwrap().to_owned();
+    let big = vec![0u8; 6 * 1024 * 1024];
+    let put = http
+        .put(start3["upload_url"].as_str().unwrap())
+        .header("content-type", "image/jpeg")
+        .body(big)
+        .send()
+        .await
+        .unwrap();
+    assert!(put.status().is_success());
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m2_id),
+        &a,
+        Some(json!({ "key": big_key })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "over 5 MB");
+    let head = http
+        .head(storage.head_url(&big_key, std::time::Duration::from_secs(60)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        head.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "oversize object must be deleted, not left behind"
+    );
+
+    // Another user can't see it, or plant an attachment on it.
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "GET", &attach(m1_id), &b, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m1_id),
+        &b,
+        Some(json!({ "key": "attachments/other/x.jpg" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "not this user's memo");
+
+    // Delete: gone from storage and from the memo.
+    let (s, _, _) = call(&app, "DELETE", &attach(m1_id), &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, _, _) = call(&app, "GET", &attach(m1_id), &a, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, _, m1_final) = call(&app, "GET", &format!("/api/memos/{m1_id}"), &a, None).await;
+    assert_eq!(m1_final["has_attachment"], json!(false));
+}
+
+#[tokio::test]
+async fn reports_trend_across_months_excludes_transfers() {
+    let (app, _db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, bank) = call(
+        &app,
+        "POST",
+        "/api/sources",
+        &a,
+        Some(json!({ "name": "Bank", "kind": "bank" })),
+    )
+    .await;
+    let (_, _, cat) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Food", "direction": "expense" })),
+    )
+    .await;
+
+    // Computed off `now`, not hardcoded, so the test doesn't depend on which month it runs in.
+    let now = chrono::Utc::now();
+    let this_month = now.format("%Y-%m").to_string();
+    let last_month = (now - chrono::Duration::days(32))
+        .format("%Y-%m")
+        .to_string();
+
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "income", "amount_minor": 100000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-05T12:00:00Z") }),
+        ),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "expense", "amount_minor": 30000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-06T12:00:00Z"),
+                     "source_id": cash, "category_id": cat["id"] }),
+        ),
+    )
+    .await;
+    // A transfer moves money between sources; it must never show up as income or expense.
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "transfer", "amount_minor": 50000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-07T12:00:00Z"),
+                     "source_id": cash, "to_source_id": bank["id"] }),
+        ),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "expense", "amount_minor": 10000, "currency": "USD",
+                     "occurred_at": format!("{last_month}-05T12:00:00Z"),
+                     "source_id": cash, "category_id": cat["id"] }),
+        ),
+    )
+    .await;
+
+    let (s, _, trend) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=6&offset=0",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let months = trend["months"].as_array().unwrap();
+    assert_eq!(months.len(), 6);
+    assert_eq!(months.last().unwrap(), &json!(this_month));
+
+    let totals = trend["totals"].as_array().unwrap();
+    let total = |month: &str, direction: &str| {
+        totals
+            .iter()
+            .find(|t| t["month"] == month && t["currency"] == "USD" && t["direction"] == direction)
+            .map(|t| t["total_minor"].as_i64().unwrap())
+            .unwrap_or(0)
+    };
+    assert_eq!(total(&this_month, "income"), 100000);
+    assert_eq!(total(&this_month, "expense"), 30000);
+    assert_eq!(total(&last_month, "expense"), 10000);
+    assert!(
+        !totals.iter().any(|t| t["direction"] == "transfer"),
+        "transfers must be excluded"
+    );
+
+    let by_category = trend["by_category"].as_array().unwrap();
+    let category_total = |month: &str| {
+        by_category
+            .iter()
+            .find(|r| r["month"] == month && r["category_id"] == cat["id"])
+            .map(|r| r["total_minor"].as_i64().unwrap())
+    };
+    assert_eq!(category_total(&this_month), Some(30000));
+    assert_eq!(category_total(&last_month), Some(10000));
+
+    let (s, _, _) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=3&offset=0",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 6 or 12");
+}
+
+#[tokio::test]
+async fn preferences_sync() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+
+    // Empty by default, and returned on /auth/me.
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!((s, &me["preferences"]), (StatusCode::OK, &json!({})));
+
+    // A partial merge only touches the given keys.
+    let (s, _, me) = call(
+        &app,
+        "PATCH",
+        "/api/auth/me",
+        &a,
+        Some(json!({ "preferences": { "accent": "ocean", "font": "modern" } })),
+    )
+    .await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern" })
+        ),
+    );
+    let (s, _, me) = call(
+        &app,
+        "PATCH",
+        "/api/auth/me",
+        &a,
+        Some(json!({ "preferences": { "size": "large" } })),
+    )
+    .await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern", "size": "large" }),
+        ),
+    );
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern", "size": "large" }),
+        ),
+    );
+
+    // Unknown key, unknown value and non-string value are all rejected.
+    for bad in [
+        json!({ "nonsense": "ocean" }),
+        json!({ "accent": "neon" }),
+        json!({ "size": 1 }),
+    ] {
+        let (s, _, _) = call(
+            &app,
+            "PATCH",
+            "/api/auth/me",
+            &a,
+            Some(json!({ "preferences": bad })),
+        )
+        .await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+    }
+    // A rejected patch never partially applies.
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern", "size": "large" }),
+        ),
+    );
+
+    // Preferences are private, like the rest of the account.
+    let b = signup(&app).await;
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &b, None).await;
+    assert_eq!((s, &me["preferences"]), (StatusCode::OK, &json!({})));
+}
+
+async fn rule_user(db: &sea_orm::DatabaseConnection, rule: &Value) -> uuid::Uuid {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let id: uuid::Uuid = rule["id"].as_str().unwrap().parse().unwrap();
+    db.query_one_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT user_id FROM recurring_rules WHERE id = $1",
+        [id.into()],
+    ))
+    .await
+    .unwrap()
+    .unwrap()
+    .try_get("", "user_id")
+    .unwrap()
+}
+
+async fn set_next_date(db: &sea_orm::DatabaseConnection, rule: &Value, date: &str) {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+    let id: uuid::Uuid = rule["id"].as_str().unwrap().parse().unwrap();
+    db.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "UPDATE recurring_rules SET next_date = $2::date WHERE id = $1",
+        [id.into(), date.into()],
+    ))
+    .await
+    .unwrap();
+}
+
+fn at(s: &str) -> chrono::DateTime<chrono::Utc> {
+    s.parse().unwrap()
+}
+
+#[tokio::test]
+async fn recurring_rules() {
+    use domain::recurring::materialize;
+    let (app, db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, rent) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Rent", "direction": "expense" })),
+    )
+    .await;
+
+    let base = json!({ "direction": "expense", "amount_minor": 1000, "currency": "USD", "category_id": rent["id"], "source_id": cash, "cadence": "monthly", "next_date": "2099-01-31", "offset_minutes": 420 });
+    let with = |k: &str, v: Value| {
+        let mut b = base.clone();
+        b[k] = v;
+        b
+    };
+    for (bad, msg) in [
+        (
+            with("cadence", json!("daily")),
+            "cadence must be weekly, monthly or yearly",
+        ),
+        (
+            with("next_date", Value::Null),
+            "direction, amount_minor, currency and next_date are required",
+        ),
+        (
+            with("direction", json!("income")),
+            "category direction does not match memo direction",
+        ),
+        (with("source_id", Value::Null), "an expense needs a source"),
+        (
+            json!({ "direction": "transfer", "amount_minor": 5, "currency": "USD", "source_id": cash, "cadence": "weekly", "next_date": "2099-01-01" }),
+            "a transfer needs two different sources",
+        ),
+        (
+            with("next_date", json!("1900-01-01")),
+            "next_date out of range",
+        ),
+    ] {
+        let (s, _, err) = call(&app, "POST", "/api/recurring", &a, Some(bad)).await;
+        assert_eq!(
+            (s, err["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some(msg))
+        );
+    }
+
+    let (s, _, rule) = call(&app, "POST", "/api/recurring", &a, Some(base.clone())).await;
+    assert_eq!(s, StatusCode::CREATED, "{rule}");
+    assert_eq!(
+        (rule["anchor_day"].clone(), rule["next_date"].clone()),
+        (json!(31), json!("2099-01-31"))
+    );
+    let uid = rule_user(&db, &rule).await;
+
+    // Catch-up from Jan 31: clamps to month end and returns to the 31st, at local noon (+07:00).
+    set_next_date(&db, &rule, "2026-01-31").await;
+    let now = at("2026-05-01T00:00:00Z");
+    assert_eq!(materialize(&db, Some(uid), now).await.unwrap(), 4);
+    assert_eq!(materialize(&db, Some(uid), now).await.unwrap(), 0);
+    // Even re-running the same occurrences (a racing or replayed run) creates no duplicates.
+    set_next_date(&db, &rule, "2026-01-31").await;
+    assert_eq!(materialize(&db, Some(uid), now).await.unwrap(), 0);
+    let (_, _, rules) = call(&app, "GET", "/api/recurring", &a, None).await;
+    assert_eq!(rules[0]["next_date"], "2026-05-31");
+    let mut days = vec![];
+    for m in ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05"] {
+        let (_, _, memos) = call(
+            &app,
+            "GET",
+            &format!("/api/memos?month={m}&offset=420"),
+            &a,
+            None,
+        )
+        .await;
+        for memo in memos.as_array().unwrap() {
+            assert_eq!(memo["recurring_rule_id"], rule["id"]);
+            days.push(memo["occurred_at"].as_str().unwrap().to_owned());
+        }
+    }
+    assert_eq!(
+        days,
+        [
+            "2026-01-31T05:00:00Z",
+            "2026-02-28T05:00:00Z",
+            "2026-03-31T05:00:00Z",
+            "2026-04-30T05:00:00Z"
+        ]
+    );
+
+    // Paused rules create nothing; resuming skips what was missed.
+    let path = format!("/api/recurring/{}", rule["id"].as_str().unwrap());
+    let (s, _, paused) = call(&app, "PATCH", &path, &a, Some(json!({ "paused": true }))).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(paused["paused_at"].is_string());
+    assert_eq!(
+        materialize(&db, Some(uid), at("2026-08-01T00:00:00Z"))
+            .await
+            .unwrap(),
+        0
+    );
+    let (_, _, resumed) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "paused": false, "amount_minor": 1500 })),
+    )
+    .await;
+    assert!(resumed["paused_at"].is_null());
+    assert_eq!(resumed["amount_minor"], 1500);
+    let today = domain::recurring::local_date(chrono::Utc::now(), 420).to_string();
+    let next = resumed["next_date"].as_str().unwrap().to_owned();
+    assert!(next > today, "{next} vs {today}");
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "category_id": null, "direction": "income" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "direction": "expense", "category_id": rent["id"], "source_id": cash })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    // The next occurrence shows up as upcoming in its month.
+    let (_, _, up) = call(
+        &app,
+        "GET",
+        &format!("/api/recurring/upcoming?month={}&offset=420", &next[..7]),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(up[0]["id"], rule["id"]);
+    assert_eq!(up[0]["date"], next);
+
+    // Make an existing memo recurring: it's the first occurrence and links to the rule.
+    let (_, _, memo) = call(&app, "POST", "/api/memos", &a, Some(json!({ "direction": "expense", "amount_minor": 99, "currency": "USD", "occurred_at": "2099-06-10T03:00:00Z", "source_id": cash }))).await;
+    let (s, _, weekly) = call(
+        &app,
+        "POST",
+        "/api/recurring",
+        &a,
+        Some(json!({ "memo_id": memo["id"], "cadence": "weekly", "offset_minutes": 420 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{weekly}");
+    assert_eq!(
+        (weekly["next_date"].clone(), weekly["amount_minor"].clone()),
+        (json!("2099-06-17"), json!(99))
+    );
+    let (_, _, memo) = call(
+        &app,
+        "GET",
+        &format!("/api/memos/{}", memo["id"].as_str().unwrap()),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(memo["recurring_rule_id"], weekly["id"]);
+
+    // Other users can't see or touch it.
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "PATCH", &path, &b, Some(json!({ "paused": true }))).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, _, none) = call(&app, "GET", "/api/recurring", &b, None).await;
+    assert_eq!(none, json!([]));
+
+    // Stopping keeps the memos it made.
+    let (s, _, _) = call(&app, "DELETE", &path, &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (_, _, feb) = call(&app, "GET", "/api/memos?month=2026-02&offset=420", &a, None).await;
+    assert_eq!(feb[0]["recurring_rule_id"], Value::Null);
+    let (_, _, rules) = call(&app, "GET", "/api/recurring", &a, None).await;
+    assert_eq!(rules.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn budgets_spent_and_projected() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, food) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Food", "direction": "expense" })),
+    )
+    .await;
+    let (_, _, salary) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Salary", "direction": "income" })),
+    )
+    .await;
+
+    let (s, _, err) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": salary["id"], "currency": "USD", "limit_minor": 100 })),
+    )
+    .await;
+    assert_eq!(
+        (s, err["error"].clone()),
+        (
+            StatusCode::BAD_REQUEST,
+            json!("budgets are for expense categories")
+        )
+    );
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "USD", "limit_minor": 0 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, budget) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "usd", "limit_minor": 10000 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{budget}");
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "USD", "limit_minor": 5 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CONFLICT);
+
+    // Spent: this category's non-deleted USD expenses in the local month only.
+    let spend = [
+        ("USD", 3000, "2026-02-10T12:00:00Z"),
+        ("USD", 500, "2026-02-28T20:00:00Z"), // Mar 1 at +07:00
+        ("IDR", 7000, "2026-02-11T12:00:00Z"),
+        ("USD", 800, "2026-02-12T12:00:00Z"),
+    ];
+    let mut ids = vec![];
+    for (cur, amt, t) in spend {
+        let (s, _, m) = call(&app, "POST", "/api/memos", &a, Some(json!({ "direction": "expense", "amount_minor": amt, "currency": cur, "occurred_at": t, "category_id": food["id"], "source_id": cash }))).await;
+        assert_eq!(s, StatusCode::CREATED);
+        ids.push(m["id"].as_str().unwrap().to_owned());
+    }
+    call(&app, "DELETE", &format!("/api/memos/{}", ids[3]), &a, None).await;
+    let (_, _, feb) = call(
+        &app,
+        "GET",
+        "/api/budgets?month=2026-02&offset=420",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(feb[0]["id"], budget["id"]);
+    assert_eq!(
+        (
+            feb[0]["limit_minor"].clone(),
+            feb[0]["spent_minor"].clone(),
+            feb[0]["projected_minor"].clone()
+        ),
+        (json!(10000), json!(3000), json!(3000))
+    );
+
+    // Projected adds recurring expenses still to come (weekly from Mar 1 2099: 5 in March).
+    let rule = json!({ "direction": "expense", "amount_minor": 500, "currency": "USD", "category_id": food["id"], "source_id": cash, "cadence": "weekly", "next_date": "2099-03-01", "offset_minutes": 420 });
+    call(&app, "POST", "/api/recurring", &a, Some(rule.clone())).await;
+    let mut other = rule.clone();
+    other["currency"] = json!("IDR");
+    call(&app, "POST", "/api/recurring", &a, Some(other)).await;
+    let (_, _, mar) = call(
+        &app,
+        "GET",
+        "/api/budgets?month=2099-03&offset=420",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(
+        (
+            mar[0]["spent_minor"].clone(),
+            mar[0]["projected_minor"].clone()
+        ),
+        (json!(0), json!(2500))
+    );
+
+    let path = format!("/api/budgets/{}", budget["id"].as_str().unwrap());
+    let (_, _, patched) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "limit_minor": 20000 })),
+    )
+    .await;
+    assert_eq!(patched["limit_minor"], 20000);
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "DELETE", &path, &b, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, _) = call(&app, "DELETE", &path, &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+
+    // Deleting the category removes its budgets.
+    call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "USD", "limit_minor": 1 })),
+    )
+    .await;
+    call(
+        &app,
+        "DELETE",
+        &format!("/api/categories/{}", food["id"].as_str().unwrap()),
+        &a,
+        None,
+    )
+    .await;
+    let (_, _, none) = call(&app, "GET", "/api/budgets", &a, None).await;
+    assert_eq!(none, json!([]));
 }

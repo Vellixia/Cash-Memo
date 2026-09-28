@@ -16,6 +16,9 @@ type Source = {
   track_balance: boolean;
   currency: string | null;
   opening_minor: number;
+  credit_limit_minor: number | null;
+  statement_day: number | null;
+  due_day: number | null;
   archived_at: string | null;
   balance_minor: number | null;
 };
@@ -26,6 +29,9 @@ type SourceInput = {
   track_balance?: boolean;
   currency?: string | null;
   opening_minor?: number;
+  credit_limit_minor?: number | null;
+  statement_day?: number | null;
+  due_day?: number | null;
 };
 type MemoInput = {
   direction: "income" | "expense" | "transfer";
@@ -157,9 +163,9 @@ export async function gotoHome(page: Page) {
 }
 
 export async function noHorizontalOverflow(page: Page) {
-  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }));
+  // Mobile emulation widens the layout viewport (and innerWidth) to fit overflowing content, so compare
+  // against the configured viewport instead.
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const innerWidth = page.viewportSize()!.width;
   expect(scrollWidth, `scrollWidth ${scrollWidth} > innerWidth ${innerWidth}`).toBeLessThanOrEqual(innerWidth);
 }

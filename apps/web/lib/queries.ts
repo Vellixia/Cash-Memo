@@ -1,28 +1,40 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   archiveSource,
   changeEmail,
   changePassword,
   completePasswordReset,
+  confirmAttachment,
   confirmEmail,
   createCategory,
   createMemo,
+  createPlan,
   createSource,
   deleteAccount,
+  deleteAttachment,
   deleteCategory,
   deleteMemo,
+  deletePlan,
+  getAttachmentUrl,
   getCategories,
   getJob,
   getMe,
   getMemos,
+  getPlans,
   getSources,
   getSummary,
+  getTrend,
   login,
   logout,
   requestPasswordReset,
+  restoreMemo,
+  searchCursor,
+  searchMemos,
+  SEARCH_PAGE_SIZE,
   signup,
+  startAttachmentUpload,
   startCommit,
   startExport,
   startImportUpload,
@@ -31,14 +43,28 @@ import {
   updateMe,
   updateMemo,
   updateSource,
+  type AttachmentContentType,
   type CategoryInput,
   type CommitResult,
   type ExportResult,
   type Job,
   type Mapping,
   type MemoInput,
+  type PlanInput,
   type SourceInput,
   type ValidateResult,
+} from "@/lib/api";
+import {
+  createBudget,
+  createRecurring,
+  deleteBudget,
+  deleteRecurring,
+  getBudgets,
+  getRecurring,
+  getUpcoming,
+  updateBudget,
+  updateRecurring,
+  type RecurringInput,
 } from "@/lib/api";
 import { guessCurrency } from "@/lib/money";
 
@@ -91,6 +117,7 @@ function useInvalidateMoney() {
     qc.invalidateQueries({ queryKey: ["summary"] });
     // Memos move money between sources, so their balances may have changed too.
     qc.invalidateQueries({ queryKey: ["sources"] });
+    qc.invalidateQueries({ queryKey: ["budgets"] });
   };
 }
 
@@ -110,6 +137,24 @@ export function useUpdateMemo() {
 export function useDeleteMemo() {
   const invalidate = useInvalidateMoney();
   return useMutation({ mutationFn: (id: string) => deleteMemo(id), onSuccess: invalidate });
+}
+
+/** Undoes a soft delete (see `useDeleteMemo`). */
+export function useRestoreMemo() {
+  const invalidate = useInvalidateMoney();
+  return useMutation({ mutationFn: (id: string) => restoreMemo(id), onSuccess: invalidate });
+}
+
+/** Full-text-ish search across all months. Disabled until `q` (trimmed) is at least 2 characters. */
+export function useSearchMemos(q: string) {
+  const query = q.trim();
+  return useInfiniteQuery({
+    queryKey: ["search", query],
+    queryFn: ({ pageParam }: { pageParam?: string }) => searchMemos(query, pageParam),
+    enabled: query.length >= 2,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => (lastPage.length === SEARCH_PAGE_SIZE ? searchCursor(lastPage[lastPage.length - 1]) : undefined),
+  });
 }
 
 export function useCategories() {
@@ -197,6 +242,33 @@ export function useArchiveSource() {
   });
 }
 
+// --- installment plans -------------------------------------------------------
+
+export function usePlans() {
+  return useQuery({ queryKey: ["plans"], queryFn: getPlans });
+}
+
+/** A plan's memos affect balances, summaries and the ledger, on top of the plan list itself. */
+function useInvalidatePlans() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    qc.invalidateQueries({ queryKey: ["memos"] });
+    qc.invalidateQueries({ queryKey: ["summary"] });
+    qc.invalidateQueries({ queryKey: ["sources"] });
+  };
+}
+
+export function useCreatePlan() {
+  const invalidate = useInvalidatePlans();
+  return useMutation({ mutationFn: (input: PlanInput) => createPlan(input), onSuccess: invalidate });
+}
+
+export function useDeletePlan() {
+  const invalidate = useInvalidatePlans();
+  return useMutation({ mutationFn: (id: string) => deletePlan(id), onSuccess: invalidate });
+}
+
 // --- account: password reset, change password/email, delete ---------------
 
 export function useRequestPasswordReset() {
@@ -271,3 +343,98 @@ export function useInvalidateAfterImport() {
 }
 
 export type { CommitResult, ExportResult, Job, Mapping, ValidateResult };
+
+// --- memo attachments -------------------------------------------------------
+
+export function useStartAttachmentUpload() {
+  return useMutation({
+    mutationFn: ({ memoId, contentType }: { memoId: string; contentType: AttachmentContentType }) =>
+      startAttachmentUpload(memoId, contentType),
+  });
+}
+
+export function useConfirmAttachment() {
+  const invalidate = useInvalidateMoney();
+  return useMutation({
+    mutationFn: ({ memoId, key }: { memoId: string; key: string }) => confirmAttachment(memoId, key),
+    onSuccess: invalidate,
+  });
+}
+
+/** The attachment's presigned view URL; `enabled` so it's only fetched once there's one to show. */
+export function useAttachmentUrl(memoId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["attachment", memoId],
+    queryFn: () => getAttachmentUrl(memoId!),
+    enabled: !!memoId && enabled,
+  });
+}
+
+export function useDeleteAttachment() {
+  const invalidate = useInvalidateMoney();
+  return useMutation({ mutationFn: (memoId: string) => deleteAttachment(memoId), onSuccess: invalidate });
+}
+
+// --- reports -----------------------------------------------------------------
+
+export function useTrend(months: 6 | 12) {
+  return useQuery({ queryKey: ["reports-trend", months], queryFn: () => getTrend(months), placeholderData: keepPreviousData });
+}
+
+
+// --- recurring memos & budgets ----------------------------------------------
+
+export function useRecurring() {
+  return useQuery({ queryKey: ["recurring"], queryFn: getRecurring });
+}
+
+export function useUpcoming(month: string) {
+  return useQuery({ queryKey: ["upcoming", month], queryFn: () => getUpcoming(month), placeholderData: keepPreviousData });
+}
+
+/** A rule write may create memos at once (anything already due), so money queries refresh too. */
+function useInvalidateRecurring() {
+  const qc = useQueryClient();
+  const money = useInvalidateMoney();
+  return () => {
+    money();
+    qc.invalidateQueries({ queryKey: ["recurring"] });
+    qc.invalidateQueries({ queryKey: ["upcoming"] });
+  };
+}
+
+export function useCreateRecurring() {
+  const invalidate = useInvalidateRecurring();
+  return useMutation({ mutationFn: (input: RecurringInput) => createRecurring(input), onSuccess: invalidate });
+}
+
+export function useUpdateRecurring() {
+  const invalidate = useInvalidateRecurring();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: RecurringInput }) => updateRecurring(id, patch),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteRecurring() {
+  const invalidate = useInvalidateRecurring();
+  return useMutation({ mutationFn: (id: string) => deleteRecurring(id), onSuccess: invalidate });
+}
+
+export function useBudgets(month: string) {
+  return useQuery({ queryKey: ["budgets", month], queryFn: () => getBudgets(month), placeholderData: keepPreviousData });
+}
+
+export function useSaveBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { id?: string; category_id: string; currency: string; limit_minor: number }) =>
+      b.id ? updateBudget(b.id, b.limit_minor) : createBudget(b),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+  });
+}
+
+export function useDeleteBudget() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => deleteBudget(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }) });
+}

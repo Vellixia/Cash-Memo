@@ -132,7 +132,7 @@ test.describe("account menu (desktop)", () => {
 
 test("theme choice persists across reloads", async ({ page, user }) => {
   void user;
-  await page.goto("/account");
+  await page.goto("/settings");
   await page.getByRole("radio", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await page.reload();
@@ -446,11 +446,11 @@ test.describe("mobile", () => {
     await expect(tabs).toBeVisible();
     await expect(page.getByRole("button", { name: "New memo" })).toBeHidden();
 
-    await tabs.getByRole("link", { name: "Categories" }).click();
-    await expect(page).toHaveURL(/\/categories$/);
-    await expect(tabs.getByRole("link", { name: "Categories" })).toHaveAttribute("aria-current", "page");
-    await tabs.getByRole("link", { name: "Account" }).click();
-    await expect(page).toHaveURL(/\/account$/);
+    await tabs.getByRole("link", { name: "Sources" }).click();
+    await expect(page).toHaveURL(/\/sources$/);
+    await expect(tabs.getByRole("link", { name: "Sources" })).toHaveAttribute("aria-current", "page");
+    await tabs.getByRole("link", { name: "Settings" }).click();
+    await expect(page).toHaveURL(/\/settings$/);
     await tabs.getByRole("link", { name: "Home" }).click();
     await expect(page).toHaveURL(/\/$/);
 
@@ -474,7 +474,7 @@ test.describe("mobile", () => {
     void user;
     await gotoHome(page);
     const tabs = page.getByRole("navigation", { name: "Tabs" });
-    for (const name of ["Home", "Categories", "Sources", "Account"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
+    for (const name of ["Home", "Reports", "Sources", "Settings"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
     const fab = await box(tabs.getByRole("button", { name: "Add memo" }));
     const vp = page.viewportSize()!;
     expect(Math.abs(fab.x + fab.width / 2 - vp.width / 2)).toBeLessThanOrEqual(1);

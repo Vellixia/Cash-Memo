@@ -9,7 +9,7 @@ domain = { path = "../../crates/domain" }
 telemetry = { path = "../../crates/telemetry" }
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
-sea-orm = { version = "2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+sea-orm = { version = "2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid", "with-json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -18,6 +18,9 @@ password-auth = "1"
 rand = "0.9"
 sha2 = "0.10"
 tower-http = { version = "0.6", features = ["trace"] }
+# Confirming an attachment upload needs one HEAD request (existence + size); everything else
+# about file storage stays presigned-URL only. Same crate/features apps/worker already uses.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 tracing = "0.1"
 dotenvy = "0.15.7"
 sentry = { version = "0.49", default-features = false, features = ["tower", "tower-http"] }

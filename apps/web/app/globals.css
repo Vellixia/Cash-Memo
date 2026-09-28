@@ -122,67 +122,155 @@
 }
 
 /*
- * Accents: only --primary / --primary-foreground / --ring change. Income/expense stay semantic.
- * Contrast (WCAG relative-luminance formula) of foreground on primary, both >= 4.5:1:
- *   ledger  light #1f7a5c / #ffffff = 5.25:1   dark #4cc49a / #0d2219 = 7.67:1
- *   ocean   light #1c6ea4 / #ffffff = 5.50:1   dark #5aa9e6 / #08202f = 6.56:1
- *   plum    light #74408f / #ffffff = 7.31:1   dark #c496e8 / #2a1236 = 7.17:1
- *   amber   light #a15c00 / #ffffff = 5.19:1   dark #e8b64a / #2e1c00 = 8.75:1
- *   rose    light #b23a5e / #ffffff = 5.74:1   dark #f091ae / #3a0f1e = 7.39:1
- *   graphite light #4a473f / #ffffff = 9.27:1  dark #c9c4ba / #211f1a = 9.48:1
+ * Accents: a coherent palette per shadcn theming, not just primary/ring — background, card/popover,
+ * muted/secondary, accent, border/input all get a small, fixed tint toward the accent's primary
+ * (kept subtle so the "calm paper ledger" feel survives); foreground/muted-foreground/destructive and
+ * the income/expense/category tokens are semantic and never move. Values match lib/theme-palette.ts,
+ * the source these were derived from (its test verifies contrast — see that file's own comment).
+ * Contrast (WCAG relative-luminance formula), both >= 4.5:1:
+ *   foreground/background: ~15.4-15.7:1 in light, ~15.4-15.6:1 in dark for every accent (unaffected by the tint)
+ *   muted-foreground/background: ~5.1:1 light, ~6.6-6.7:1 dark for every accent
+ *   primary-foreground/primary:
+ *     ledger  light #1f7a5c / #ffffff = 5.25:1   dark #4cc49a / #0d2219 = 7.67:1
+ *     ocean   light #1c6ea4 / #ffffff = 5.50:1   dark #5aa9e6 / #08202f = 6.56:1
+ *     plum    light #74408f / #ffffff = 7.31:1   dark #c496e8 / #2a1236 = 7.17:1
+ *     amber   light #a15c00 / #ffffff = 5.19:1   dark #e8b64a / #2e1c00 = 8.75:1
+ *     rose    light #b23a5e / #ffffff = 5.74:1   dark #f091ae / #3a0f1e = 7.39:1
+ *     graphite light #4a473f / #ffffff = 9.27:1  dark #c9c4ba / #211f1a = 9.48:1
  * :root[data-accent] beats bare :root (extra attribute selector); :root.dark[data-accent] beats bare .dark likewise.
  */
 :root[data-accent="ocean"] {
+  --background: #f4f5f2;
+  --card: #fafcfd;
+  --popover: #fafcfd;
+  --muted: #e5e7e4;
+  --secondary: #e5e7e4;
+  --accent: #dde2e1;
+  --border: #d4d8d6;
+  --input: #c6cbc9;
   --primary: #1c6ea4;
   --primary-foreground: #ffffff;
   --ring: #1c6ea4;
 }
 :root.dark[data-accent="ocean"] {
+  --background: #171817;
+  --card: #1f201e;
+  --popover: #1f201e;
+  --muted: #2a2d2b;
+  --secondary: #2a2d2b;
+  --accent: #2c3233;
+  --border: #32383b;
+  --input: #3e4548;
   --primary: #5aa9e6;
   --primary-foreground: #08202f;
   --ring: #5aa9e6;
 }
 :root[data-accent="plum"] {
+  --background: #f7f3f1;
+  --card: #fcfbfd;
+  --popover: #fcfbfd;
+  --muted: #eae4e3;
+  --secondary: #eae4e3;
+  --accent: #e5dedf;
+  --border: #dcd4d4;
+  --input: #d0c6c6;
   --primary: #74408f;
   --primary-foreground: #ffffff;
   --ring: #74408f;
 }
 :root.dark[data-accent="plum"] {
+  --background: #191717;
+  --card: #211f1e;
+  --popover: #211f1e;
+  --muted: #302c2b;
+  --secondary: #302c2b;
+  --accent: #373033;
+  --border: #3d373b;
+  --input: #4b4248;
   --primary: #c496e8;
   --primary-foreground: #2a1236;
   --ring: #c496e8;
 }
 :root[data-accent="amber"] {
+  --background: #f8f4ee;
+  --card: #fdfcfa;
+  --popover: #fdfcfa;
+  --muted: #ede6da;
+  --secondary: #ede6da;
+  --accent: #eae0d1;
+  --border: #e1d6c6;
+  --input: #d6c9b5;
   --primary: #a15c00;
   --primary-foreground: #ffffff;
   --ring: #a15c00;
 }
 :root.dark[data-accent="amber"] {
+  --background: #1a1813;
+  --card: #22201b;
+  --popover: #22201b;
+  --muted: #332e22;
+  --secondary: #332e22;
+  --accent: #3a3423;
+  --border: #413a2b;
+  --input: #4f4635;
   --primary: #e8b64a;
   --primary-foreground: #2e1c00;
   --ring: #e8b64a;
 }
 :root[data-accent="rose"] {
+  --background: #f8f3f0;
+  --card: #fdfbfc;
+  --popover: #fdfbfc;
+  --muted: #eee4e0;
+  --secondary: #eee4e0;
+  --accent: #ecddda;
+  --border: #e3d3cf;
+  --input: #d8c5c1;
   --primary: #b23a5e;
   --primary-foreground: #ffffff;
   --ring: #b23a5e;
 }
 :root.dark[data-accent="rose"] {
+  --background: #1a1716;
+  --card: #221f1d;
+  --popover: #221f1d;
+  --muted: #332b28;
+  --secondary: #332b28;
+  --accent: #3b302d;
+  --border: #413635;
+  --input: #504241;
   --primary: #f091ae;
   --primary-foreground: #3a0f1e;
   --ring: #f091ae;
 }
 :root[data-accent="graphite"] {
+  --background: #f6f4ef;
+  --card: #fbfbfb;
+  --popover: #fbfbfb;
+  --muted: #e8e5de;
+  --secondary: #e8e5de;
+  --accent: #e1ded7;
+  --border: #d8d4cc;
+  --input: #cbc7bd;
   --primary: #4a473f;
   --primary-foreground: #ffffff;
   --ring: #4a473f;
 }
 :root.dark[data-accent="graphite"] {
+  --background: #1a1816;
+  --card: #21201d;
+  --popover: #21201d;
+  --muted: #312f28;
+  --secondary: #312f28;
+  --accent: #37352e;
+  --border: #3e3b37;
+  --input: #4b4842;
   --primary: #c9c4ba;
   --primary-foreground: #211f1a;
   --ring: #c9c4ba;
 }
-/* "ledger" is the default (set above in :root/.dark) and needs no override block. */
+/* "ledger" is the default (set above in :root/.dark) and needs no override block: its primary already
+ * equals the income color, so the base "calm paper ledger" palette is already its own coherent theme. */
 
 /* Font pairs: "classic" is the default (set above in :root) and needs no override block. */
 :root[data-font="modern"] {
@@ -199,6 +287,17 @@
   --app-sans: ui-sans-serif, system-ui, sans-serif;
   --app-serif: ui-serif, Georgia, serif;
   --app-num: ui-serif, Georgia, serif;
+}
+:root[data-font="rounded"] {
+  --app-sans: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
+  --app-serif: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
+  --app-num: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
+}
+/* System everywhere except money, which sets in mono for an at-a-glance ledger look. */
+:root[data-font="mono"] {
+  --app-sans: ui-sans-serif, system-ui, sans-serif;
+  --app-serif: ui-serif, Georgia, serif;
+  --app-num: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 /* Text size: "default" is the base html font-size; "large" bumps it 12.5%. */

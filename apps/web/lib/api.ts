@@ -1,4 +1,6 @@
-export type User = { id: string; email: string; default_currency: string };
+/** Appearance sync across devices: partial and server-validated, so any field may be absent. */
+export type Preferences = { theme?: string; accent?: string; font?: string; size?: string };
+export type User = { id: string; email: string; default_currency: string; preferences: Preferences };
 export type Direction = "income" | "expense";
 export type MemoDirection = Direction | "transfer";
 export type Memo = {
@@ -11,8 +13,11 @@ export type Memo = {
   source_id: string | null;
   to_source_id: string | null;
   note: string | null;
+  has_attachment: boolean;
   created_at: string;
   updated_at: string;
+  /** The recurring rule that created (or was made from) this memo. */
+  recurring_rule_id?: string | null;
 };
 export type Category = { id: string; name: string; direction: Direction; emoji: string | null };
 export type SourceKind = "cash" | "bank" | "ewallet" | "credit" | "paylater" | "other";
@@ -24,6 +29,10 @@ export type Source = {
   track_balance: boolean;
   currency: string | null;
   opening_minor: number;
+  /** Credit/paylater only. */
+  credit_limit_minor: number | null;
+  statement_day: number | null;
+  due_day: number | null;
   archived_at: string | null;
   /** Only for sources that track a balance. */
   balance_minor: number | null;
@@ -104,6 +113,23 @@ export function deleteMemo(id: string): Promise<void> {
   return api<void>(`/memos/${id}`, { method: "DELETE" });
 }
 
+export function restoreMemo(id: string): Promise<Memo> {
+  return api<Memo>(`/memos/${id}/restore`, { method: "POST" });
+}
+
+/** `before` is the previous page's last row, "<occurred_at>,<id>" (see `searchCursor`). */
+export function searchMemos(q: string, before?: string): Promise<Memo[]> {
+  const params = new URLSearchParams({ q });
+  if (before) params.set("before", before);
+  return api<Memo[]>(`/search?${params}`);
+}
+
+export const SEARCH_PAGE_SIZE = 50;
+
+export function searchCursor(m: Memo): string {
+  return `${m.occurred_at},${m.id}`;
+}
+
 // --- categories -----------------------------------------------------------
 
 export function getCategories(): Promise<Category[]> {
@@ -138,6 +164,9 @@ export type SourceInput = {
   track_balance?: boolean;
   currency?: string | null;
   opening_minor?: number;
+  credit_limit_minor?: number | null;
+  statement_day?: number | null;
+  due_day?: number | null;
 };
 
 export function createSource(input: SourceInput): Promise<Source> {
@@ -154,6 +183,49 @@ export function archiveSource(id: string): Promise<void> {
   return api<void>(`/sources/${id}`, { method: "DELETE" });
 }
 
+// --- installment plans -------------------------------------------------------
+
+export type InstallmentPlan = {
+  id: string;
+  source_id: string;
+  category_id: string | null;
+  note: string | null;
+  currency: string;
+  principal_minor: number;
+  fee_minor: number;
+  months: number;
+  first_date: string;
+  created_at: string;
+  paid: number;
+  remaining: number;
+};
+
+export type PlanInput = {
+  source_id: string;
+  category_id?: string | null;
+  note?: string | null;
+  currency: string;
+  principal_minor: number;
+  fee_minor?: number;
+  months: number;
+  /** "YYYY-MM-DD" */
+  first_date: string;
+  offset: number;
+};
+
+export function getPlans(): Promise<InstallmentPlan[]> {
+  return api<InstallmentPlan[]>("/installments");
+}
+
+export function createPlan(input: PlanInput): Promise<InstallmentPlan> {
+  return api<InstallmentPlan>("/installments", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Soft-deletes the plan's not-yet-due memos; past ones stay. */
+export function deletePlan(id: string): Promise<void> {
+  return api<void>(`/installments/${id}`, { method: "DELETE" });
+}
+
 // --- auth -----------------------------------------------------------------
 
 export function getMe(): Promise<User> {
@@ -168,7 +240,7 @@ export function signup(email: string, password: string, default_currency?: strin
   return api<User>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, default_currency }) });
 }
 
-export function updateMe(patch: { default_currency: string }): Promise<User> {
+export function updateMe(patch: { default_currency?: string; preferences?: Preferences }): Promise<User> {
   return api<User>("/auth/me", { method: "PATCH", body: JSON.stringify(patch) });
 }
 
@@ -270,4 +342,121 @@ export type Job<R = ExportResult | ValidateResult | CommitResult | undefined> = 
 
 export function getJob<R = ExportResult | ValidateResult | CommitResult | undefined>(id: string): Promise<Job<R>> {
   return api(`/jobs/${id}`);
+}
+
+// --- memo attachments -------------------------------------------------------
+
+export type AttachmentContentType = "image/jpeg" | "image/webp";
+
+export function startAttachmentUpload(memoId: string, contentType: AttachmentContentType): Promise<{ upload_url: string; key: string }> {
+  return api(`/memos/${memoId}/attachment`, { method: "POST", body: JSON.stringify({ content_type: contentType }) });
+}
+
+/** PUTs the processed image straight to the presigned URL: same pattern as `uploadImportFile`. */
+export async function uploadAttachmentFile(uploadUrl: string, blob: Blob, contentType: AttachmentContentType): Promise<void> {
+  const res = await fetch(uploadUrl, { method: "PUT", body: blob, headers: { "Content-Type": contentType } });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+}
+
+export function confirmAttachment(memoId: string, key: string): Promise<{ has_attachment: boolean }> {
+  return api(`/memos/${memoId}/attachment`, { method: "PUT", body: JSON.stringify({ key }) });
+}
+
+export function getAttachmentUrl(memoId: string): Promise<{ url: string }> {
+  return api(`/memos/${memoId}/attachment`);
+}
+
+export function deleteAttachment(memoId: string): Promise<void> {
+  return api(`/memos/${memoId}/attachment`, { method: "DELETE" });
+}
+
+// --- reports -----------------------------------------------------------------
+
+export type TrendTotal = { month: string; currency: string; direction: MemoDirection; total_minor: number };
+export type TrendCategoryTotal = { month: string; category_id: string | null; currency: string; total_minor: number };
+export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[] };
+
+export function getTrend(months: 6 | 12): Promise<Trend> {
+  const params = new URLSearchParams({ months: String(months), offset: String(utcOffsetMinutes()) });
+  return api<Trend>(`/reports/trend?${params}`);
+}
+
+
+// --- recurring memos & budgets -------------------------------------------------
+
+export type Cadence = "weekly" | "monthly" | "yearly";
+export type RecurringRule = {
+  id: string;
+  direction: MemoDirection;
+  amount_minor: number;
+  currency: string;
+  category_id: string | null;
+  source_id: string | null;
+  to_source_id: string | null;
+  note: string | null;
+  cadence: Cadence;
+  anchor_day: number;
+  /** Local date "YYYY-MM-DD" of the next occurrence. */
+  next_date: string;
+  offset_minutes: number;
+  paused_at: string | null;
+  created_at: string;
+};
+/** An occurrence still to come this month (not a memo yet, not in totals). */
+export type Upcoming = RecurringRule & { date: string; occurred_at: string };
+/** Create from `memo_id` (it becomes the first occurrence) or from memo fields + `next_date`. PATCH is partial. */
+export type RecurringInput = Partial<Omit<MemoInput, "occurred_at">> & {
+  memo_id?: string;
+  cadence?: Cadence;
+  next_date?: string;
+  paused?: boolean;
+};
+
+export function getRecurring(): Promise<RecurringRule[]> {
+  return api<RecurringRule[]>("/recurring");
+}
+
+export function getUpcoming(month: string): Promise<Upcoming[]> {
+  const params = new URLSearchParams({ month, offset: String(utcOffsetMinutes()) });
+  return api<Upcoming[]>(`/recurring/upcoming?${params}`);
+}
+
+export function createRecurring(input: RecurringInput): Promise<RecurringRule> {
+  return api<RecurringRule>("/recurring", { method: "POST", body: JSON.stringify({ ...input, offset_minutes: utcOffsetMinutes() }) });
+}
+
+export function updateRecurring(id: string, patch: RecurringInput): Promise<RecurringRule> {
+  return api<RecurringRule>(`/recurring/${id}`, { method: "PATCH", body: JSON.stringify({ ...patch, offset_minutes: utcOffsetMinutes() }) });
+}
+
+/** Stops the rule; memos it already created stay. */
+export function deleteRecurring(id: string): Promise<void> {
+  return api<void>(`/recurring/${id}`, { method: "DELETE" });
+}
+
+export type Budget = {
+  id: string;
+  category_id: string;
+  currency: string;
+  limit_minor: number;
+  spent_minor: number;
+  /** Spent plus recurring expenses still to come this month. */
+  projected_minor: number;
+};
+
+export function getBudgets(month: string): Promise<Budget[]> {
+  const params = new URLSearchParams({ month, offset: String(utcOffsetMinutes()) });
+  return api<Budget[]>(`/budgets?${params}`);
+}
+
+export function createBudget(input: { category_id: string; currency: string; limit_minor: number }): Promise<Budget> {
+  return api<Budget>("/budgets", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBudget(id: string, limit_minor: number): Promise<Budget> {
+  return api<Budget>(`/budgets/${id}`, { method: "PATCH", body: JSON.stringify({ limit_minor }) });
+}
+
+export function deleteBudget(id: string): Promise<void> {
+  return api<void>(`/budgets/${id}`, { method: "DELETE" });
 }

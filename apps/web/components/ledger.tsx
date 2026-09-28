@@ -1,13 +1,14 @@
 "use client";
 
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Plus, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Paperclip, Plus, Repeat, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Segmented } from "@/components/segmented";
 import { card } from "@/components/summary";
-import type { Category, Direction, Memo, Source } from "@/lib/api";
+import type { Category, Direction, Memo, Source, Upcoming } from "@/lib/api";
 import { dayLabel, groupByDay, signedAmount, timeLabel } from "@/lib/format";
 import { formatMoney, signedMoney } from "@/lib/money";
 import { STARTER_CATEGORIES, useAddStarterSet } from "@/lib/queries";
@@ -29,6 +30,7 @@ export function Ledger({
   onSource,
   onSelect,
   onAdd,
+  upcoming,
 }: {
   memos: Memo[] | undefined;
   categories: Category[];
@@ -41,12 +43,22 @@ export function Ledger({
   onSource: (id: string | undefined) => void;
   onSelect: (memo: Memo) => void;
   onAdd: () => void;
+  /** Recurring occurrences still to come this month: shown muted, never in totals. */
+  upcoming?: Upcoming[];
 }) {
   const byId = new Map(categories.map((c) => [c.id, c]));
   const sourceById = new Map(sources.map((s) => [s.id, s]));
   const options = categories.filter((c) => direction === "all" || c.direction === direction);
   const shown = memos?.filter((m) => direction === "all" || m.direction === direction);
   const filtered = direction !== "all" || !!categoryId || !!sourceId;
+  const upcomingShown = shown
+    ? (upcoming ?? []).filter(
+        (u) =>
+          (direction === "all" || u.direction === direction) &&
+          (!categoryId || u.category_id === categoryId) &&
+          (!sourceId || u.source_id === sourceId || u.to_source_id === sourceId),
+      )
+    : [];
 
   return (
     <section aria-labelledby="ledger-title" className="space-y-4">
@@ -117,6 +129,40 @@ export function Ledger({
         </div>
       </div>
 
+      {upcomingShown.length > 0 && (
+        <div data-testid="upcoming">
+          <div className="flex items-baseline justify-between gap-3 px-2 pb-2">
+            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Upcoming</h3>
+            <span className="text-xs text-muted-foreground">Not in totals yet</span>
+          </div>
+          <ul className={cn(card, "divide-y divide-border/70 overflow-hidden rounded-2xl border-dashed bg-card/60 shadow-none")}>
+            {upcomingShown.map((u) => {
+              const c = u.category_id ? byId.get(u.category_id) : undefined;
+              const title = u.note || c?.name || (u.direction === "transfer" ? "Transfer" : "Untitled");
+              return (
+                <li key={`${u.id}-${u.date}`}>
+                  <Link
+                    href="/recurring"
+                    data-testid="upcoming-row"
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-muted-foreground transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/60"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-lg opacity-80" aria-hidden>
+                      {c?.emoji ?? <Repeat className="size-4.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.95rem] font-medium">{title}</span>
+                      <span className="block truncate text-xs">Upcoming · {dayLabel(u.date)}</span>
+                    </span>
+                    <span className="num shrink-0 text-lg">
+                      {u.direction === "transfer" ? formatMoney(u.amount_minor, u.currency) : signedMoney(signedAmount(u), u.currency)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {!shown ? (
         <div className={cn(card, "space-y-3 p-4")}>
           {[0, 1, 2].map((i) => (
@@ -154,62 +200,78 @@ export function Ledger({
                 </span>
               </div>
               <ul className={cn(card, "divide-y divide-border/70 overflow-hidden rounded-2xl")}>
-                {g.memos.map((m) => {
-                  const isTransfer = m.direction === "transfer";
-                  const c = m.category_id ? byId.get(m.category_id) : undefined;
-                  const income = m.direction === "income";
-                  const fromSource = m.source_id ? sourceById.get(m.source_id) : undefined;
-                  const toSource = m.to_source_id ? sourceById.get(m.to_source_id) : undefined;
-                  // Legacy memos with no source: an expense reads "Unspecified"; income just omits it.
-                  const sourcePart = m.source_id
-                    ? (sourceById.get(m.source_id)?.name ?? "Unspecified")
-                    : m.direction === "expense"
-                      ? "Unspecified"
-                      : null;
-                  const title = isTransfer ? m.note || "Transfer" : m.note || c?.name || "Untitled";
-                  const subtitle = isTransfer
-                    ? `${fromSource?.name ?? "Unspecified"} → ${toSource?.name ?? "Unspecified"} · ${timeLabel(m.occurred_at)}`
-                    : [m.note ? c?.name : null, sourcePart, timeLabel(m.occurred_at)].filter(Boolean).join(" · ");
-                  return (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        data-testid="memo-row"
-                        onClick={() => onSelect(m)}
-                        className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/60"
-                      >
-                        <span
-                          className={cn(
-                            "flex size-10 shrink-0 items-center justify-center rounded-2xl text-lg",
-                            isTransfer ? "bg-muted text-muted-foreground" : income ? "bg-income-soft text-income" : "bg-expense-soft text-expense",
-                          )}
-                          aria-hidden
-                        >
-                          {isTransfer ? (
-                            <ArrowRightLeft className="size-4.5" />
-                          ) : (
-                            (c?.emoji ?? (income ? <ArrowDownLeft className="size-4.5" /> : <ArrowUpRight className="size-4.5" />))
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[0.95rem] font-medium">{title}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
-                        </span>
-                        <span
-                          className={cn("num shrink-0 text-lg", isTransfer ? "text-muted-foreground" : income ? "text-income" : "text-expense")}
-                        >
-                          {isTransfer ? formatMoney(m.amount_minor, m.currency) : signedMoney(signedAmount(m), m.currency)}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
+                {g.memos.map((m) => (
+                  <MemoRow key={m.id} memo={m} categoryById={byId} sourceById={sourceById} onSelect={onSelect} />
+                ))}
               </ul>
             </div>
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+/** A single ledger row. Shared with the search page so results look exactly like the ledger. */
+export function MemoRow({
+  memo: m,
+  categoryById,
+  sourceById,
+  onSelect,
+}: {
+  memo: Memo;
+  categoryById: Map<string, Category>;
+  sourceById: Map<string, Source>;
+  onSelect: (memo: Memo) => void;
+}) {
+  const isTransfer = m.direction === "transfer";
+  const c = m.category_id ? categoryById.get(m.category_id) : undefined;
+  const income = m.direction === "income";
+  const fromSource = m.source_id ? sourceById.get(m.source_id) : undefined;
+  const toSource = m.to_source_id ? sourceById.get(m.to_source_id) : undefined;
+  // Legacy memos with no source: an expense reads "Unspecified"; income just omits it.
+  const sourcePart = m.source_id
+    ? (sourceById.get(m.source_id)?.name ?? "Unspecified")
+    : m.direction === "expense"
+      ? "Unspecified"
+      : null;
+  const title = isTransfer ? m.note || "Transfer" : m.note || c?.name || "Untitled";
+  const subtitle = isTransfer
+    ? `${fromSource?.name ?? "Unspecified"} → ${toSource?.name ?? "Unspecified"} · ${timeLabel(m.occurred_at)}`
+    : [m.note ? c?.name : null, sourcePart, timeLabel(m.occurred_at)].filter(Boolean).join(" · ");
+  return (
+    <li>
+      <button
+        type="button"
+        data-testid="memo-row"
+        onClick={() => onSelect(m)}
+        className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/60"
+      >
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-2xl text-lg",
+            isTransfer ? "bg-muted text-muted-foreground" : income ? "bg-income-soft text-income" : "bg-expense-soft text-expense",
+          )}
+          aria-hidden
+        >
+          {isTransfer ? (
+            <ArrowRightLeft className="size-4.5" />
+          ) : (
+            (c?.emoji ?? (income ? <ArrowDownLeft className="size-4.5" /> : <ArrowUpRight className="size-4.5" />))
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1 truncate text-[0.95rem] font-medium">
+            <span className="truncate">{title}</span>
+            {m.has_attachment && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label="Has an attachment" />}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
+        </span>
+        <span className={cn("num shrink-0 text-lg", isTransfer ? "text-muted-foreground" : income ? "text-income" : "text-expense")}>
+          {isTransfer ? formatMoney(m.amount_minor, m.currency) : signedMoney(signedAmount(m), m.currency)}
+        </span>
+      </button>
+    </li>
   );
 }
 

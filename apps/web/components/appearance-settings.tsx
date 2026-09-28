@@ -29,14 +29,26 @@ const FONT_LABEL: Record<Font, string> = {
   modern: "Modern",
   readable: "Readable",
   system: "System",
+  rounded: "Rounded",
+  mono: "Mono numbers",
 };
 
-/** Preview family for each pair, independent of the page's own active --app-* vars. */
-const FONT_PREVIEW: Record<Font, string> = {
+/** Preview families for each pair, independent of the page's own active --app-* vars (mirrors globals.css). */
+const FONT_HEADING_PREVIEW: Record<Font, string> = {
   classic: "var(--font-fraunces), ui-serif, Georgia, serif",
   modern: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
   readable: "var(--font-atkinson), ui-sans-serif, system-ui, sans-serif",
   system: "ui-sans-serif, system-ui, sans-serif",
+  rounded: "var(--font-quicksand), ui-sans-serif, system-ui, sans-serif",
+  mono: "ui-sans-serif, system-ui, sans-serif",
+};
+const FONT_NUM_PREVIEW: Record<Font, string> = {
+  classic: "var(--font-fraunces), ui-serif, Georgia, serif",
+  modern: "var(--font-geist-mono), ui-monospace, monospace",
+  readable: "var(--font-atkinson), ui-serif, Georgia, serif",
+  system: "ui-serif, Georgia, serif",
+  rounded: "var(--font-quicksand), ui-sans-serif, system-ui, sans-serif",
+  mono: "var(--font-geist-mono), ui-monospace, monospace",
 };
 
 /** Moves roving focus within a radiogroup by arrow key, wrapping around. */
@@ -98,12 +110,20 @@ function FontPicker({ font, setFont }: { font: Font; setFont: (f: Font) => void 
             tabIndex={active ? 0 : -1}
             onClick={() => setFont(f)}
             className={cn(
-              "rounded-xl border px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/40",
-              active ? "border-primary bg-primary/10 text-foreground" : "border-input bg-card text-muted-foreground hover:bg-muted",
+              "space-y-1 rounded-xl border px-3 py-2 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/40",
+              active ? "border-primary bg-primary/10" : "border-input bg-card hover:bg-muted",
             )}
-            style={{ fontFamily: FONT_PREVIEW[f] }}
           >
-            {FONT_LABEL[f]}
+            <span className={cn("block text-xs font-medium", active ? "text-foreground" : "text-muted-foreground")}>{FONT_LABEL[f]}</span>
+            {/* The preview itself: a short heading plus a money value, each in that pair's own fonts. */}
+            <span className="flex items-baseline gap-2 overflow-hidden">
+              <span className="truncate text-base" style={{ fontFamily: FONT_HEADING_PREVIEW[f] }}>
+                Cash Memo
+              </span>
+              <span className="shrink-0 text-sm tabular-nums text-muted-foreground" style={{ fontFamily: FONT_NUM_PREVIEW[f] }}>
+                $1,234.56
+              </span>
+            </span>
           </button>
         );
       })}
@@ -111,7 +131,7 @@ function FontPicker({ font, setFont }: { font: Font; setFont: (f: Font) => void 
   );
 }
 
-/** Accent, font pair and text size — curated presets stored per device (see lib/appearance.ts). */
+/** Accent, font pair and text size — curated presets, saved locally and synced to the account (lib/appearance.ts). */
 export function AppearanceSettings() {
   const { accent, setAccent, font, setFont, size, setSize } = useAppearance();
   return (
