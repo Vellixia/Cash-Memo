@@ -67,7 +67,7 @@ test("sources: paying with a card, a transfer, balances, filtering and archiving
   await expect(bcaRow).toContainText("$965.00");
   await bcaRow.getByRole("button", { name: "Archive BCA" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Archive source" }).click();
-  await expect(page.getByText("Archived “BCA”")).toBeVisible();
+  await expect(page.getByText("Source archived")).toBeVisible();
   await expect(page.getByTestId("source-row").filter({ hasText: "BCA" })).toHaveCount(0);
   const archived = page.getByRole("button", { name: "Archived (1)" });
   await expect(archived).toBeVisible();

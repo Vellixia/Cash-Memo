@@ -29,7 +29,7 @@ import { AmountField } from "@/components/amount-field";
 import type { Direction, Memo, MemoDirection, Source } from "@/lib/api";
 import { fitAmount, fromMinor, toMinor } from "@/lib/money";
 import { toDatetimeLocal } from "@/lib/format";
-import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useSources, useUpdateMemo } from "@/lib/queries";
+import { useCategories, useCreateCategory, useCreateMemo, useDeleteMemo, useMe, useRestoreMemo, useSources, useUpdateMemo } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
@@ -137,6 +137,7 @@ function MemoForm({
   const createMemo = useCreateMemo();
   const updateMemo = useUpdateMemo();
   const deleteMemo = useDeleteMemo();
+  const restoreMemo = useRestoreMemo();
   const online = useOnline();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -225,11 +226,24 @@ function MemoForm({
 
   async function onDelete() {
     if (!memo) return;
+    const id = memo.id;
     try {
-      await deleteMemo.mutateAsync(memo.id);
-      toast.success("Memo deleted");
+      await deleteMemo.mutateAsync(id);
       setConfirmDelete(false);
       onDone();
+      toast.success("Memo deleted", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await restoreMemo.mutateAsync(id);
+              toast.success("Memo restored");
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not restore memo");
+            }
+          },
+        },
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete memo");
     }

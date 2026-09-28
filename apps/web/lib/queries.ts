@@ -1,6 +1,6 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   archiveSource,
   changeEmail,
@@ -22,6 +22,10 @@ import {
   login,
   logout,
   requestPasswordReset,
+  restoreMemo,
+  searchCursor,
+  searchMemos,
+  SEARCH_PAGE_SIZE,
   signup,
   startCommit,
   startExport,
@@ -110,6 +114,24 @@ export function useUpdateMemo() {
 export function useDeleteMemo() {
   const invalidate = useInvalidateMoney();
   return useMutation({ mutationFn: (id: string) => deleteMemo(id), onSuccess: invalidate });
+}
+
+/** Undoes a soft delete (see `useDeleteMemo`). */
+export function useRestoreMemo() {
+  const invalidate = useInvalidateMoney();
+  return useMutation({ mutationFn: (id: string) => restoreMemo(id), onSuccess: invalidate });
+}
+
+/** Full-text-ish search across all months. Disabled until `q` (trimmed) is at least 2 characters. */
+export function useSearchMemos(q: string) {
+  const query = q.trim();
+  return useInfiniteQuery({
+    queryKey: ["search", query],
+    queryFn: ({ pageParam }: { pageParam?: string }) => searchMemos(query, pageParam),
+    enabled: query.length >= 2,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => (lastPage.length === SEARCH_PAGE_SIZE ? searchCursor(lastPage[lastPage.length - 1]) : undefined),
+  });
 }
 
 export function useCategories() {

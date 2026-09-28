@@ -104,6 +104,23 @@ export function deleteMemo(id: string): Promise<void> {
   return api<void>(`/memos/${id}`, { method: "DELETE" });
 }
 
+export function restoreMemo(id: string): Promise<Memo> {
+  return api<Memo>(`/memos/${id}/restore`, { method: "POST" });
+}
+
+/** `before` is the previous page's last row, "<occurred_at>,<id>" (see `searchCursor`). */
+export function searchMemos(q: string, before?: string): Promise<Memo[]> {
+  const params = new URLSearchParams({ q });
+  if (before) params.set("before", before);
+  return api<Memo[]>(`/search?${params}`);
+}
+
+export const SEARCH_PAGE_SIZE = 50;
+
+export function searchCursor(m: Memo): string {
+  return `${m.occurred_at},${m.id}`;
+}
+
 // --- categories -----------------------------------------------------------
 
 export function getCategories(): Promise<Category[]> {
