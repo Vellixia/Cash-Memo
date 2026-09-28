@@ -90,6 +90,9 @@ function TopBar({ onNew }: { onNew: () => void }) {
             <Link
               key={href}
               href={href}
+              // /reports doesn't exist on this branch yet (another worker is building it); skip the
+              // prefetch so it doesn't 404 in the background. Harmless once that page lands.
+              prefetch={href === "/reports" ? false : undefined}
               aria-current={pathname === href ? "page" : undefined}
               className={cn(
                 "rounded-full px-3.5 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
@@ -188,6 +191,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
     return (
       <Link
         href={href}
+        prefetch={href === "/reports" ? false : undefined}
         aria-current={active ? "page" : undefined}
         className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl py-1 text-[0.72rem] font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
       >

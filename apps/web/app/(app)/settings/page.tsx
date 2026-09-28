@@ -98,9 +98,11 @@ export default function SettingsPage() {
         <ChevronRight className="size-4 text-muted-foreground" />
       </Link>
 
-      {/* Built by another worker; just a link row here. */}
+      {/* Built by another worker; just a link row here. Doesn't exist on this branch yet, so skip the
+          prefetch — harmless once that page lands. */}
       <Link
         href="/recurring"
+        prefetch={false}
         className={cn(card, "flex items-center gap-3 p-5 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/40")}
       >
         <Repeat className="size-5 text-muted-foreground" />
