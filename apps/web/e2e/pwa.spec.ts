@@ -46,8 +46,11 @@ test("works offline: cached home and ledger load without a network, with an offl
   await context.setOffline(false);
 });
 
-test("logging out wipes cached API data from the device", async ({ page, api, user }) => {
+test("logging out wipes cached API data from the device", async ({ page, api, user, allowConsole }) => {
   void user;
+  // The page stays on an app route after the bare logout fetch, so a background link prefetch can
+  // redirect to /login and 404 its RSC payload. Real logout hard-navigates away first.
+  allowConsole(/status of 404/);
   await api.memo({ direction: "expense", amount_minor: 500, note: "Private lunch" });
   await gotoHome(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
