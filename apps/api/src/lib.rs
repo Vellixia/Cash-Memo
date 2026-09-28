@@ -1,5 +1,6 @@
 mod account;
 mod auth;
+mod budgets;
 mod categories;
 mod data;
 mod error;
@@ -35,6 +36,7 @@ pub fn app(state: AppState) -> Router {
         .merge(categories::routes())
         .merge(sources::routes())
         .merge(recurring::routes())
+        .merge(budgets::routes())
         .merge(data::routes());
     Router::new()
         .nest("/api", api)

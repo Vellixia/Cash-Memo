@@ -7,6 +7,7 @@ mod m20261001_000004_sources;
 mod m20261002_000005_jobs_email;
 mod m20261003_000006_csv;
 mod m20261004_000007_recurring;
+mod m20261005_000008_budgets;
 
 pub struct Migrator;
 
@@ -21,6 +22,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261002_000005_jobs_email::Migration),
             Box::new(m20261003_000006_csv::Migration),
             Box::new(m20261004_000007_recurring::Migration),
+            Box::new(m20261005_000008_budgets::Migration),
         ]
     }
 }

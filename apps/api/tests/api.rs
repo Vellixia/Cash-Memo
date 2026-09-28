@@ -1007,3 +1007,160 @@ async fn recurring_rules() {
     let (_, _, rules) = call(&app, "GET", "/api/recurring", &a, None).await;
     assert_eq!(rules.as_array().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn budgets_spent_and_projected() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, food) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Food", "direction": "expense" })),
+    )
+    .await;
+    let (_, _, salary) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Salary", "direction": "income" })),
+    )
+    .await;
+
+    let (s, _, err) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": salary["id"], "currency": "USD", "limit_minor": 100 })),
+    )
+    .await;
+    assert_eq!(
+        (s, err["error"].clone()),
+        (
+            StatusCode::BAD_REQUEST,
+            json!("budgets are for expense categories")
+        )
+    );
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "USD", "limit_minor": 0 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, budget) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "usd", "limit_minor": 10000 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{budget}");
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "USD", "limit_minor": 5 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CONFLICT);
+
+    // Spent: this category's non-deleted USD expenses in the local month only.
+    let spend = [
+        ("USD", 3000, "2026-02-10T12:00:00Z"),
+        ("USD", 500, "2026-02-28T20:00:00Z"), // Mar 1 at +07:00
+        ("IDR", 7000, "2026-02-11T12:00:00Z"),
+        ("USD", 800, "2026-02-12T12:00:00Z"),
+    ];
+    let mut ids = vec![];
+    for (cur, amt, t) in spend {
+        let (s, _, m) = call(&app, "POST", "/api/memos", &a, Some(json!({ "direction": "expense", "amount_minor": amt, "currency": cur, "occurred_at": t, "category_id": food["id"], "source_id": cash }))).await;
+        assert_eq!(s, StatusCode::CREATED);
+        ids.push(m["id"].as_str().unwrap().to_owned());
+    }
+    call(&app, "DELETE", &format!("/api/memos/{}", ids[3]), &a, None).await;
+    let (_, _, feb) = call(
+        &app,
+        "GET",
+        "/api/budgets?month=2026-02&offset=420",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(feb[0]["id"], budget["id"]);
+    assert_eq!(
+        (
+            feb[0]["limit_minor"].clone(),
+            feb[0]["spent_minor"].clone(),
+            feb[0]["projected_minor"].clone()
+        ),
+        (json!(10000), json!(3000), json!(3000))
+    );
+
+    // Projected adds recurring expenses still to come (weekly from Mar 1 2099: 5 in March).
+    let rule = json!({ "direction": "expense", "amount_minor": 500, "currency": "USD", "category_id": food["id"], "source_id": cash, "cadence": "weekly", "next_date": "2099-03-01", "offset_minutes": 420 });
+    call(&app, "POST", "/api/recurring", &a, Some(rule.clone())).await;
+    let mut other = rule.clone();
+    other["currency"] = json!("IDR");
+    call(&app, "POST", "/api/recurring", &a, Some(other)).await;
+    let (_, _, mar) = call(
+        &app,
+        "GET",
+        "/api/budgets?month=2099-03&offset=420",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(
+        (
+            mar[0]["spent_minor"].clone(),
+            mar[0]["projected_minor"].clone()
+        ),
+        (json!(0), json!(2500))
+    );
+
+    let path = format!("/api/budgets/{}", budget["id"].as_str().unwrap());
+    let (_, _, patched) = call(
+        &app,
+        "PATCH",
+        &path,
+        &a,
+        Some(json!({ "limit_minor": 20000 })),
+    )
+    .await;
+    assert_eq!(patched["limit_minor"], 20000);
+    let b = signup(&app).await;
+    let (s, _, _) = call(&app, "DELETE", &path, &b, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, _) = call(&app, "DELETE", &path, &a, None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+
+    // Deleting the category removes its budgets.
+    call(
+        &app,
+        "POST",
+        "/api/budgets",
+        &a,
+        Some(json!({ "category_id": food["id"], "currency": "USD", "limit_minor": 1 })),
+    )
+    .await;
+    call(
+        &app,
+        "DELETE",
+        &format!("/api/categories/{}", food["id"].as_str().unwrap()),
+        &a,
+        None,
+    )
+    .await;
+    let (_, _, none) = call(&app, "GET", "/api/budgets", &a, None).await;
+    assert_eq!(none, json!([]));
+}
