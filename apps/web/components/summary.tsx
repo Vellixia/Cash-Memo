@@ -4,11 +4,13 @@ import { useState } from "react";
 import type { Category, Source, Summary } from "@/lib/api";
 import { CATEGORY_COLORS } from "@/lib/format";
 import { balanceLabel, formatMoney, signedMoney } from "@/lib/money";
+import { daysUntil, nextOccurrence, shortDate } from "@/lib/credit-dates";
 import { Segmented } from "@/components/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export const card = "rounded-3xl border border-border bg-card shadow-paper";
+const isDebtKind = (kind: string) => kind === "credit" || kind === "paylater";
 
 export function HeroCard({
   summary,
@@ -195,7 +197,8 @@ export function SpendingCard({
   );
 }
 
-/** Tracked, non-archived source balances. Shown when there's at least one. */
+/** Tracked, non-archived source balances. A credit/paylater source with a limit also gets an
+ * owed-vs-limit bar and its next due date. Shown when there's at least one tracked source. */
 export function BalancesCard({ sources }: { sources: Source[] | undefined }) {
   const tracked = sources?.filter((s) => s.track_balance && !s.archived_at) ?? [];
   if (tracked.length === 0) return null;
@@ -205,17 +208,64 @@ export function BalancesCard({ sources }: { sources: Source[] | undefined }) {
         Balances
       </h2>
       <ul className="mt-1.5 divide-y divide-border/70">
-        {tracked.map((s) => (
-          <li key={s.id} data-testid="balance-row" className="flex items-center justify-between gap-3 py-2.5">
-            <span className="flex min-w-0 items-center gap-2">
-              {s.emoji && <span aria-hidden>{s.emoji}</span>}
-              <span className="truncate text-sm font-medium">{s.name}</span>
-            </span>
-            <span className="num shrink-0 text-sm [overflow-wrap:anywhere]">{balanceLabel(s.kind, s.balance_minor ?? 0, s.currency!)}</span>
-          </li>
-        ))}
+        {tracked.map((s) => {
+          const debt = isDebtKind(s.kind);
+          const owed = debt ? Math.max(0, -(s.balance_minor ?? 0)) : 0;
+          const limit = s.credit_limit_minor;
+          return (
+            <li key={s.id} data-testid="balance-row" className="space-y-1.5 py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2">
+                  {s.emoji && <span aria-hidden>{s.emoji}</span>}
+                  <span className="truncate text-sm font-medium">{s.name}</span>
+                </span>
+                <span className="num shrink-0 text-sm [overflow-wrap:anywhere]">{balanceLabel(s.kind, s.balance_minor ?? 0, s.currency!)}</span>
+              </div>
+              {debt && limit != null && (
+                <>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                    <div className="h-full rounded-full bg-expense" style={{ width: `${Math.min(100, (owed / limit) * 100)}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Available {formatMoney(Math.max(0, limit - owed), s.currency!)}</p>
+                </>
+              )}
+              {debt && s.due_day != null && <p className="text-xs text-muted-foreground">Due {shortDate(nextOccurrence(s.due_day))}</p>}
+            </li>
+          );
+        })}
       </ul>
     </section>
+  );
+}
+
+/** A compact reminder line per credit/paylater source that owes money and is due within 5 days,
+ * plus a note when its statement also closes within 5 days. No section when nothing qualifies. */
+export function CreditReminders({ sources }: { sources: Source[] | undefined }) {
+  const rows = (sources ?? [])
+    .filter((s) => s.track_balance && !s.archived_at && isDebtKind(s.kind))
+    .map((s) => {
+      const owed = Math.max(0, -(s.balance_minor ?? 0));
+      const dueSoon = s.due_day != null && owed > 0 && daysUntil(nextOccurrence(s.due_day)) <= 5;
+      const statementSoon = s.statement_day != null && daysUntil(nextOccurrence(s.statement_day)) <= 5;
+      if (!dueSoon && !statementSoon) return null;
+      const parts: string[] = [];
+      if (dueSoon) {
+        const days = daysUntil(nextOccurrence(s.due_day!));
+        parts.push(`due ${days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`} · owe ${formatMoney(owed, s.currency!)}`);
+      }
+      if (statementSoon) parts.push(`statement closes ${shortDate(nextOccurrence(s.statement_day!))}`);
+      return { id: s.id, text: `${s.name} ${parts.join(" · ")}` };
+    })
+    .filter((r): r is { id: string; text: string } => r !== null);
+  if (rows.length === 0) return null;
+  return (
+    <ul className="space-y-1 px-1" data-testid="credit-reminders" aria-label="Credit reminders">
+      {rows.map((r) => (
+        <li key={r.id} data-testid="reminder-row" className="text-xs text-muted-foreground">
+          {r.text}
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -26,8 +26,9 @@ import { EmojiField } from "@/components/emoji-field";
 import { OfflineHint } from "@/components/offline-hint";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
+import { Switch } from "@/components/ui/switch";
 import type { Direction, Memo, MemoDirection, Source } from "@/lib/api";
-import { uploadAttachmentFile } from "@/lib/api";
+import { uploadAttachmentFile, utcOffsetMinutes } from "@/lib/api";
 import { processAttachment } from "@/lib/attachment";
 import { fitAmount, fromMinor, toMinor } from "@/lib/money";
 import { toDatetimeLocal } from "@/lib/format";
@@ -37,6 +38,7 @@ import {
   useConfirmAttachment,
   useCreateCategory,
   useCreateMemo,
+  useCreatePlan,
   useDeleteAttachment,
   useDeleteMemo,
   useMe,
@@ -48,6 +50,8 @@ import {
 import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
+
+const isDebtKind = (kind: string) => kind === "credit" || kind === "paylater";
 
 const schema = z
   .object({
@@ -63,6 +67,10 @@ const schema = z
     source_id: z.string().nullable(),
     to_source_id: z.string().nullable(),
     note: z.string().max(2000, "Keep notes under 2000 characters"),
+    // Pay-in-installments (credit/paylater sources only; see `isDebtKind`).
+    installments: z.boolean(),
+    months: z.string().regex(/^\d*$/, "Enter a number"),
+    fee: z.string().regex(/^\d*(\.\d*)?$/, "Enter a number"),
   })
   .superRefine((v, ctx) => {
     if (/^[A-Z]{3}$/.test(v.currency) && /\d/.test(v.amount) && toMinor(v.amount, v.currency) <= 0) {
@@ -78,6 +86,10 @@ const schema = z
       } else if (v.source_id === v.to_source_id) {
         ctx.addIssue({ code: "custom", path: ["to_source_id"], message: "Pick two different accounts" });
       }
+    }
+    if (v.installments) {
+      const n = Number(v.months);
+      if (!v.months || n < 2 || n > 36) ctx.addIssue({ code: "custom", path: ["months"], message: "2-36 months" });
     }
   });
 type Values = z.infer<typeof schema>;
@@ -151,6 +163,7 @@ function MemoForm({
   const activeSources = sources.filter((s) => !s.archived_at);
   const createMemo = useCreateMemo();
   const updateMemo = useUpdateMemo();
+  const createPlan = useCreatePlan();
   const deleteMemo = useDeleteMemo();
   const restoreMemo = useRestoreMemo();
   const startUpload = useStartAttachmentUpload();
@@ -178,6 +191,9 @@ function MemoForm({
       source_id: memo?.source_id ?? null,
       to_source_id: memo?.to_source_id ?? null,
       note: memo?.note ?? "",
+      installments: false,
+      months: "3",
+      fee: "",
     },
   });
 
@@ -185,8 +201,9 @@ function MemoForm({
     control,
     name: ["direction", "currency", "category_id", "source_id", "to_source_id"],
   });
+  const [installments, months] = useWatch({ control, name: ["installments", "months"] });
   const choices = categories.filter((c) => c.direction === direction);
-  const saving = createMemo.isPending || updateMemo.isPending;
+  const saving = createMemo.isPending || updateMemo.isPending || createPlan.isPending;
 
   // A new memo defaults its source to the last one used, falling back to the first active source.
   const autoSourceApplied = useRef(false);
@@ -207,6 +224,12 @@ function MemoForm({
     }
   }, [lockedCurrency, currency, setValue, getValues]);
 
+  // Installments: a new expense paid with a credit/paylater source only.
+  const canInstallments = !memo && direction === "expense" && isDebtKind(sourceById.get(sourceId ?? "")?.kind ?? "");
+  useEffect(() => {
+    if (installments && !canInstallments) setValue("installments", false);
+  }, [installments, canInstallments, setValue]);
+
   function setDirection(d: MemoDirection) {
     setValue("direction", d);
     const current = categories.find((c) => c.id === categoryId);
@@ -217,6 +240,32 @@ function MemoForm({
     if (!online) return;
     const cur = values.currency;
     const isTransfer = values.direction === "transfer";
+    const note = values.note.trim() || null;
+
+    if (canInstallments && values.installments) {
+      try {
+        const n = Number(values.months);
+        await createPlan.mutateAsync({
+          source_id: values.source_id!,
+          category_id: values.category_id,
+          note,
+          currency: cur,
+          principal_minor: toMinor(values.amount, cur),
+          fee_minor: values.fee ? toMinor(values.fee, cur) : 0,
+          months: n,
+          first_date: values.occurred_at.slice(0, 10),
+          offset: utcOffsetMinutes(),
+        });
+        noteCurrency(cur);
+        setLastSourceId(values.source_id!);
+        toast.success(`Split into ${n} payments`);
+        onDone();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not set up the plan");
+      }
+      return;
+    }
+
     const body = {
       direction: values.direction,
       amount_minor: toMinor(values.amount, cur),
@@ -225,7 +274,7 @@ function MemoForm({
       category_id: isTransfer ? null : values.category_id,
       source_id: values.source_id,
       to_source_id: isTransfer ? values.to_source_id : null,
-      note: values.note.trim() || null,
+      note,
     };
     try {
       let saved: Memo;
@@ -380,6 +429,53 @@ function MemoForm({
               />
               {errors.source_id && <p className="text-sm text-destructive">{errors.source_id.message}</p>}
             </fieldset>
+
+            {canInstallments && (
+              <fieldset className="space-y-3 rounded-2xl bg-muted/50 p-3.5">
+                <label className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium">Pay in installments</span>
+                  <Switch checked={installments} onCheckedChange={(v) => setValue("installments", v)} aria-label="Pay in installments" />
+                </label>
+                {installments && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[3, 6, 12].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          aria-pressed={months === String(n)}
+                          onClick={() => setValue("months", String(n))}
+                          className={cn(sourceChip, months === String(n) ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted")}
+                        >
+                          {n}×
+                        </button>
+                      ))}
+                      <Input
+                        type="number"
+                        min={2}
+                        max={36}
+                        aria-label="Custom number of months"
+                        placeholder="Custom"
+                        className="h-9 w-24 rounded-full bg-card text-center text-sm"
+                        {...register("months")}
+                      />
+                    </div>
+                    {errors.months && <p className="text-sm text-destructive">{errors.months.message}</p>}
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Fee (optional)</span>
+                      <AmountField
+                        control={control}
+                        name="fee"
+                        currency={currency}
+                        invalid={!!errors.fee}
+                        big={false}
+                        className="h-10 rounded-xl border border-input bg-card px-3.5 text-left text-base"
+                      />
+                    </div>
+                  </div>
+                )}
+              </fieldset>
+            )}
           </>
         )}
 
@@ -396,12 +492,14 @@ function MemoForm({
           </label>
         </div>
 
-        <AttachmentField
-          memoId={memo?.id ?? null}
-          hasAttachment={memo?.has_attachment ?? false}
-          pendingFile={pendingFile}
-          onPendingFile={setPendingFile}
-        />
+        {!(canInstallments && installments) && (
+          <AttachmentField
+            memoId={memo?.id ?? null}
+            hasAttachment={memo?.has_attachment ?? false}
+            pendingFile={pendingFile}
+            onPendingFile={setPendingFile}
+          />
+        )}
       </div>
 
       {/* Outside the scroll area, so Save stays put above the keyboard / home indicator. */}

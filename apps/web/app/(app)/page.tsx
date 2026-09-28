@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
-import { BalancesCard, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
+import { BalancesCard, CreditReminders, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
 import { useCategories, useMe, useMemos, useSources, useSummary } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
@@ -43,6 +43,7 @@ export default function HomePage() {
           <HeroCard summary={summary} currency={currency} currencies={currencies} onCurrency={setCurrency} />
           <SpendingCard summary={summary} currency={currency} categories={categories ?? []} />
         </div>
+        <CreditReminders sources={sources} />
         <BalancesCard sources={sources} />
         {summary && currencies.length >= 2 && <CurrenciesCard summary={summary} currencies={currencies} />}
       </aside>
