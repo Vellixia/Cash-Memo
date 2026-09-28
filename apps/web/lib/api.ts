@@ -13,6 +13,8 @@ export type Memo = {
   note: string | null;
   created_at: string;
   updated_at: string;
+  /** The recurring rule that created (or was made from) this memo. */
+  recurring_rule_id?: string | null;
 };
 export type Category = { id: string; name: string; direction: Direction; emoji: string | null };
 export type SourceKind = "cash" | "bank" | "ewallet" | "credit" | "paylater" | "other";
@@ -270,4 +272,83 @@ export type Job<R = ExportResult | ValidateResult | CommitResult | undefined> = 
 
 export function getJob<R = ExportResult | ValidateResult | CommitResult | undefined>(id: string): Promise<Job<R>> {
   return api(`/jobs/${id}`);
+}
+
+// --- recurring memos & budgets -------------------------------------------------
+
+export type Cadence = "weekly" | "monthly" | "yearly";
+export type RecurringRule = {
+  id: string;
+  direction: MemoDirection;
+  amount_minor: number;
+  currency: string;
+  category_id: string | null;
+  source_id: string | null;
+  to_source_id: string | null;
+  note: string | null;
+  cadence: Cadence;
+  anchor_day: number;
+  /** Local date "YYYY-MM-DD" of the next occurrence. */
+  next_date: string;
+  offset_minutes: number;
+  paused_at: string | null;
+  created_at: string;
+};
+/** An occurrence still to come this month (not a memo yet, not in totals). */
+export type Upcoming = RecurringRule & { date: string; occurred_at: string };
+/** Create from `memo_id` (it becomes the first occurrence) or from memo fields + `next_date`. PATCH is partial. */
+export type RecurringInput = Partial<Omit<MemoInput, "occurred_at">> & {
+  memo_id?: string;
+  cadence?: Cadence;
+  next_date?: string;
+  paused?: boolean;
+};
+
+export function getRecurring(): Promise<RecurringRule[]> {
+  return api<RecurringRule[]>("/recurring");
+}
+
+export function getUpcoming(month: string): Promise<Upcoming[]> {
+  const params = new URLSearchParams({ month, offset: String(utcOffsetMinutes()) });
+  return api<Upcoming[]>(`/recurring/upcoming?${params}`);
+}
+
+export function createRecurring(input: RecurringInput): Promise<RecurringRule> {
+  return api<RecurringRule>("/recurring", { method: "POST", body: JSON.stringify({ ...input, offset_minutes: utcOffsetMinutes() }) });
+}
+
+export function updateRecurring(id: string, patch: RecurringInput): Promise<RecurringRule> {
+  return api<RecurringRule>(`/recurring/${id}`, { method: "PATCH", body: JSON.stringify({ ...patch, offset_minutes: utcOffsetMinutes() }) });
+}
+
+/** Stops the rule; memos it already created stay. */
+export function deleteRecurring(id: string): Promise<void> {
+  return api<void>(`/recurring/${id}`, { method: "DELETE" });
+}
+
+export type Budget = {
+  id: string;
+  category_id: string;
+  currency: string;
+  limit_minor: number;
+  spent_minor: number;
+  /** Spent plus recurring expenses still to come this month. */
+  projected_minor: number;
+};
+
+export function getBudgets(month: string): Promise<Budget[]> {
+  const params = new URLSearchParams({ month, offset: String(utcOffsetMinutes()) });
+  return api<Budget[]>(`/budgets?${params}`);
+}
+
+export function createBudget(input: { category_id: string; currency: string; limit_minor: number }): Promise<Budget> {
+  return api<Budget>("/budgets", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBudget(id: string, limit_minor: number): Promise<Budget> {
+  return api<Budget>(`/budgets/${id}`, { method: "PATCH", body: JSON.stringify({ limit_minor }) });
+}
+
+export function deleteBudget(id: string): Promise<void> {
+  return api<void>(`/budgets/${id}`, { method: "DELETE" });
 }

@@ -40,6 +40,18 @@ import {
   type SourceInput,
   type ValidateResult,
 } from "@/lib/api";
+import {
+  createBudget,
+  createRecurring,
+  deleteBudget,
+  deleteRecurring,
+  getBudgets,
+  getRecurring,
+  getUpcoming,
+  updateBudget,
+  updateRecurring,
+  type RecurringInput,
+} from "@/lib/api";
 import { guessCurrency } from "@/lib/money";
 
 type Credentials = { email: string; password: string };
@@ -91,6 +103,7 @@ function useInvalidateMoney() {
     qc.invalidateQueries({ queryKey: ["summary"] });
     // Memos move money between sources, so their balances may have changed too.
     qc.invalidateQueries({ queryKey: ["sources"] });
+    qc.invalidateQueries({ queryKey: ["budgets"] });
   };
 }
 
@@ -271,3 +284,60 @@ export function useInvalidateAfterImport() {
 }
 
 export type { CommitResult, ExportResult, Job, Mapping, ValidateResult };
+
+// --- recurring memos & budgets ----------------------------------------------
+
+export function useRecurring() {
+  return useQuery({ queryKey: ["recurring"], queryFn: getRecurring });
+}
+
+export function useUpcoming(month: string) {
+  return useQuery({ queryKey: ["upcoming", month], queryFn: () => getUpcoming(month), placeholderData: keepPreviousData });
+}
+
+/** A rule write may create memos at once (anything already due), so money queries refresh too. */
+function useInvalidateRecurring() {
+  const qc = useQueryClient();
+  const money = useInvalidateMoney();
+  return () => {
+    money();
+    qc.invalidateQueries({ queryKey: ["recurring"] });
+    qc.invalidateQueries({ queryKey: ["upcoming"] });
+  };
+}
+
+export function useCreateRecurring() {
+  const invalidate = useInvalidateRecurring();
+  return useMutation({ mutationFn: (input: RecurringInput) => createRecurring(input), onSuccess: invalidate });
+}
+
+export function useUpdateRecurring() {
+  const invalidate = useInvalidateRecurring();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: RecurringInput }) => updateRecurring(id, patch),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteRecurring() {
+  const invalidate = useInvalidateRecurring();
+  return useMutation({ mutationFn: (id: string) => deleteRecurring(id), onSuccess: invalidate });
+}
+
+export function useBudgets(month: string) {
+  return useQuery({ queryKey: ["budgets", month], queryFn: () => getBudgets(month), placeholderData: keepPreviousData });
+}
+
+export function useSaveBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { id?: string; category_id: string; currency: string; limit_minor: number }) =>
+      b.id ? updateBudget(b.id, b.limit_minor) : createBudget(b),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+  });
+}
+
+export function useDeleteBudget() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => deleteBudget(id), onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }) });
+}
