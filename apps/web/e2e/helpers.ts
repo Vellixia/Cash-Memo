@@ -157,9 +157,9 @@ export async function gotoHome(page: Page) {
 }
 
 export async function noHorizontalOverflow(page: Page) {
-  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }));
+  // Mobile emulation widens the layout viewport (and innerWidth) to fit overflowing content, so compare
+  // against the configured viewport instead.
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  const innerWidth = page.viewportSize()!.width;
   expect(scrollWidth, `scrollWidth ${scrollWidth} > innerWidth ${innerWidth}`).toBeLessThanOrEqual(innerWidth);
 }
