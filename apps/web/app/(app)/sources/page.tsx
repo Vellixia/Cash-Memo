@@ -27,10 +27,18 @@ import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
 import { OfflineHint } from "@/components/offline-hint";
 import { card } from "@/components/summary";
-import { useCreateSource, useMe, useSources, useUpdateSource, useArchiveSource } from "@/lib/queries";
+import {
+  useCreateSource,
+  useDeletePlan,
+  useMe,
+  usePlans,
+  useSources,
+  useUpdateSource,
+  useArchiveSource,
+} from "@/lib/queries";
 import { useOnline } from "@/lib/use-online";
 import type { Source, SourceKind } from "@/lib/api";
-import { balanceLabel, fitAmount, toMinor } from "@/lib/money";
+import { balanceLabel, fitAmount, formatMoney, fromMinor, toMinor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 const KIND_ORDER: SourceKind[] = ["cash", "bank", "ewallet", "credit", "paylater", "other"];
@@ -94,10 +102,18 @@ const sourceSchema = z
     currency: z.string(),
     // Canonical "1234.5" (see lib/money.ts editAmount); may be empty when balance tracking is off.
     amount: z.string().regex(/^\d*(\.\d*)?$/, "Enter a number"),
+    // Credit/paylater only, all optional: limit (canonical amount string) and day-of-month (1-31).
+    creditLimit: z.string().regex(/^\d*(\.\d*)?$/, "Enter a number"),
+    statementDay: z.string().regex(/^\d*$/, "Enter a day"),
+    dueDay: z.string().regex(/^\d*$/, "Enter a day"),
   })
   .superRefine((v, ctx) => {
     if (v.track_balance && !/^[A-Z]{3}$/.test(v.currency)) {
       ctx.addIssue({ code: "custom", path: ["currency"], message: "Pick a currency" });
+    }
+    for (const field of ["statementDay", "dueDay"] as const) {
+      const n = Number(v[field]);
+      if (v[field] && (n < 1 || n > 31)) ctx.addIssue({ code: "custom", path: [field], message: "1-31" });
     }
   });
 type SourceValues = z.infer<typeof sourceSchema>;
@@ -116,7 +132,17 @@ function AddSourceCard() {
     formState: { errors },
   } = useForm<SourceValues>({
     resolver: zodResolver(sourceSchema),
-    defaultValues: { name: "", kind: "bank", emoji: null, track_balance: false, currency: me?.default_currency ?? "USD", amount: "" },
+    defaultValues: {
+      name: "",
+      kind: "bank",
+      emoji: null,
+      track_balance: false,
+      currency: me?.default_currency ?? "USD",
+      amount: "",
+      creditLimit: "",
+      statementDay: "",
+      dueDay: "",
+    },
   });
   const [kind, trackBalance, currency] = useWatch({ control, name: ["kind", "track_balance", "currency"] });
   const debt = isDebtKind(kind);
@@ -128,6 +154,8 @@ function AddSourceCard() {
 
   async function onSubmit(values: SourceValues) {
     const openingRaw = values.track_balance ? toMinor(values.amount || "0", values.currency) : 0;
+    // Credit limit, statement and due day only mean anything on a debt source that tracks a balance.
+    const creditFields = debt && values.track_balance;
     try {
       await create.mutateAsync({
         name: values.name.trim(),
@@ -137,9 +165,22 @@ function AddSourceCard() {
         currency: values.track_balance ? values.currency : null,
         // A debt's "Currently owed" reads positive but means a negative balance.
         opening_minor: debt ? -openingRaw : openingRaw,
+        credit_limit_minor: creditFields && values.creditLimit ? toMinor(values.creditLimit, values.currency) : null,
+        statement_day: creditFields && values.statementDay ? Number(values.statementDay) : null,
+        due_day: creditFields && values.dueDay ? Number(values.dueDay) : null,
       });
       toast.success(`Added “${values.name.trim()}”`);
-      reset({ name: "", kind: values.kind, emoji: null, track_balance: false, currency: values.currency, amount: "" });
+      reset({
+        name: "",
+        kind: values.kind,
+        emoji: null,
+        track_balance: false,
+        currency: values.currency,
+        amount: "",
+        creditLimit: "",
+        statementDay: "",
+        dueDay: "",
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add source");
     }
@@ -217,6 +258,33 @@ function AddSourceCard() {
             />
             {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
           </div>
+        </div>
+      )}
+
+      {trackBalance && debt && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Credit limit</span>
+            <AmountField
+              control={control}
+              name="creditLimit"
+              currency={currency || "USD"}
+              invalid={!!errors.creditLimit}
+              big={false}
+              className="h-11 rounded-xl border border-input bg-card px-3.5 text-left text-base"
+            />
+            {errors.creditLimit && <p className="text-sm text-destructive">{errors.creditLimit.message}</p>}
+          </div>
+          <label className="space-y-1.5">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Statement day</span>
+            <Input type="number" min={1} max={31} placeholder="1-31" className="h-11 rounded-xl bg-card" {...register("statementDay")} />
+            {errors.statementDay && <p className="text-sm text-destructive">{errors.statementDay.message}</p>}
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Due day</span>
+            <Input type="number" min={1} max={31} placeholder="1-31" className="h-11 rounded-xl bg-card" {...register("dueDay")} />
+            {errors.dueDay && <p className="text-sm text-destructive">{errors.dueDay.message}</p>}
+          </label>
         </div>
       )}
 
@@ -301,6 +369,7 @@ function SourceRow({ source }: { source: Source }) {
   }
 
   return (
+    <>
     <li className="flex items-center gap-3 px-3 py-2.5" data-testid="source-row">
       <EmojiField
         value={source.emoji}
@@ -359,6 +428,113 @@ function SourceRow({ source }: { source: Source }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </li>
+    {source.track_balance && isDebtKind(source.kind) && <CreditPanel source={source} />}
+    </>
+  );
+}
+
+/** Credit limit, statement/due day and this source's active installment plans, editable inline. */
+function CreditPanel({ source }: { source: Source }) {
+  const update = useUpdateSource();
+  const { data: plans } = usePlans();
+  const cancelPlan = useDeletePlan();
+  const online = useOnline();
+  const [limit, setLimit] = useState(source.credit_limit_minor != null ? fromMinor(source.credit_limit_minor, source.currency!) : "");
+  const [statementDay, setStatementDay] = useState(source.statement_day?.toString() ?? "");
+  const [dueDay, setDueDay] = useState(source.due_day?.toString() ?? "");
+  const mine = (plans ?? []).filter((p) => p.source_id === source.id);
+
+  async function save() {
+    try {
+      await update.mutateAsync({
+        id: source.id,
+        patch: {
+          credit_limit_minor: limit ? toMinor(limit, source.currency!) : null,
+          statement_day: statementDay ? Number(statementDay) : null,
+          due_day: dueDay ? Number(dueDay) : null,
+        },
+      });
+      toast.success("Credit details updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update credit details");
+    }
+  }
+
+  async function cancel(id: string) {
+    try {
+      await cancelPlan.mutateAsync(id);
+      toast.success("Plan cancelled");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not cancel plan");
+    }
+  }
+
+  return (
+    <li className="space-y-2.5 border-t border-border/70 bg-muted/30 px-3 py-3" data-testid="credit-panel">
+      <div className="grid grid-cols-3 gap-2">
+        <label className="space-y-1">
+          <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Limit</span>
+          <Input
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            placeholder="0"
+            inputMode="decimal"
+            aria-label={`Credit limit for ${source.name}`}
+            className="h-9 rounded-lg bg-card text-sm"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Statement day</span>
+          <Input
+            type="number"
+            min={1}
+            max={31}
+            value={statementDay}
+            onChange={(e) => setStatementDay(e.target.value)}
+            aria-label={`Statement day for ${source.name}`}
+            className="h-9 rounded-lg bg-card text-sm"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase">Due day</span>
+          <Input
+            type="number"
+            min={1}
+            max={31}
+            value={dueDay}
+            onChange={(e) => setDueDay(e.target.value)}
+            aria-label={`Due day for ${source.name}`}
+            className="h-9 rounded-lg bg-card text-sm"
+          />
+        </label>
+      </div>
+      <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg" onClick={save} disabled={update.isPending || !online}>
+        {update.isPending && <Loader2 className="animate-spin" />}
+        Save credit details
+      </Button>
+      {mine.length > 0 && (
+        <ul className="space-y-1.5 pt-1">
+          {mine.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 text-xs" data-testid="plan-row">
+              <span className="min-w-0 truncate">
+                {(p.note ?? "Installments").replace(/\s*\(\d+\/\d+\)$/, "")} · {p.paid}/{p.months} ·{" "}
+                {formatMoney(Math.floor((p.principal_minor + p.fee_minor) / p.months), p.currency)}/mo
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 rounded-lg px-2 text-muted-foreground hover:text-destructive"
+                onClick={() => cancel(p.id)}
+                disabled={cancelPlan.isPending || !online}
+              >
+                Cancel
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   );
 }

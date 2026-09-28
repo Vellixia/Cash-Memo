@@ -75,6 +75,10 @@ pub mod source {
         pub track_balance: bool,
         pub currency: Option<String>,
         pub opening_minor: i64,
+        /// Credit/paylater only: limit, statement and due day of month (1-31). Null otherwise.
+        pub credit_limit_minor: Option<i64>,
+        pub statement_day: Option<i16>,
+        pub due_day: Option<i16>,
         pub archived_at: Option<DateTimeUtc>,
         #[serde(skip)]
         pub created_at: DateTimeUtc,
@@ -105,10 +109,40 @@ pub mod memo {
         pub source_id: Option<Uuid>,
         pub to_source_id: Option<Uuid>,
         pub note: Option<String>,
+        /// Set when this memo was created by an installment plan.
+        pub installment_plan_id: Option<Uuid>,
         #[serde(skip)]
         pub deleted_at: Option<DateTimeUtc>,
         pub created_at: DateTimeUtc,
         pub updated_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod installment_plan {
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize)]
+    #[sea_orm(table_name = "installment_plans")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        #[serde(skip)]
+        pub user_id: Uuid,
+        pub source_id: Uuid,
+        pub category_id: Option<Uuid>,
+        pub note: Option<String>,
+        pub currency: String,
+        pub principal_minor: i64,
+        pub fee_minor: i64,
+        pub months: i16,
+        pub first_date: Date,
+        pub created_at: DateTimeUtc,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

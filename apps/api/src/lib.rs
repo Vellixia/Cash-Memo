@@ -3,6 +3,7 @@ mod auth;
 mod categories;
 mod data;
 mod error;
+mod installments;
 mod limits;
 mod memos;
 mod search;
@@ -35,6 +36,7 @@ pub fn app(state: AppState) -> Router {
         .merge(categories::routes())
         .merge(sources::routes())
         .merge(search::routes())
+        .merge(installments::routes())
         .merge(data::routes());
     Router::new()
         .nest("/api", api)

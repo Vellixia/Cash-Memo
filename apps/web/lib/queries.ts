@@ -9,14 +9,17 @@ import {
   confirmEmail,
   createCategory,
   createMemo,
+  createPlan,
   createSource,
   deleteAccount,
   deleteCategory,
   deleteMemo,
+  deletePlan,
   getCategories,
   getJob,
   getMe,
   getMemos,
+  getPlans,
   getSources,
   getSummary,
   login,
@@ -41,6 +44,7 @@ import {
   type Job,
   type Mapping,
   type MemoInput,
+  type PlanInput,
   type SourceInput,
   type ValidateResult,
 } from "@/lib/api";
@@ -217,6 +221,33 @@ export function useArchiveSource() {
       qc.invalidateQueries({ queryKey: ["memos"] });
     },
   });
+}
+
+// --- installment plans -------------------------------------------------------
+
+export function usePlans() {
+  return useQuery({ queryKey: ["plans"], queryFn: getPlans });
+}
+
+/** A plan's memos affect balances, summaries and the ledger, on top of the plan list itself. */
+function useInvalidatePlans() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    qc.invalidateQueries({ queryKey: ["memos"] });
+    qc.invalidateQueries({ queryKey: ["summary"] });
+    qc.invalidateQueries({ queryKey: ["sources"] });
+  };
+}
+
+export function useCreatePlan() {
+  const invalidate = useInvalidatePlans();
+  return useMutation({ mutationFn: (input: PlanInput) => createPlan(input), onSuccess: invalidate });
+}
+
+export function useDeletePlan() {
+  const invalidate = useInvalidatePlans();
+  return useMutation({ mutationFn: (id: string) => deletePlan(id), onSuccess: invalidate });
 }
 
 // --- account: password reset, change password/email, delete ---------------
