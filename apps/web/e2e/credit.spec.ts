@@ -14,6 +14,7 @@ test("credit: a limit/due day, an installment purchase, the plan and the limit b
   });
   void visa; // selected by chip in the editor below
 
+  await gotoHome(page);
   // A 3x installment purchase, paid with the credit card.
   const dialog = await openNewMemo(page, isMobile);
   await dialog.getByLabel("Amount").fill("120");

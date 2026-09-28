@@ -107,7 +107,13 @@ async fn confirm(
     let storage = storage(&st)?;
     let m = owned(&st, uid, memo_id).await?;
     let prefix = format!("{}{memo_id}/", attachment_prefix(uid));
-    if !input.key.starts_with(&prefix) {
+    // Exactly `<prefix><uuid>.<jpg|webp>`: a looser check (e.g. `starts_with`) would let `../` segments,
+    // which URL parsing normalizes, point the presigned URLs at another user's object.
+    let valid = input.key.strip_prefix(&prefix).is_some_and(|name| {
+        name.rsplit_once('.')
+            .is_some_and(|(id, ext)| Uuid::parse_str(id).is_ok() && matches!(ext, "jpg" | "webp"))
+    });
+    if !valid {
         return Err(AppError::BadRequest(
             "that upload doesn't belong to this memo",
         ));

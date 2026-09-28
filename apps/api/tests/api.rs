@@ -1172,6 +1172,16 @@ async fn attachment_upload_confirm_view_delete() {
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST, "wrong memo prefix");
+    let traversal = format!("{}../../x.jpg", &key[..key.rfind('/').unwrap() + 1]);
+    let (s, _, _) = call(
+        &app,
+        "PUT",
+        &attach(m1_id),
+        &a,
+        Some(json!({ "key": traversal })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "no path traversal");
 
     // Oversize: rejected, and the object is deleted rather than left behind.
     let (_, _, start3) = call(
