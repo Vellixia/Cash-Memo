@@ -100,6 +100,7 @@ async fn create(
         source_id: Set(None),
         to_source_id: Set(None),
         note: Set(None),
+        installment_plan_id: Set(None),
         ..Default::default()
     };
     let (Some(_), Some(_), Some(_), Some(_)) = (

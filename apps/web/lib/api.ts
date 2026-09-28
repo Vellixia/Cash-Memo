@@ -24,6 +24,10 @@ export type Source = {
   track_balance: boolean;
   currency: string | null;
   opening_minor: number;
+  /** Credit/paylater only. */
+  credit_limit_minor: number | null;
+  statement_day: number | null;
+  due_day: number | null;
   archived_at: string | null;
   /** Only for sources that track a balance. */
   balance_minor: number | null;
@@ -138,6 +142,9 @@ export type SourceInput = {
   track_balance?: boolean;
   currency?: string | null;
   opening_minor?: number;
+  credit_limit_minor?: number | null;
+  statement_day?: number | null;
+  due_day?: number | null;
 };
 
 export function createSource(input: SourceInput): Promise<Source> {
@@ -152,6 +159,49 @@ export function updateSource(id: string, patch: Partial<SourceInput> & { archive
 /** Archives (the API never hard-deletes a source, so history and balances stay intact). */
 export function archiveSource(id: string): Promise<void> {
   return api<void>(`/sources/${id}`, { method: "DELETE" });
+}
+
+// --- installment plans -------------------------------------------------------
+
+export type InstallmentPlan = {
+  id: string;
+  source_id: string;
+  category_id: string | null;
+  note: string | null;
+  currency: string;
+  principal_minor: number;
+  fee_minor: number;
+  months: number;
+  first_date: string;
+  created_at: string;
+  paid: number;
+  remaining: number;
+};
+
+export type PlanInput = {
+  source_id: string;
+  category_id?: string | null;
+  note?: string | null;
+  currency: string;
+  principal_minor: number;
+  fee_minor?: number;
+  months: number;
+  /** "YYYY-MM-DD" */
+  first_date: string;
+  offset: number;
+};
+
+export function getPlans(): Promise<InstallmentPlan[]> {
+  return api<InstallmentPlan[]>("/installments");
+}
+
+export function createPlan(input: PlanInput): Promise<InstallmentPlan> {
+  return api<InstallmentPlan>("/installments", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Soft-deletes the plan's not-yet-due memos; past ones stay. */
+export function deletePlan(id: string): Promise<void> {
+  return api<void>(`/installments/${id}`, { method: "DELETE" });
 }
 
 // --- auth -----------------------------------------------------------------

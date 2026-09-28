@@ -34,6 +34,9 @@ struct SourceIn {
     currency: Option<String>,
     #[serde(default)]
     opening_minor: i64,
+    credit_limit_minor: Option<i64>,
+    statement_day: Option<i16>,
+    due_day: Option<i16>,
 }
 
 #[derive(Deserialize)]
@@ -46,6 +49,12 @@ struct UpdateIn {
     #[serde(default, deserialize_with = "present")]
     currency: Option<Option<String>>,
     opening_minor: Option<i64>,
+    #[serde(default, deserialize_with = "present")]
+    credit_limit_minor: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "present")]
+    statement_day: Option<Option<i16>>,
+    #[serde(default, deserialize_with = "present")]
+    due_day: Option<Option<i16>>,
     archived: Option<bool>,
 }
 
@@ -73,6 +82,7 @@ async fn list(
         .all(&st.db)
         .await?;
     // Opening + income − expense − transfers out + transfers in, for tracked sources only.
+    // Future-dated memos (e.g. installments not yet due) don't count toward today's balance.
     let balances: HashMap<Uuid, i64> = Balance::find_by_statement(Statement::from_sql_and_values(
         DbBackend::Postgres,
         "SELECT s.id, (s.opening_minor + COALESCE(SUM(
@@ -82,6 +92,7 @@ async fn list(
          FROM sources s
          LEFT JOIN memos m ON m.user_id = s.user_id AND m.deleted_at IS NULL
               AND (m.source_id = s.id OR m.to_source_id = s.id)
+              AND m.occurred_at <= now()
          WHERE s.user_id = $1 AND s.track_balance
          GROUP BY s.id",
         [uid.into()],
@@ -110,15 +121,20 @@ async fn create(
     if input.track_balance && currency.is_none() {
         return Err(AppError::BadRequest("tracking a balance needs a currency"));
     }
+    let kind = parse_kind(&input.kind)?;
+    check_credit_fields(&kind, input.credit_limit_minor, input.statement_day, input.due_day)?;
     let s = source::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(uid),
         name: Set(valid_name(&input.name)?),
-        kind: Set(parse_kind(&input.kind)?),
+        kind: Set(kind),
         emoji: Set(valid_emoji(input.emoji)?),
         track_balance: Set(input.track_balance),
         currency: Set(currency),
         opening_minor: Set(input.opening_minor),
+        credit_limit_minor: Set(valid_credit_limit(input.credit_limit_minor)?),
+        statement_day: Set(valid_day(input.statement_day)?),
+        due_day: Set(valid_day(input.due_day)?),
         archived_at: Set(None),
         created_at: Set(Utc::now()),
     }
@@ -160,12 +176,27 @@ async fn update(
     if let Some(o) = input.opening_minor {
         s.opening_minor = Set(o);
     }
+    if let Some(v) = input.credit_limit_minor {
+        s.credit_limit_minor = Set(valid_credit_limit(v)?);
+    }
+    if let Some(v) = input.statement_day {
+        s.statement_day = Set(valid_day(v)?);
+    }
+    if let Some(v) = input.due_day {
+        s.due_day = Set(valid_day(v)?);
+    }
     if let Some(archived) = input.archived {
         if archived {
             keep_one_active(&txn, uid, id).await?;
         }
         s.archived_at = Set(archived.then(Utc::now));
     }
+    check_credit_fields(
+        s.kind.as_ref(),
+        *s.credit_limit_minor.as_ref(),
+        *s.statement_day.as_ref(),
+        *s.due_day.as_ref(),
+    )?;
     if let Some(cur) = s.currency.as_ref() {
         // A currency lock must hold for the memos already on this source.
         let mismatched = memo::Entity::find()
@@ -237,6 +268,39 @@ fn parse_kind(k: &str) -> Result<String> {
     }
 }
 
+/// Credit limit, statement day and due day only mean anything on a credit/paylater source.
+pub(crate) fn is_debt_kind(kind: &str) -> bool {
+    kind == "credit" || kind == "paylater"
+}
+
+fn check_credit_fields(
+    kind: &str,
+    credit_limit_minor: Option<i64>,
+    statement_day: Option<i16>,
+    due_day: Option<i16>,
+) -> Result<()> {
+    if !is_debt_kind(kind) && (credit_limit_minor.is_some() || statement_day.is_some() || due_day.is_some()) {
+        return Err(AppError::BadRequest(
+            "credit limit, statement day and due day only apply to credit or pay-later sources",
+        ));
+    }
+    Ok(())
+}
+
+fn valid_credit_limit(v: Option<i64>) -> Result<Option<i64>> {
+    match v {
+        Some(n) if n <= 0 => Err(AppError::BadRequest("credit_limit_minor must be positive")),
+        v => Ok(v),
+    }
+}
+
+fn valid_day(v: Option<i16>) -> Result<Option<i16>> {
+    match v {
+        Some(d) if !(1..=31).contains(&d) => Err(AppError::BadRequest("day must be between 1 and 31")),
+        v => Ok(v),
+    }
+}
+
 /// The starter source every account gets at sign-up.
 pub(crate) async fn create_cash(db: &impl sea_orm::ConnectionTrait, uid: Uuid) -> Result<()> {
     source::ActiveModel {
@@ -248,6 +312,9 @@ pub(crate) async fn create_cash(db: &impl sea_orm::ConnectionTrait, uid: Uuid) -
         track_balance: Set(false),
         currency: Set(None),
         opening_minor: Set(0),
+        credit_limit_minor: Set(None),
+        statement_day: Set(None),
+        due_day: Set(None),
         archived_at: Set(None),
         created_at: Set(Utc::now()),
     }
