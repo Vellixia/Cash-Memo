@@ -298,3 +298,14 @@ export function getAttachmentUrl(memoId: string): Promise<{ url: string }> {
 export function deleteAttachment(memoId: string): Promise<void> {
   return api(`/memos/${memoId}/attachment`, { method: "DELETE" });
 }
+
+// --- reports -----------------------------------------------------------------
+
+export type TrendTotal = { month: string; currency: string; direction: MemoDirection; total_minor: number };
+export type TrendCategoryTotal = { month: string; category_id: string | null; currency: string; total_minor: number };
+export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[] };
+
+export function getTrend(months: 6 | 12): Promise<Trend> {
+  const params = new URLSearchParams({ months: String(months), offset: String(utcOffsetMinutes()) });
+  return api<Trend>(`/reports/trend?${params}`);
+}

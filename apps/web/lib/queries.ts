@@ -22,6 +22,7 @@ import {
   getMemos,
   getSources,
   getSummary,
+  getTrend,
   login,
   logout,
   requestPasswordReset,
@@ -306,4 +307,10 @@ export function useAttachmentUrl(memoId: string | undefined, enabled: boolean) {
 export function useDeleteAttachment() {
   const invalidate = useInvalidateMoney();
   return useMutation({ mutationFn: (memoId: string) => deleteAttachment(memoId), onSuccess: invalidate });
+}
+
+// --- reports -----------------------------------------------------------------
+
+export function useTrend(months: 6 | 12) {
+  return useQuery({ queryKey: ["reports-trend", months], queryFn: () => getTrend(months), placeholderData: keepPreviousData });
 }

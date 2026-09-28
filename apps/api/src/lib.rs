@@ -6,6 +6,7 @@ mod data;
 mod error;
 mod limits;
 mod memos;
+mod reports;
 mod sources;
 
 pub(crate) use domain::entities;
@@ -38,7 +39,8 @@ pub fn app(state: AppState) -> Router {
         .merge(categories::routes())
         .merge(sources::routes())
         .merge(data::routes())
-        .merge(attachments::routes());
+        .merge(attachments::routes())
+        .merge(reports::routes());
     Router::new()
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())

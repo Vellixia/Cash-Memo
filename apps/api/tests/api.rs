@@ -950,3 +950,132 @@ async fn attachment_upload_confirm_view_delete() {
     let (_, _, m1_final) = call(&app, "GET", &format!("/api/memos/{m1_id}"), &a, None).await;
     assert_eq!(m1_final["has_attachment"], json!(false));
 }
+
+#[tokio::test]
+async fn reports_trend_across_months_excludes_transfers() {
+    let (app, _db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, bank) = call(
+        &app,
+        "POST",
+        "/api/sources",
+        &a,
+        Some(json!({ "name": "Bank", "kind": "bank" })),
+    )
+    .await;
+    let (_, _, cat) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Food", "direction": "expense" })),
+    )
+    .await;
+
+    // Computed off `now`, not hardcoded, so the test doesn't depend on which month it runs in.
+    let now = chrono::Utc::now();
+    let this_month = now.format("%Y-%m").to_string();
+    let last_month = (now - chrono::Duration::days(32))
+        .format("%Y-%m")
+        .to_string();
+
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "income", "amount_minor": 100000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-05T12:00:00Z") }),
+        ),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "expense", "amount_minor": 30000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-06T12:00:00Z"),
+                     "source_id": cash, "category_id": cat["id"] }),
+        ),
+    )
+    .await;
+    // A transfer moves money between sources; it must never show up as income or expense.
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "transfer", "amount_minor": 50000, "currency": "USD",
+                     "occurred_at": format!("{this_month}-07T12:00:00Z"),
+                     "source_id": cash, "to_source_id": bank["id"] }),
+        ),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(
+            json!({ "direction": "expense", "amount_minor": 10000, "currency": "USD",
+                     "occurred_at": format!("{last_month}-05T12:00:00Z"),
+                     "source_id": cash, "category_id": cat["id"] }),
+        ),
+    )
+    .await;
+
+    let (s, _, trend) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=6&offset=0",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let months = trend["months"].as_array().unwrap();
+    assert_eq!(months.len(), 6);
+    assert_eq!(months.last().unwrap(), &json!(this_month));
+
+    let totals = trend["totals"].as_array().unwrap();
+    let total = |month: &str, direction: &str| {
+        totals
+            .iter()
+            .find(|t| t["month"] == month && t["currency"] == "USD" && t["direction"] == direction)
+            .map(|t| t["total_minor"].as_i64().unwrap())
+            .unwrap_or(0)
+    };
+    assert_eq!(total(&this_month, "income"), 100000);
+    assert_eq!(total(&this_month, "expense"), 30000);
+    assert_eq!(total(&last_month, "expense"), 10000);
+    assert!(
+        !totals.iter().any(|t| t["direction"] == "transfer"),
+        "transfers must be excluded"
+    );
+
+    let by_category = trend["by_category"].as_array().unwrap();
+    let category_total = |month: &str| {
+        by_category
+            .iter()
+            .find(|r| r["month"] == month && r["category_id"] == cat["id"])
+            .map(|r| r["total_minor"].as_i64().unwrap())
+    };
+    assert_eq!(category_total(&this_month), Some(30000));
+    assert_eq!(category_total(&last_month), Some(10000));
+
+    let (s, _, _) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=3&offset=0",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 6 or 12");
+}
