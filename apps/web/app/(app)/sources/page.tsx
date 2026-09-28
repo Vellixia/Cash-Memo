@@ -144,7 +144,7 @@ function AddSourceCard() {
       dueDay: "",
     },
   });
-  const [kind, trackBalance, currency] = useWatch({ control, name: ["kind", "track_balance", "currency"] });
+  const [kind, trackBalance, currency, emoji] = useWatch({ control, name: ["kind", "track_balance", "currency", "emoji"] });
   const debt = isDebtKind(kind);
 
   // Once the account's default currency loads, seed the (still-empty) currency field with it.
@@ -190,7 +190,7 @@ function AddSourceCard() {
     <form onSubmit={handleSubmit(onSubmit)} className={cn(card, "space-y-4 rounded-2xl p-4")} noValidate>
       <div className="flex items-center gap-2">
         <EmojiField
-          value={getValues("emoji")}
+          value={emoji}
           onChange={(e) => setValue("emoji", e)}
           label="Choose emoji for new source"
           className="size-11 shrink-0 rounded-2xl"

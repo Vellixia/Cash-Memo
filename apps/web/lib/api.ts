@@ -1,4 +1,6 @@
-export type User = { id: string; email: string; default_currency: string };
+/** Appearance sync across devices: partial and server-validated, so any field may be absent. */
+export type Preferences = { theme?: string; accent?: string; font?: string; size?: string };
+export type User = { id: string; email: string; default_currency: string; preferences: Preferences };
 export type Direction = "income" | "expense";
 export type MemoDirection = Direction | "transfer";
 export type Memo = {
@@ -236,7 +238,7 @@ export function signup(email: string, password: string, default_currency?: strin
   return api<User>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, default_currency }) });
 }
 
-export function updateMe(patch: { default_currency: string }): Promise<User> {
+export function updateMe(patch: { default_currency?: string; preferences?: Preferences }): Promise<User> {
   return api<User>("/auth/me", { method: "PATCH", body: JSON.stringify(patch) });
 }
 

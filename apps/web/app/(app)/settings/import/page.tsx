@@ -213,8 +213,8 @@ export default function ImportPage() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
       <header className="space-y-1">
-        <Link href="/account" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> Account
+        <Link href="/settings" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" /> Settings
         </Link>
         <h1 className="font-serif text-3xl tracking-tight md:text-4xl">Import from CSV</h1>
       </header>

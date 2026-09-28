@@ -5,7 +5,7 @@ const primaryVar = (page: import("@playwright/test").Page) =>
 
 test("Appearance: accent, font and text size persist across reload and repaint --primary", async ({ page, user }) => {
   void user;
-  await page.goto("/account");
+  await page.goto("/settings");
 
   const before = await primaryVar(page);
 

@@ -1186,3 +1186,84 @@ async fn reports_trend_across_months_excludes_transfers() {
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 6 or 12");
 }
+
+#[tokio::test]
+async fn preferences_sync() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+
+    // Empty by default, and returned on /auth/me.
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!((s, &me["preferences"]), (StatusCode::OK, &json!({})));
+
+    // A partial merge only touches the given keys.
+    let (s, _, me) = call(
+        &app,
+        "PATCH",
+        "/api/auth/me",
+        &a,
+        Some(json!({ "preferences": { "accent": "ocean", "font": "modern" } })),
+    )
+    .await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern" })
+        ),
+    );
+    let (s, _, me) = call(
+        &app,
+        "PATCH",
+        "/api/auth/me",
+        &a,
+        Some(json!({ "preferences": { "size": "large" } })),
+    )
+    .await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern", "size": "large" }),
+        ),
+    );
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern", "size": "large" }),
+        ),
+    );
+
+    // Unknown key, unknown value and non-string value are all rejected.
+    for bad in [
+        json!({ "nonsense": "ocean" }),
+        json!({ "accent": "neon" }),
+        json!({ "size": 1 }),
+    ] {
+        let (s, _, _) = call(
+            &app,
+            "PATCH",
+            "/api/auth/me",
+            &a,
+            Some(json!({ "preferences": bad })),
+        )
+        .await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+    }
+    // A rejected patch never partially applies.
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &a, None).await;
+    assert_eq!(
+        (s, &me["preferences"]),
+        (
+            StatusCode::OK,
+            &json!({ "accent": "ocean", "font": "modern", "size": "large" }),
+        ),
+    );
+
+    // Preferences are private, like the rest of the account.
+    let b = signup(&app).await;
+    let (s, _, me) = call(&app, "GET", "/api/auth/me", &b, None).await;
+    assert_eq!((s, &me["preferences"]), (StatusCode::OK, &json!({})));
+}

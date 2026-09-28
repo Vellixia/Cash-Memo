@@ -85,9 +85,9 @@ test("currency picker: Default/All sections, keyboard, Escape closes only the pi
   await expect(dialog.getByRole("button", { name: /Currency USD/ })).toBeVisible();
 });
 
-test("changing the default currency on Account makes the next new memo start in it", async ({ page, user, isMobile }) => {
+test("changing the default currency on Settings makes the next new memo start in it", async ({ page, user, isMobile }) => {
   void user;
-  await page.goto("/account");
+  await page.goto("/settings");
   await expect(page.getByTestId("default-currency-name")).toHaveText("US Dollar");
   await page.getByRole("button", { name: /Default currency USD/ }).click();
   const picker = page.getByTestId("currency-picker");
@@ -163,7 +163,7 @@ test("install entry: hidden with no prompt, appears on beforeinstallprompt and c
     await page.keyboard.press("Escape");
   }
 
-  await page.goto("/account");
+  await page.goto("/settings");
   await expect(page.getByTestId("default-currency-name")).toBeVisible();
   const install = page.getByRole("button", { name: "Install app" });
   await expect(install).toHaveCount(0);
@@ -178,9 +178,9 @@ test("install entry: hidden with no prompt, appears on beforeinstallprompt and c
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" });
 
-  test("the Account page shows the Add to Home Screen hint instead of a button", async ({ page, user }) => {
+  test("the Settings page shows the Add to Home Screen hint instead of a button", async ({ page, user }) => {
     void user;
-    await page.goto("/account");
+    await page.goto("/settings");
     await expect(page.getByTestId("ios-install-hint")).toContainText("Add to Home Screen");
     await expect(page.getByRole("button", { name: "Install app" })).toHaveCount(0);
   });
