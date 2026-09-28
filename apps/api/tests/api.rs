@@ -1833,3 +1833,10 @@ async fn budgets_spent_and_projected() {
     let (_, _, none) = call(&app, "GET", "/api/budgets", &a, None).await;
     assert_eq!(none, json!([]));
 }
+
+#[tokio::test]
+async fn health_reports_the_version() {
+    let app = test_app().await;
+    let (s, _, body) = call(&app, "GET", "/api/health", "", None).await;
+    assert_eq!((s, body["version"].as_str()), (StatusCode::OK, Some("dev")));
+}

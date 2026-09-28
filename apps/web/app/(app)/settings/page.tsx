@@ -130,6 +130,7 @@ export default function SettingsPage() {
           )}
         </section>
       )}
+      <p className="text-center text-xs text-muted-foreground">Cash Memo {process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}</p>
     </div>
   );
 }

@@ -4,10 +4,17 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 
 pub use sentry::ClientInitGuard;
 
+/// The release version, baked in at build time from the git tag (`APP_VERSION`, set by the release
+/// workflow); "dev" for local and CI builds.
+pub const VERSION: &str = match option_env!("APP_VERSION") {
+    Some(v) => v,
+    None => "dev",
+};
+
 /// Call first in `main`, before the async runtime starts; keep the guard alive until exit.
-pub fn init(release: Option<std::borrow::Cow<'static, str>>) -> ClientInitGuard {
+pub fn init() -> ClientInitGuard {
     let mut opts = sentry::ClientOptions::new()
-        .maybe_release(release)
+        .release(format!("cashmemo@{VERSION}"))
         .send_default_pii(false)
         // Money data never leaves the server: keep only method + path of the request.
         .before_send(|mut event| {

@@ -55,12 +55,17 @@ pub fn app(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// Liveness + database reachability, for the Dokploy healthcheck.
-async fn health(State(st): State<AppState>) -> StatusCode {
-    match st.db.ping().await {
+/// Liveness + database reachability, for the Dokploy healthcheck. The version lets the release
+/// workflow confirm the new build is the one answering.
+async fn health(State(st): State<AppState>) -> (StatusCode, axum::Json<serde_json::Value>) {
+    let status = match st.db.ping().await {
         Ok(()) => StatusCode::OK,
         Err(_) => StatusCode::SERVICE_UNAVAILABLE,
-    }
+    };
+    (
+        status,
+        axum::Json(serde_json::json!({ "version": telemetry::VERSION })),
+    )
 }
 
 /// ISO 4217-shaped code, uppercased. Shared by memos and user settings.

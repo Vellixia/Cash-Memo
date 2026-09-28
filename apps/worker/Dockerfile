@@ -5,6 +5,9 @@ COPY Cargo.toml Cargo.lock ./
 COPY apps/api apps/api
 COPY apps/worker apps/worker
 COPY crates crates
+# The git tag (without the v), from the release workflow; shows in /api/health and GlitchTip.
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 RUN cargo build --release -p worker
 
 FROM debian:bookworm-slim
