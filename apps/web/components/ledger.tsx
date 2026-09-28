@@ -1,13 +1,14 @@
 "use client";
 
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Plus, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Plus, Repeat, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Segmented } from "@/components/segmented";
 import { card } from "@/components/summary";
-import type { Category, Direction, Memo, Source } from "@/lib/api";
+import type { Category, Direction, Memo, Source, Upcoming } from "@/lib/api";
 import { dayLabel, groupByDay, signedAmount, timeLabel } from "@/lib/format";
 import { formatMoney, signedMoney } from "@/lib/money";
 import { STARTER_CATEGORIES, useAddStarterSet } from "@/lib/queries";
@@ -29,6 +30,7 @@ export function Ledger({
   onSource,
   onSelect,
   onAdd,
+  upcoming,
 }: {
   memos: Memo[] | undefined;
   categories: Category[];
@@ -41,12 +43,22 @@ export function Ledger({
   onSource: (id: string | undefined) => void;
   onSelect: (memo: Memo) => void;
   onAdd: () => void;
+  /** Recurring occurrences still to come this month: shown muted, never in totals. */
+  upcoming?: Upcoming[];
 }) {
   const byId = new Map(categories.map((c) => [c.id, c]));
   const sourceById = new Map(sources.map((s) => [s.id, s]));
   const options = categories.filter((c) => direction === "all" || c.direction === direction);
   const shown = memos?.filter((m) => direction === "all" || m.direction === direction);
   const filtered = direction !== "all" || !!categoryId || !!sourceId;
+  const upcomingShown = shown
+    ? (upcoming ?? []).filter(
+        (u) =>
+          (direction === "all" || u.direction === direction) &&
+          (!categoryId || u.category_id === categoryId) &&
+          (!sourceId || u.source_id === sourceId || u.to_source_id === sourceId),
+      )
+    : [];
 
   return (
     <section aria-labelledby="ledger-title" className="space-y-4">
@@ -117,6 +129,40 @@ export function Ledger({
         </div>
       </div>
 
+      {upcomingShown.length > 0 && (
+        <div data-testid="upcoming">
+          <div className="flex items-baseline justify-between gap-3 px-2 pb-2">
+            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Upcoming</h3>
+            <span className="text-xs text-muted-foreground">Not in totals yet</span>
+          </div>
+          <ul className={cn(card, "divide-y divide-border/70 overflow-hidden rounded-2xl border-dashed bg-card/60 shadow-none")}>
+            {upcomingShown.map((u) => {
+              const c = u.category_id ? byId.get(u.category_id) : undefined;
+              const title = u.note || c?.name || (u.direction === "transfer" ? "Transfer" : "Untitled");
+              return (
+                <li key={`${u.id}-${u.date}`}>
+                  <Link
+                    href="/recurring"
+                    data-testid="upcoming-row"
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-muted-foreground transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/60"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-lg opacity-80" aria-hidden>
+                      {c?.emoji ?? <Repeat className="size-4.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[0.95rem] font-medium">{title}</span>
+                      <span className="block truncate text-xs">Upcoming · {dayLabel(u.date)}</span>
+                    </span>
+                    <span className="num shrink-0 text-lg">
+                      {u.direction === "transfer" ? formatMoney(u.amount_minor, u.currency) : signedMoney(signedAmount(u), u.currency)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {!shown ? (
         <div className={cn(card, "space-y-3 p-4")}>
           {[0, 1, 2].map((i) => (
