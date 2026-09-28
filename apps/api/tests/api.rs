@@ -487,6 +487,183 @@ async fn sources_and_transfers() {
     assert_eq!(s, StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+async fn installment_plans() {
+    use chrono::Datelike;
+    use sea_orm::{DbBackend, FromQueryResult, Statement};
+
+    let (app, db) = test_app_db().await;
+    let a = signup(&app).await;
+    let src = |body: Value| {
+        let app = app.clone();
+        let a = a.clone();
+        async move { call(&app, "POST", "/api/sources", &a, Some(body)).await }
+    };
+    let install = |body: Value| {
+        let app = app.clone();
+        let a = a.clone();
+        async move { call(&app, "POST", "/api/installments", &a, Some(body)).await }
+    };
+
+    // Credit limit/statement/due day only apply to a credit or pay-later source.
+    let (s, _, _) = src(json!({ "name": "Jar", "kind": "cash", "credit_limit_minor": 100 })).await;
+    assert_eq!(
+        s,
+        StatusCode::BAD_REQUEST,
+        "credit fields need a credit/paylater kind"
+    );
+
+    let (_, _, bca) =
+        src(json!({ "name": "BCA", "kind": "bank", "track_balance": true, "currency": "USD" }))
+            .await;
+    let (_, _, visa) = src(json!({
+        "name": "Visa", "kind": "credit", "track_balance": true, "currency": "USD",
+        "opening_minor": 0, "credit_limit_minor": 500_000, "due_day": 15,
+    }))
+    .await;
+    let bca_id = bca["id"].clone();
+    let visa_id = visa["id"].clone();
+
+    // Adding credit fields to an already-non-credit source is rejected too.
+    let (s, _, _) = call(
+        &app,
+        "PATCH",
+        &format!("/api/sources/{}", bca_id.as_str().unwrap()),
+        &a,
+        Some(json!({ "credit_limit_minor": 500 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // A plan needs a credit/paylater source.
+    let (s, _, _) = install(json!({
+        "source_id": bca_id, "currency": "USD", "principal_minor": 1000, "months": 3,
+        "first_date": "2026-01-01", "offset": 0,
+    }))
+    .await;
+    assert_eq!(
+        s,
+        StatusCode::BAD_REQUEST,
+        "installments need a credit/paylater source"
+    );
+
+    // `first_date` placed so exactly 2 of 4 monthly installments are already due and 2 are still
+    // ahead, however late in the day this test happens to run — each lands a few days off the
+    // today/future boundary, never right on it.
+    let today = chrono::Utc::now().date_naive();
+    let first_date =
+        today.checked_sub_months(chrono::Months::new(2)).unwrap() + chrono::Duration::days(3);
+    let (s, _, plan) = install(json!({
+        "source_id": visa_id, "note": "New phone", "currency": "USD",
+        "principal_minor": 10_000, "fee_minor": 3, "months": 4,
+        "first_date": first_date.format("%Y-%m-%d").to_string(), "offset": 0,
+    }))
+    .await;
+    assert_eq!(s, StatusCode::CREATED);
+    assert_eq!(plan["paid"], json!(2), "2 of 4 installments already due");
+    assert_eq!(plan["remaining"], json!(2));
+    let plan_id = plan["id"].as_str().unwrap().to_owned();
+
+    #[derive(FromQueryResult)]
+    struct Row {
+        id: uuid::Uuid,
+        amount_minor: i64,
+        occurred_at: chrono::DateTime<chrono::Utc>,
+    }
+    let rows = Row::find_by_statement(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT id, amount_minor, occurred_at FROM memos WHERE installment_plan_id = $1 ORDER BY occurred_at",
+        [uuid::Uuid::parse_str(&plan_id).unwrap().into()],
+    ))
+    .all(&db)
+    .await
+    .unwrap();
+    // The whole-minor-unit remainder (10,003 / 4 = 2,500 r3) lands on the first installment.
+    assert_eq!(
+        rows.iter().map(|r| r.amount_minor).collect::<Vec<_>>(),
+        vec![2503, 2500, 2500, 2500]
+    );
+    let now = chrono::Utc::now();
+    assert_eq!(rows.iter().filter(|r| r.occurred_at <= now).count(), 2);
+    assert_eq!(rows.iter().filter(|r| r.occurred_at > now).count(), 2);
+
+    // The balance only counts installments already due; the 2 not-yet-due ones don't count yet.
+    let (_, _, list) = call(&app, "GET", "/api/sources", &a, None).await;
+    let visa_balance = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == visa_id)
+        .unwrap()["balance_minor"]
+        .clone();
+    assert_eq!(visa_balance, json!(-2503 - 2500));
+
+    // Month-end clamping: Jan 31 -> Feb 28/29 -> Mar 31, whichever "next January" comes up.
+    let jan31 = chrono::NaiveDate::from_ymd_opt(today.year() + 1, 1, 31).unwrap();
+    let (s, _, clamped) = install(json!({
+        "source_id": visa_id, "currency": "USD", "principal_minor": 300, "months": 3,
+        "first_date": jan31.format("%Y-%m-%d").to_string(), "offset": 0,
+    }))
+    .await;
+    assert_eq!(s, StatusCode::CREATED);
+    let clamped_id = clamped["id"].as_str().unwrap().to_owned();
+    let clamped_rows = Row::find_by_statement(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT id, amount_minor, occurred_at FROM memos WHERE installment_plan_id = $1 ORDER BY occurred_at",
+        [uuid::Uuid::parse_str(&clamped_id).unwrap().into()],
+    ))
+    .all(&db)
+    .await
+    .unwrap();
+    let feb_last_day = if chrono::NaiveDate::from_ymd_opt(today.year() + 1, 2, 29).is_some() {
+        29
+    } else {
+        28
+    };
+    assert_eq!(
+        clamped_rows
+            .iter()
+            .map(|r| r.occurred_at.day())
+            .collect::<Vec<_>>(),
+        vec![31, feb_last_day, 31]
+    );
+
+    // Cancelling a plan soft-deletes only its not-yet-due memos; past ones stay untouched.
+    let (s, _, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/installments/{plan_id}"),
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    #[derive(FromQueryResult)]
+    struct Deleted {
+        deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    }
+    for r in &rows {
+        let after = Deleted::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT deleted_at FROM memos WHERE id = $1",
+            [r.id.into()],
+        ))
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            after.deleted_at.is_some(),
+            r.occurred_at > now,
+            "future installments are soft-deleted, past ones stay"
+        );
+    }
+
+    // The plan itself is gone.
+    let (_, _, plans) = call(&app, "GET", "/api/installments", &a, None).await;
+    assert!(plans.as_array().unwrap().iter().all(|p| p["id"] != plan_id));
+}
+
 /// The link in the newest queued email to `to` (the worker isn't running in tests).
 async fn mailed_token(db: &sea_orm::DatabaseConnection, to: &str) -> Option<String> {
     use sea_orm::{ConnectionTrait, DbBackend, Statement};
