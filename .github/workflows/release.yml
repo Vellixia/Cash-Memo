@@ -46,7 +46,7 @@ jobs:
             v="${INPUT#v}"
             echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::version must look like 1.2.0"; exit 1; }
             for app in api web worker; do
-              docker manifest inspect "ghcr.io/vellixia/cashmemo-$app:$v" >/dev/null \
+              docker manifest inspect "ghcr.io/cunilab/cashmemo-$app:$v" >/dev/null \
                 || { echo "::error::no $app image for $v; only released versions can be redeployed"; exit 1; }
             done
           else
@@ -93,8 +93,8 @@ jobs:
             NEXT_PUBLIC_APP_VERSION=${{ env.VERSION }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
           tags: |
-            ghcr.io/vellixia/cashmemo-${{ matrix.app }}:${{ env.VERSION }}
-            ghcr.io/vellixia/cashmemo-${{ matrix.app }}:latest
+            ghcr.io/cunilab/cashmemo-${{ matrix.app }}:${{ env.VERSION }}
+            ghcr.io/cunilab/cashmemo-${{ matrix.app }}:latest
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
       # Dokploy has no registry credentials; new GHCR packages default to private.
@@ -102,7 +102,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api --method PATCH /orgs/Vellixia/packages/container/cashmemo-${{ matrix.app }} -f visibility=public \
+          gh api --method PATCH /orgs/cunilab/packages/container/cashmemo-${{ matrix.app }} -f visibility=public \
           || echo "Could not set visibility automatically; flip it in the GitHub UI."
 
   # Needs the DOKPLOY_URL and DOKPLOY_TOKEN secrets plus one DOKPLOY_APP_<APP> secret per app.
@@ -127,7 +127,7 @@ jobs:
       - name: Point the app at this version's image and redeploy
         env:
           APP_ID: ${{ secrets[matrix.id_secret] }}
-          IMAGE: ghcr.io/vellixia/cashmemo-${{ matrix.app }}:${{ needs.version.outputs.version }}
+          IMAGE: ghcr.io/cunilab/cashmemo-${{ matrix.app }}:${{ needs.version.outputs.version }}
         run: |
           if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_TOKEN" ] || [ -z "$APP_ID" ]; then echo "::error::Dokploy secrets not set"; exit 1; fi
           api() { curl -fsS -X POST "$DOKPLOY_URL/api/$1" -H "x-api-key: $DOKPLOY_TOKEN" -H 'content-type: application/json' -d "$2"; }

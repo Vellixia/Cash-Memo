@@ -396,7 +396,7 @@ bun run test:e2e
 - **Merging to `main` doesn't deploy.** Production changes only through a release.
 - **`release.yml`** runs when a semver tag (`vX.Y.Z`) is pushed:
   1. **version**: the tag must be on `main` and `ci` must be green for that commit (it waits for a run that's still going).
-  2. **build**: builds `ghcr.io/vellixia/cashmemo-api`, `cashmemo-web` and `cashmemo-worker` tagged `X.Y.Z` and `latest`, on GitHub's runners (the Dokploy host's build containers can't resolve DNS). The version is baked in: `/api/health` returns `{ "version": "X.Y.Z" }`, Settings shows it, and GlitchTip gets release `cashmemo@X.Y.Z`.
+  2. **build**: builds `ghcr.io/cunilab/cashmemo-api`, `cashmemo-web` and `cashmemo-worker` tagged `X.Y.Z` and `latest`, on GitHub's runners (the Dokploy host's build containers can't resolve DNS). The version is baked in: `/api/health` returns `{ "version": "X.Y.Z" }`, Settings shows it, and GlitchTip gets release `cashmemo@X.Y.Z`.
   3. **deploy**: points each Dokploy app at the `X.Y.Z` image and redeploys. This needs the secrets `DOKPLOY_URL`, `DOKPLOY_TOKEN`, `DOKPLOY_APP_API`, `DOKPLOY_APP_WEB` and `DOKPLOY_APP_WORKER`.
   4. **verify**: waits until production's `/api/health` reports `X.Y.Z` (up to 10 minutes).
   5. **publish**: creates the GitHub Release with generated notes.
