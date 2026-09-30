@@ -6,7 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Camera, Check, ImagePlus, Loader2, Lock, Plus, Repeat, Trash2, X } from "lucide-react";
+import { Camera, ImagePlus, Loader2, Lock, Plus, Repeat, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { EmojiField } from "@/components/emoji-field";
 import { OfflineHint } from "@/components/offline-hint";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
+import { ChoiceChips, chipClass } from "@/components/choice-chips";
 import { Switch } from "@/components/ui/switch";
 import type { Cadence, Direction, Memo, MemoDirection, Source } from "@/lib/api";
 import { uploadAttachmentFile, utcOffsetMinutes } from "@/lib/api";
@@ -353,7 +354,7 @@ function MemoForm({
         </DialogPrimitive.Close>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 pt-4 pb-5">
+      <div data-testid="memo-editor-body" className="min-h-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto px-5 pt-4 pb-5">
         <Segmented
           label="Direction"
           className="flex w-full"
@@ -387,7 +388,7 @@ function MemoForm({
             </CurrencyPicker>
           )}
           <AmountField control={control} name="amount" currency={currency} invalid={!!errors.amount} inputRef={amountRef} className={tone} />
-          <div className="min-h-5 text-center text-sm" aria-live="polite">
+          <div className="min-h-5 max-w-full text-center text-sm wrap-anywhere" aria-live="polite">
             {errors.amount && <p className="text-destructive">{errors.amount.message}</p>}
             {!errors.amount && errors.currency && <p className="text-destructive">{errors.currency.message}</p>}
             {!errors.amount && !errors.currency && lockedCurrency && (
@@ -398,11 +399,11 @@ function MemoForm({
 
         {direction === "transfer" ? (
           <>
-            <fieldset className="space-y-2.5">
+            <fieldset className="min-w-0 space-y-2.5">
               <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">From</legend>
               <SourceChips label="From account" sources={activeSources} value={sourceId} onChange={(id) => setValue("source_id", id)} onNavigate={onDone} />
             </fieldset>
-            <fieldset className="space-y-2.5">
+            <fieldset className="min-w-0 space-y-2.5">
               <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">To</legend>
               <SourceChips label="To account" sources={activeSources} value={toSourceId} onChange={(id) => setValue("to_source_id", id)} onNavigate={onDone} />
               {errors.to_source_id && <p className="text-sm text-destructive">{errors.to_source_id.message}</p>}
@@ -411,7 +412,7 @@ function MemoForm({
         ) : (
           <>
             {/* Category chips */}
-            <fieldset className="space-y-2.5">
+            <fieldset className="min-w-0 space-y-2.5">
               <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">Category</legend>
               <CategoryChips
                 direction={direction}
@@ -422,7 +423,7 @@ function MemoForm({
             </fieldset>
 
             {/* Source chips */}
-            <fieldset className="space-y-2.5">
+            <fieldset className="min-w-0 space-y-2.5">
               <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {direction === "income" ? "Received in" : "Paid with"}
               </legend>
@@ -437,7 +438,7 @@ function MemoForm({
             </fieldset>
 
             {canInstallments && (
-              <fieldset className="space-y-3 rounded-2xl bg-muted/50 p-3.5">
+              <fieldset className="min-w-0 space-y-3 rounded-2xl bg-muted/50 p-3.5">
                 <label className="flex items-center justify-between gap-3">
                   <span className="text-sm font-medium">Pay in installments</span>
                   <Switch checked={installments} onCheckedChange={(v) => setValue("installments", v)} aria-label="Pay in installments" />
@@ -451,7 +452,7 @@ function MemoForm({
                           type="button"
                           aria-pressed={months === String(n)}
                           onClick={() => setValue("months", String(n))}
-                          className={cn(sourceChip, months === String(n) ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted")}
+                          className={cn(chipClass, months === String(n) ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted")}
                         >
                           {n}×
                         </button>
@@ -507,6 +508,8 @@ function MemoForm({
             <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{memo ? "Make recurring" : "Repeat"}</span>
             <Segmented
               size="sm"
+              // Four touch-sized pills overflow a 320px sheet at the default padding.
+              className="max-w-full max-sm:[&>button]:px-2"
               label={memo ? "Make recurring" : "Repeat"}
               value={repeat}
               onChange={setRepeat}
@@ -636,7 +639,7 @@ function AttachmentField({
   const thumbUrl = previewUrl ?? attachmentUrl.data?.url;
 
   return (
-    <fieldset className="space-y-2.5">
+    <fieldset className="min-w-0 space-y-2.5">
       <legend className="mb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">Attachment</legend>
       <input
         ref={fileRef}
@@ -730,41 +733,22 @@ function CategoryChips({
     }
   }
 
-  const chip =
-    "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 pointer-coarse:h-11 pointer-coarse:px-3.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40";
-
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Categories">
-        {choices.map((c) => {
-          const active = c.id === value;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onChange(active ? null : c.id)}
-              className={cn(
-                chip,
-                active
-                  ? direction === "income"
-                    ? "border-income bg-income-soft text-income"
-                    : "border-expense bg-expense-soft text-expense"
-                  : "border-border bg-card text-foreground hover:bg-muted",
-              )}
-            >
-              {c.emoji && <span aria-hidden>{c.emoji}</span>}
-              {c.name}
-              {active && <Check className="size-3.5" aria-hidden />}
-            </button>
-          );
-        })}
+      <ChoiceChips
+        label="Categories"
+        moreLabel="More categories"
+        items={choices}
+        value={value}
+        onChange={onChange}
+        activeClassName={direction === "income" ? "border-income bg-income-soft text-income" : "border-expense bg-expense-soft text-expense"}
+      >
         {!adding && (
-          <button type="button" onClick={() => setAdding(true)} className={cn(chip, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
+          <button type="button" onClick={() => setAdding(true)} className={cn(chipClass, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
             <Plus className="size-4" /> New
           </button>
         )}
-      </div>
+      </ChoiceChips>
       {adding && (
         <div className="flex items-center gap-2 rounded-2xl bg-muted/60 p-2">
           <EmojiField value={emoji} onChange={setEmoji} />
@@ -798,10 +782,7 @@ function CategoryChips({
   );
 }
 
-const sourceChip =
-  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 pointer-coarse:h-11 pointer-coarse:px-3.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40";
-
-/** A horizontally-scrolling row of active-source chips, with a trailing link to add one. */
+/** The first few active-source chips plus "More…" for the rest, with a trailing link to add one. */
 function SourceChips({
   label,
   sources,
@@ -816,30 +797,10 @@ function SourceChips({
   onNavigate: () => void;
 }) {
   return (
-    <div
-      className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      role="group"
-      aria-label={label}
-    >
-      {sources.map((s) => {
-        const active = s.id === value;
-        return (
-          <button
-            key={s.id}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onChange(active ? null : s.id)}
-            className={cn(sourceChip, active ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted")}
-          >
-            {s.emoji && <span aria-hidden>{s.emoji}</span>}
-            {s.name}
-            {active && <Check className="size-3.5" aria-hidden />}
-          </button>
-        );
-      })}
-      <Link href="/sources" onClick={onNavigate} aria-label="Add new source" className={cn(sourceChip, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
+    <ChoiceChips label={label} moreLabel="More sources" items={sources} value={value} onChange={onChange} activeClassName="border-primary bg-primary/10 text-primary">
+      <Link href="/sources" onClick={onNavigate} aria-label="Add new source" className={cn(chipClass, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
         <Plus className="size-4" /> New
       </Link>
-    </div>
+    </ChoiceChips>
   );
 }
