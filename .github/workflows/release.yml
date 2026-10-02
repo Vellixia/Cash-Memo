@@ -1,0 +1,160 @@
+# Releases are the only way to production. Push a semver tag on a green main commit:
+#   git tag v1.3.0 && git push origin v1.3.0
+# and this builds the images for that version, deploys them to Dokploy, waits until the API reports
+# the new version, then publishes a GitHub Release with generated notes.
+# Rollback: Actions → release → Run workflow with an earlier version; it redeploys those images as-is.
+# Images are built on GitHub runners and pushed to GHCR (the Dokploy host can't resolve DNS in builds).
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Already-released version to redeploy (rollback), e.g. 1.2.0"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+  checks: read
+
+# One rollout at a time; a second tag waits instead of racing the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  HEALTH_URL: https://cashmemo.andresholivin.dev/api/health
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            v="${INPUT#v}"
+            echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::version must look like 1.2.0"; exit 1; }
+            for app in api web worker; do
+              docker manifest inspect "ghcr.io/cunilab/cashmemo-$app:$v" >/dev/null \
+                || { echo "::error::no $app image for $v; only released versions can be redeployed"; exit 1; }
+            done
+          else
+            v="${GITHUB_REF_NAME#v}"
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+              || { echo "::error::$GITHUB_REF_NAME is not on main; tag a commit that is"; exit 1; }
+            # The tag is usually pushed right after a merge: wait for that commit's CI, then require green.
+            for _ in $(seq 60); do
+              runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" \
+                --jq '[.check_runs[] | select(.name == "check" or .name == "e2e")]')
+              if [ "$(jq 'length' <<<"$runs")" -ge 2 ] && [ "$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")" = 0 ]; then break; fi
+              echo "waiting for ci on $GITHUB_SHA"; sleep 30
+            done
+            jq -e 'length >= 2 and all(.conclusion == "success")' <<<"$runs" >/dev/null \
+              || { echo "::error::ci is not green for $GITHUB_SHA"; jq -r '.[] | "\(.name): \(.status) \(.conclusion)"' <<<"$runs"; exit 1; }
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [api, web, worker]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          # The DSN is public by design (the browser posts errors to it): a repo variable, not a secret.
+          build-args: |
+            APP_VERSION=${{ env.VERSION }}
+            NEXT_PUBLIC_APP_VERSION=${{ env.VERSION }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+          tags: |
+            ghcr.io/cunilab/cashmemo-${{ matrix.app }}:${{ env.VERSION }}
+            ghcr.io/cunilab/cashmemo-${{ matrix.app }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      # Dokploy has no registry credentials; new GHCR packages default to private.
+      - name: Make the GHCR package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method PATCH /orgs/cunilab/packages/container/cashmemo-${{ matrix.app }} -f visibility=public \
+          || echo "Could not set visibility automatically; flip it in the GitHub UI."
+
+  # Needs the DOKPLOY_URL and DOKPLOY_TOKEN secrets plus one DOKPLOY_APP_<APP> secret per app.
+  deploy:
+    needs: [version, build]
+    # `build` is skipped on a rollback (the images already exist).
+    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build.result) }}
+    runs-on: ubuntu-latest
+    env:
+      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+      DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+    strategy:
+      matrix:
+        include:
+          - app: api
+            id_secret: DOKPLOY_APP_API
+          - app: web
+            id_secret: DOKPLOY_APP_WEB
+          - app: worker
+            id_secret: DOKPLOY_APP_WORKER
+    steps:
+      - name: Point the app at this version's image and redeploy
+        env:
+          APP_ID: ${{ secrets[matrix.id_secret] }}
+          IMAGE: ghcr.io/cunilab/cashmemo-${{ matrix.app }}:${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_TOKEN" ] || [ -z "$APP_ID" ]; then echo "::error::Dokploy secrets not set"; exit 1; fi
+          api() { curl -fsS -X POST "$DOKPLOY_URL/api/$1" -H "x-api-key: $DOKPLOY_TOKEN" -H 'content-type: application/json' -d "$2"; }
+          api application.saveDockerProvider "{\"applicationId\":\"$APP_ID\",\"dockerImage\":\"$IMAGE\",\"username\":null,\"password\":null,\"registryUrl\":null}"
+          api application.deploy "{\"applicationId\":\"$APP_ID\"}"
+
+  # Dokploy deploys asynchronously: done means production answers with the new version.
+  verify:
+    needs: [version, deploy]
+    if: ${{ !cancelled() && needs.deploy.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - run: |
+          for _ in $(seq 60); do
+            live=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r .version 2>/dev/null || true)
+            [ "$live" = "$VERSION" ] && { echo "live: $live"; exit 0; }
+            echo "live: ${live:-unreachable}, waiting for $VERSION"; sleep 10
+          done
+          echo "::error::production did not report $VERSION within 10 minutes"; exit 1
+
+  publish:
+    needs: [version, verify]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "Cash Memo ${{ needs.version.outputs.version }}"

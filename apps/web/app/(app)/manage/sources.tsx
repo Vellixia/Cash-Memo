@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { ChevronDown, Loader2, Pencil, Plus, RotateCcw, Trash2, X, Check } from "lucide-react";
+import { ChevronDown, Loader2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmojiField } from "@/components/emoji-field";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { AmountField } from "@/components/amount-field";
@@ -37,7 +38,7 @@ import {
   useArchiveSource,
 } from "@/lib/queries";
 import { useOnline } from "@/lib/use-online";
-import type { Source, SourceKind } from "@/lib/api";
+import type { Source, SourceInput, SourceKind } from "@/lib/api";
 import { balanceLabel, fitAmount, formatMoney, fromMinor, toMinor } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -52,18 +53,14 @@ const KIND_LABEL: Record<SourceKind, string> = {
 };
 const isDebtKind = (kind: SourceKind) => kind === "credit" || kind === "paylater";
 
-export default function SourcesPage() {
+export function SourcesPanel() {
   const { data: sources, isLoading } = useSources();
   const active = (sources ?? []).filter((s) => !s.archived_at);
   const archived = (sources ?? []).filter((s) => s.archived_at);
   const groups = KIND_ORDER.map((kind) => ({ kind, items: active.filter((s) => s.kind === kind) })).filter((g) => g.items.length > 0);
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="font-serif text-3xl tracking-tight md:text-4xl">Sources</h1>
-        <p className="text-sm text-muted-foreground">Where your money lives — wallets, accounts and cards.</p>
-      </header>
+    <div className="w-full max-w-2xl space-y-6">
       <OfflineHint className="rounded-2xl bg-muted px-4 py-3" />
 
       <AddSourceCard />
@@ -304,15 +301,12 @@ function SourceRow({ source }: { source: Source }) {
   const archive = useArchiveSource();
   const online = useOnline();
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(source.name);
-  const [emoji, setEmoji] = useState<string | null>(source.emoji);
   const [confirm, setConfirm] = useState(false);
 
-  async function save(patch: { name?: string; emoji?: string | null }, done?: () => void) {
+  async function saveEmoji(emoji: string | null) {
     try {
-      await update.mutateAsync({ id: source.id, patch });
+      await update.mutateAsync({ id: source.id, patch: { emoji } });
       toast.success("Source updated");
-      done?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update source");
     }
@@ -340,40 +334,12 @@ function SourceRow({ source }: { source: Source }) {
     }
   }
 
-  if (editing) {
-    return (
-      <li>
-        <form
-          className="flex items-center gap-2 px-3 py-2.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const trimmed = name.trim();
-            if (!trimmed) return toast.error("Name can’t be empty");
-            save({ name: trimmed, emoji }, () => setEditing(false));
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setEditing(false);
-          }}
-        >
-          <EmojiField value={emoji} onChange={setEmoji} label={`Emoji for ${source.name}`} className="size-10 rounded-2xl" />
-          <Input autoFocus aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-xl bg-card" />
-          <Button type="submit" size="icon" className="size-10 rounded-xl" aria-label="Save source" disabled={update.isPending || !online}>
-            {update.isPending ? <Loader2 className="animate-spin" /> : <Check />}
-          </Button>
-          <Button type="button" variant="ghost" size="icon" className="size-10 rounded-xl" aria-label="Cancel editing" onClick={() => setEditing(false)}>
-            <X />
-          </Button>
-        </form>
-      </li>
-    );
-  }
-
   return (
     <>
     <li className="flex items-center gap-3 px-3 py-2.5" data-testid="source-row">
       <EmojiField
         value={source.emoji}
-        onChange={(e) => save({ emoji: e })}
+        onChange={saveEmoji}
         label={`Change emoji for ${source.name}`}
         disabled={!online}
         className="size-10 shrink-0 rounded-2xl border-transparent bg-muted"
@@ -389,12 +355,8 @@ function SourceRow({ source }: { source: Source }) {
         variant="ghost"
         size="icon"
         className="size-11 rounded-xl text-muted-foreground md:size-9"
-        aria-label={`Rename ${source.name}`}
-        onClick={() => {
-          setName(source.name);
-          setEmoji(source.emoji);
-          setEditing(true);
-        }}
+        aria-label={`Edit ${source.name}`}
+        onClick={() => setEditing(true)}
       >
         <Pencil />
       </Button>
@@ -428,9 +390,167 @@ function SourceRow({ source }: { source: Source }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {editing && <EditSourceDialog source={source} onClose={() => setEditing(false)} />}
     </li>
     {source.track_balance && isDebtKind(source.kind) && <CreditPanel source={source} />}
     </>
+  );
+}
+
+/** Name, emoji and balance tracking (currency + opening balance) of an existing source. */
+function EditSourceDialog({ source, onClose }: { source: Source; onClose: () => void }) {
+  const update = useUpdateSource();
+  const online = useOnline();
+  const { data: me } = useMe();
+  const debt = isDebtKind(source.kind);
+  // A debt's opening reads positive ("owed at start") but is stored negative. Anything else starts empty.
+  const shown = debt ? -source.opening_minor : source.opening_minor;
+  const {
+    control,
+    register,
+    handleSubmit,
+    getValues,
+    setValue,
+    formState: { errors, dirtyFields },
+  } = useForm<SourceValues>({
+    resolver: zodResolver(sourceSchema),
+    defaultValues: {
+      name: source.name,
+      kind: source.kind,
+      emoji: source.emoji,
+      track_balance: source.track_balance,
+      currency: source.currency ?? me?.default_currency ?? "USD",
+      amount: source.track_balance && source.currency && shown > 0 ? fromMinor(shown, source.currency) : "",
+      creditLimit: "",
+      statementDay: "",
+      dueDay: "",
+    },
+  });
+  const [trackBalance, currency, emoji] = useWatch({ control, name: ["track_balance", "currency", "emoji"] });
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(values: SourceValues) {
+    const patch: Partial<SourceInput> = {};
+    const name = values.name.trim();
+    if (name !== source.name) patch.name = name;
+    if (values.emoji !== source.emoji) patch.emoji = values.emoji;
+    if (values.track_balance !== source.track_balance) patch.track_balance = values.track_balance;
+    // Turning tracking off also drops the currency, so no invisible lock is left on the source's memos.
+    const nextCurrency = values.track_balance ? values.currency : null;
+    if (nextCurrency !== source.currency) patch.currency = nextCurrency;
+    // The opening balance only goes out when it could have changed, so an untouched field never rewrites it.
+    if (values.track_balance && (dirtyFields.amount || patch.track_balance !== undefined || patch.currency !== undefined)) {
+      const raw = toMinor(values.amount || "0", values.currency);
+      patch.opening_minor = debt ? -raw : raw;
+    }
+    if (Object.keys(patch).length === 0) return onClose();
+    try {
+      await update.mutateAsync({ id: source.id, patch });
+      toast.success("Source updated");
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not update source";
+      setError(
+        /another currency/.test(message)
+          ? `Some memos on “${source.name}” use a different currency than ${values.currency}. Pick the currency they use, or keep balance tracking off.`
+          : message,
+      );
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent showCloseButton={false} className="rounded-2xl sm:max-w-md">
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl leading-tight">Edit {source.name}</DialogTitle>
+            <DialogDescription>{KIND_LABEL[source.kind]}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-start gap-2">
+            <EmojiField value={emoji} onChange={(e) => setValue("emoji", e, { shouldDirty: true })} label={`Emoji for ${source.name}`} className="size-11 shrink-0 rounded-2xl" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <Input autoFocus aria-label="Name" aria-invalid={!!errors.name} className="h-11 rounded-xl bg-card px-3.5" {...register("name")} />
+              {errors.name && (
+                <p role="alert" className="text-sm text-destructive">
+                  {errors.name.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <label className="flex items-center justify-between gap-3 rounded-xl bg-muted/60 px-3.5 py-2.5">
+            <span className="text-sm font-medium">Track balance</span>
+            <Switch
+              checked={trackBalance}
+              onCheckedChange={(v) => {
+                setValue("track_balance", v);
+                setError(null);
+              }}
+              aria-label="Track balance"
+            />
+          </label>
+
+          {trackBalance ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Currency</span>
+                <CurrencyPicker
+                  value={currency}
+                  defaultCurrency={me?.default_currency}
+                  onChange={(c) => {
+                    setValue("currency", c);
+                    setValue("amount", fitAmount(getValues("amount"), c));
+                    setError(null);
+                  }}
+                  triggerLabel={`Currency ${currency || "—"}, change`}
+                  triggerClassName="flex h-11 w-full items-center rounded-xl border border-input bg-card px-3.5 text-left text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40"
+                >
+                  {currency || "Pick a currency"}
+                </CurrencyPicker>
+                {errors.currency && <p className="text-sm text-destructive">{errors.currency.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{debt ? "Owed at start" : "Starting balance"}</span>
+                <AmountField
+                  control={control}
+                  name="amount"
+                  currency={currency || "USD"}
+                  invalid={!!errors.amount}
+                  big={false}
+                  className="h-11 rounded-xl border border-input bg-card px-3.5 text-left text-base"
+                />
+                {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                The balance is this starting amount plus every memo on {source.name}. Memos then stay in {currency || "this currency"}.
+              </p>
+            </div>
+          ) : (
+            source.track_balance && (
+              <p className="text-xs text-muted-foreground">
+                Its balance stops showing and memos on it can use any currency again. Your memos stay as they are.
+              </p>
+            )
+          )}
+
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" className="h-10 rounded-xl" disabled={update.isPending || !online}>
+              {update.isPending && <Loader2 className="animate-spin" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

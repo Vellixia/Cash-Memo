@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 fn main() {
     dotenvy::dotenv().ok();
-    let _telemetry = telemetry::init(sentry::release_name!());
+    let _telemetry = telemetry::init();
 
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()

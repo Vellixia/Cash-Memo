@@ -71,7 +71,7 @@ Live: **https://cashmemo.andresholivin.dev**
 | UI | Tailwind CSS v4, [shadcn/ui](https://ui.shadcn.com) on Base UI, lucide icons, Fraunces, Geist, Geist Mono and Atkinson Hyperlegible fonts |
 | State & data | TanStack Query (server state), zustand (UI state), react-hook-form + zod (forms) |
 | Testing | `cargo test` (API, queue and CSV round trip against real Postgres + S3), `bun test` (money, CSV preview parser), Playwright (e2e, 4 viewports) |
-| Delivery | GitHub Actions → GHCR images → [Dokploy](https://dokploy.com), auto-deployed after green CI |
+| Delivery | GitHub Actions → GHCR images → [Dokploy](https://dokploy.com), deployed by tagged releases (`vX.Y.Z`) after green CI |
 
 ## Architecture
 
@@ -181,7 +181,7 @@ Open http://localhost:3000, create an account, and add the starter categories. W
 | `MAIL_FROM` | worker | — (required with Resend) | e.g. `Cash Memo <noreply@mail.cashmemo.andresholivin.dev>` |
 | `EMAIL_DAILY_CAP` | worker | `90` | stays under Resend's free 100/day; extra mail waits an hour |
 | `API_URL` | web | `http://localhost:8080` | where the web proxy forwards `/api/*` (read at runtime) |
-| `NEXT_PUBLIC_SENTRY_DSN` | web (build time) | unset | GlitchTip DSN for browser/server errors; unset = off. Inlined when the image is built, so set it as the GitHub **variable** `NEXT_PUBLIC_SENTRY_DSN` (`images.yml` passes it as a build arg) |
+| `NEXT_PUBLIC_SENTRY_DSN` | web (build time) | unset | GlitchTip DSN for browser/server errors; unset = off. Inlined when the image is built, so set it as the GitHub **variable** `NEXT_PUBLIC_SENTRY_DSN` (`release.yml` passes it as a build arg) |
 
 The Rust apps load `.env` from the repo root in development (`dotenvy`).
 
@@ -393,9 +393,26 @@ bun run test:e2e
 - **`ci.yml`** (push to `main`, PRs), with Postgres and RustFS (S3) as services:
   - `check` job: lint, all Rust tests and build.
   - `e2e` job: release API + worker, then the web production build, then Playwright on all viewports.
-- **`images.yml`** runs only after `ci` passes on a push to `main`:
-  - builds `ghcr.io/vellixia/cashmemo-api`, `cashmemo-web` and `cashmemo-worker`, tagged with the commit SHA and `latest`, on GitHub's runners (the Dokploy host's build containers can't resolve DNS);
-  - its `deploy` job then points each Dokploy app at the new SHA and redeploys. This needs the secrets `DOKPLOY_URL`, `DOKPLOY_TOKEN`, `DOKPLOY_APP_API`, `DOKPLOY_APP_WEB` and `DOKPLOY_APP_WORKER`, and is skipped until they're set.
+- **Merging to `main` doesn't deploy.** Production changes only through a release.
+- **`release.yml`** runs when a semver tag (`vX.Y.Z`) is pushed:
+  1. **version**: the tag must be on `main` and `ci` must be green for that commit (it waits for a run that's still going).
+  2. **build**: builds `ghcr.io/cunilab/cashmemo-api`, `cashmemo-web` and `cashmemo-worker` tagged `X.Y.Z` and `latest`, on GitHub's runners (the Dokploy host's build containers can't resolve DNS). The version is baked in: `/api/health` returns `{ "version": "X.Y.Z" }`, Settings shows it, and GlitchTip gets release `cashmemo@X.Y.Z`.
+  3. **deploy**: points each Dokploy app at the `X.Y.Z` image and redeploys. This needs the secrets `DOKPLOY_URL`, `DOKPLOY_TOKEN`, `DOKPLOY_APP_API`, `DOKPLOY_APP_WEB` and `DOKPLOY_APP_WORKER`.
+  4. **verify**: waits until production's `/api/health` reports `X.Y.Z` (up to 10 minutes).
+  5. **publish**: creates the GitHub Release with generated notes.
+
+### Releasing
+
+```sh
+git checkout main && git pull
+git tag v1.3.0            # semver: major = breaking, minor = features, patch = fixes
+git push origin v1.3.0    # watch it under Actions → release
+```
+
+- **Rollback**: Actions → release → *Run workflow* with an earlier version (e.g. `1.2.0`). It redeploys that version's images without rebuilding.
+  - Only roll back to a version with the **same migrations**. The API refuses to start if the database has a migration it doesn't know, so after a schema change, roll forward with a fix instead.
+- **Versions** come only from the tag. Local and CI builds report `dev`, and nothing in `Cargo.toml` or `package.json` needs bumping.
+
 - **`uptime.yml`**: every 15 minutes, `GET https://cashmemo.andresholivin.dev/api/health` from GitHub's runners. A failure emails the repo owner. It's the off-host watchdog for when the whole server is down.
 - **Dokploy project `cashmemo`** (images pulled with the GHCR registry credential):
   - `cashmemo-db` (Postgres 18), with daily backups to R2.
@@ -451,7 +468,7 @@ AI features are **opt-in**: they use your own history first, send only the minim
 - [x] **Password reset** by email (Resend), **change password**, **change email** with confirmation
 - [x] **CSV export and import** with column mapping, preview, duplicate skipping, and background jobs that can't overload the database
 - [x] **Delete my account**: password-confirmed hard delete, including stored files
-- [x] **Ops**: `apps/worker` + Postgres job queue, auth rate limits, GlitchTip errors/logs/uptime, off-host watchdog, auto-deploy after green CI, R2 backups with a restore drill
+- [x] **Ops**: `apps/worker` + Postgres job queue, auth rate limits, GlitchTip errors/logs/uptime, off-host watchdog, deploys after green CI (tagged releases since v1.2.0), R2 backups with a restore drill
 - Dropped: sign-up email verification. It adds friction for little gain in a private journal: a reset link only ever goes to the address itself, and changing email is confirmed from the new address.
 
 ### ✅ v1.2: Less typing, more planning

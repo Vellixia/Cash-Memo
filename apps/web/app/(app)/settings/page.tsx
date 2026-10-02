@@ -90,11 +90,11 @@ export default function SettingsPage() {
       </section>
 
       <Link
-        href="/categories"
+        href="/manage"
         className={cn(card, "flex items-center gap-3 p-5 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/40")}
       >
         <Tags className="size-5 text-muted-foreground" />
-        <span className="flex-1 font-medium">Manage categories</span>
+        <span className="flex-1 font-medium">Categories and sources</span>
         <ChevronRight className="size-4 text-muted-foreground" />
       </Link>
 
@@ -130,6 +130,7 @@ export default function SettingsPage() {
           )}
         </section>
       )}
+      <p className="text-center text-xs text-muted-foreground">Cash Memo {process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}</p>
     </div>
   );
 }

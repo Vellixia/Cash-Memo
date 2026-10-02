@@ -8,6 +8,7 @@ if (dsn) {
   Sentry.init({
     dsn,
     // No `sendDefaultPii` in this SDK major (see instrumentation.ts); beforeSend strips request PII anyway.
+    release: `cashmemo@${process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}`,
     tracesSampleRate: 0,
     beforeSend,
     beforeBreadcrumb,

@@ -10,6 +10,7 @@ export async function register() {
     dsn,
     // No `sendDefaultPii` in this SDK major: PII (headers/cookies/IP) is opt-in by default already, and
     // beforeSend below strips it from `event.request` explicitly regardless.
+    release: `cashmemo@${process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}`,
     tracesSampleRate: 0,
     beforeSend,
     beforeBreadcrumb,

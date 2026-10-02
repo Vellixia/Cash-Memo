@@ -12,6 +12,9 @@ COPY apps/web apps/web
 # the browser sends to it). Empty = error reporting off.
 ARG NEXT_PUBLIC_SENTRY_DSN=""
 ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+# The git tag (without the v), from the release workflow; shown in Settings and sent as the GlitchTip release.
+ARG NEXT_PUBLIC_APP_VERSION="dev"
+ENV NEXT_PUBLIC_APP_VERSION=$NEXT_PUBLIC_APP_VERSION
 RUN cd apps/web && bun run build
 
 FROM oven/bun:1.4

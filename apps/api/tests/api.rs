@@ -488,6 +488,80 @@ async fn sources_and_transfers() {
 }
 
 #[tokio::test]
+async fn source_balance_settings_can_be_edited() {
+    let app = test_app().await;
+    let a = signup(&app).await;
+    let (_, _, src) = call(
+        &app,
+        "POST",
+        "/api/sources",
+        &a,
+        Some(json!({ "name": "BCA", "kind": "bank" })),
+    )
+    .await;
+    let path = format!("/api/sources/{}", src["id"].as_str().unwrap());
+    let patch = |body: Value| {
+        let (app, a, path) = (app.clone(), a.clone(), path.clone());
+        async move { call(&app, "PATCH", &path, &a, Some(body)).await }
+    };
+    let balance = || {
+        let (app, a, id) = (app.clone(), a.clone(), src["id"].clone());
+        async move {
+            let (_, _, list) = call(&app, "GET", "/api/sources", &a, None).await;
+            list.as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["id"] == id)
+                .unwrap()["balance_minor"]
+                .clone()
+        }
+    };
+    let memo = |currency: &str| {
+        let (app, a, id) = (app.clone(), a.clone(), src["id"].clone());
+        let body = json!({ "direction": "expense", "amount_minor": 1_000, "currency": currency, "occurred_at": "2026-09-10T12:00:00Z", "source_id": id });
+        async move { call(&app, "POST", "/api/memos", &a, Some(body)).await.0 }
+    };
+
+    // Enabling tracking needs a currency.
+    let (s, _, _) = patch(json!({ "track_balance": true })).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, body) =
+        patch(json!({ "track_balance": true, "currency": "USD", "opening_minor": 5_000 })).await;
+    assert_eq!(s, StatusCode::OK, "{body}");
+    assert_eq!(
+        (body["track_balance"].clone(), body["currency"].clone()),
+        (json!(true), json!("USD"))
+    );
+    assert_eq!(memo("USD").await, StatusCode::CREATED);
+    assert_eq!(balance().await, json!(4_000));
+
+    // The opening balance can be edited on its own.
+    let (s, _, _) = patch(json!({ "opening_minor": 10_000 })).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(balance().await, json!(9_000));
+
+    // The currency lock holds: a USD memo is already on it, and EUR memos are refused.
+    let (s, _, err) = patch(json!({ "currency": "EUR" })).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        err["error"],
+        "this source already has memos in another currency"
+    );
+    assert_eq!(memo("EUR").await, StatusCode::BAD_REQUEST);
+
+    // Disabling tracking together with clearing the currency drops the balance and the lock.
+    let (s, _, body) = patch(json!({ "track_balance": false, "currency": null })).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(body["currency"], Value::Null);
+    assert_eq!(balance().await, Value::Null);
+    assert_eq!(memo("EUR").await, StatusCode::CREATED);
+
+    // With memos in two currencies now, tracking can't come back with either lock.
+    let (s, _, _) = patch(json!({ "track_balance": true, "currency": "USD" })).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn installment_plans() {
     use chrono::Datelike;
     use sea_orm::{DbBackend, FromQueryResult, Statement};
@@ -1832,4 +1906,11 @@ async fn budgets_spent_and_projected() {
     .await;
     let (_, _, none) = call(&app, "GET", "/api/budgets", &a, None).await;
     assert_eq!(none, json!([]));
+}
+
+#[tokio::test]
+async fn health_reports_the_version() {
+    let app = test_app().await;
+    let (s, _, body) = call(&app, "GET", "/api/health", "", None).await;
+    assert_eq!((s, body["version"].as_str()), (StatusCode::OK, Some("dev")));
 }

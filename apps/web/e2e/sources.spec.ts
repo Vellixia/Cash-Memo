@@ -62,7 +62,7 @@ test("sources: paying with a card, a transfer, balances, filtering and archiving
   await expect(page.getByTestId("memo-row")).toHaveCount(3);
 
   // Archive BCA from the Sources page.
-  await page.goto("/sources");
+  await page.goto("/manage?tab=sources");
   const bcaRow = page.getByTestId("source-row").filter({ hasText: "BCA" });
   await expect(bcaRow).toContainText("$965.00");
   await bcaRow.getByRole("button", { name: "Archive BCA" }).click();
@@ -80,4 +80,60 @@ test("sources: paying with a card, a transfer, balances, filtering and archiving
   await expect(dialog3.getByRole("group", { name: "Paid with" }).getByRole("button", { name: /BCA/ })).toHaveCount(0);
   await expect(dialog3.getByRole("group", { name: "Paid with" }).getByRole("button", { name: /Visa/ })).toBeVisible();
   await page.keyboard.press("Escape");
+});
+
+test("sources: edit an existing source's name, balance tracking, currency and opening balance", async ({ page, api, allowConsole }) => {
+  allowConsole(/status of 400/); // the refused currency lock below
+  await api.signup();
+  const wallet = await api.source({ name: "Wallet", kind: "ewallet", emoji: "👛" });
+  await api.memo({ direction: "expense", amount_minor: 1500, currency: "USD", source_id: wallet.id, note: "Snack" });
+
+  await page.goto("/manage?tab=sources");
+  const row = page.getByTestId("source-row").filter({ hasText: "Wallet" });
+  await expect(row).toHaveText(/E-wallet$/);
+
+  // Enable tracking: a currency is required, and one that clashes with existing memos is refused clearly.
+  await row.getByRole("button", { name: "Edit Wallet" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Wallet" });
+  await dialog.getByLabel("Name").fill("GoPay");
+  await dialog.getByRole("switch", { name: "Track balance" }).click();
+  await dialog.getByRole("button", { name: /Currency USD/ }).click();
+  const search = page.getByTestId("currency-picker").getByRole("combobox", { name: "Search currencies" });
+  await search.fill("euro");
+  await search.press("Enter");
+  await expect(dialog.getByRole("button", { name: /Currency EUR/ })).toBeVisible();
+  await dialog.getByLabel("Amount").fill("50");
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Some memos on “Wallet” use a different currency than EUR");
+  await expect(dialog).toBeVisible();
+
+  // Back to USD: saves, and the balance (opening + memos) shows once the list refreshes.
+  await dialog.getByRole("button", { name: /Currency EUR/ }).click();
+  await search.fill("USD");
+  await search.press("Enter");
+  await dialog.getByLabel("Amount").fill("50");
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Source updated")).toBeVisible();
+  const gopay = page.getByTestId("source-row").filter({ hasText: "GoPay" });
+  await expect(gopay).toContainText("$35.00"); // 50 − the $15 snack
+
+  // Edit the opening balance only.
+  await gopay.getByRole("button", { name: "Edit GoPay" }).click();
+  const again = page.getByRole("dialog", { name: "Edit GoPay" });
+  await expect(again.getByLabel("Amount")).toHaveValue("50.00");
+  await again.getByLabel("Amount").fill("200");
+  await again.getByRole("button", { name: "Save changes" }).click();
+  await expect(again).toBeHidden();
+  await expect(gopay).toContainText("$185.00");
+
+  // Disable tracking: the balance goes away along with the currency lock.
+  await gopay.getByRole("button", { name: "Edit GoPay" }).click();
+  await again.getByRole("switch", { name: "Track balance" }).click();
+  await expect(again).toContainText("memos on it can use any currency again");
+  await again.getByRole("button", { name: "Save changes" }).click();
+  await expect(again).toBeHidden();
+  await expect(gopay).toHaveText(/E-wallet$/);
+  const saved = ((await (await page.request.get("/api/sources")).json()) as { id: string }[]).find((s) => s.id === wallet.id);
+  expect(saved).toMatchObject({ name: "GoPay", track_balance: false, currency: null });
 });
