@@ -138,12 +138,17 @@ test.describe("account menu (desktop)", () => {
 test("theme choice persists across reloads", async ({ page, user }) => {
   void user;
   await page.goto("/settings");
+  const savedDark = page.waitForResponse((r) => r.url().endsWith("/api/auth/me") && r.request().method() === "PATCH");
   await page.getByRole("radio", { name: "Dark" }).click();
+  await savedDark;
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect(page.getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+  // Wait for the account copy to save too: on load, a differing server value (still "dark") wins once.
+  const saved = page.waitForResponse((r) => r.url().endsWith("/api/auth/me") && r.request().method() === "PATCH");
   await page.getByRole("radio", { name: "Light" }).click();
+  await saved;
   await page.reload();
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
 });
