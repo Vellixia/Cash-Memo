@@ -100,9 +100,14 @@ test.describe("account menu (desktop)", () => {
     await expect(menu).toBeVisible();
     await expect(menu.getByText(user.email)).toBeVisible();
     await menu.getByRole("menuitem", { name: "Categories" }).click();
-    await expect(page).toHaveURL(/\/categories$/);
-    await expect(page.getByRole("heading", { name: "Categories", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/manage\?tab=categories$/);
+    await expect(page.getByRole("radio", { name: "Categories" })).toHaveAttribute("aria-checked", "true");
     await expect(menu).toBeHidden();
+
+    await menuButton.click();
+    await page.getByRole("menuitem", { name: "Sources" }).click();
+    await expect(page).toHaveURL(/\/manage\?tab=sources$/);
+    await expect(page.getByRole("radio", { name: "Sources" })).toHaveAttribute("aria-checked", "true");
 
     await menuButton.click();
     await page.getByRole("menuitem", { name: "Account" }).click();
@@ -379,10 +384,45 @@ test.describe("memos", () => {
   });
 });
 
-test("categories page: add, rename, change emoji, delete", async ({ page, user }) => {
+test("manage: tabs follow the URL and the old routes redirect", async ({ page, user }) => {
   void user;
   await page.goto("/categories");
-  await expect(page.getByRole("heading", { name: "Categories", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/manage\?tab=categories$/);
+  await expect(page.getByRole("heading", { name: "Manage", exact: true })).toBeVisible();
+  const section = page.getByRole("radiogroup", { name: "Manage section" });
+  await expect(section.getByRole("radio", { name: "Categories" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("region", { name: "Expense categories" })).toBeVisible();
+  await expect(page.getByTestId("source-row")).toHaveCount(0);
+
+  await section.getByRole("radio", { name: "Sources" }).click();
+  await expect(page).toHaveURL(/\/manage\?tab=sources$/);
+  await expect(page.getByTestId("source-row").filter({ hasText: "Cash" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Expense categories" })).toHaveCount(0);
+  // The tab survives a reload, since it lives in the URL.
+  await page.reload();
+  await expect(section.getByRole("radio", { name: "Sources" })).toHaveAttribute("aria-checked", "true");
+
+  await page.goto("/sources");
+  await expect(page).toHaveURL(/\/manage\?tab=sources$/);
+  await page.goto("/manage");
+  await expect(section.getByRole("radio", { name: "Categories" })).toHaveAttribute("aria-checked", "true");
+});
+
+test("desktop nav has one Manage entry instead of Sources and Categories", async ({ page, user, isMobile }) => {
+  test.skip(isMobile, "the top nav is hidden on phones");
+  void user;
+  await gotoHome(page);
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("link")).toHaveText(["Home", "Reports", "Manage"]);
+  await nav.getByRole("link", { name: "Manage" }).click();
+  await expect(page).toHaveURL(/\/manage$/);
+  await expect(nav.getByRole("link", { name: "Manage" })).toHaveAttribute("aria-current", "page");
+});
+
+test("categories page: add, rename, change emoji, delete", async ({ page, user }) => {
+  void user;
+  await page.goto("/manage?tab=categories");
+  await expect(page.getByRole("radio", { name: "Categories" })).toHaveAttribute("aria-checked", "true");
 
   // Add (expense list), with an emoji.
   const expense = page.getByRole("region", { name: "Expense categories" });
@@ -400,7 +440,8 @@ test("categories page: add, rename, change emoji, delete", async ({ page, user }
   await expect(page.getByRole("alert").filter({ hasText: "Give it a name" })).toBeVisible();
 
   // Rename.
-  await row.getByRole("button", { name: "Rename Groceries" }).click();
+  await row.getByRole("button", { name: "Actions for Groceries" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
   await page.getByLabel("Name", { exact: true }).fill("Supermarket");
   await page.getByRole("button", { name: "Save category" }).click();
   const renamed = page.getByTestId("category-row").filter({ hasText: "Supermarket" });
@@ -428,7 +469,8 @@ test("categories page: add, rename, change emoji, delete", async ({ page, user }
   await showCategories(page, "expense");
 
   // Delete with confirm.
-  await page.getByRole("button", { name: "Delete Supermarket" }).click();
+  await page.getByRole("button", { name: "Actions for Supermarket" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toContainText("Delete “Supermarket”?");
   await confirm.getByRole("button", { name: "Delete category" }).click();
@@ -446,9 +488,14 @@ test.describe("mobile", () => {
     await expect(tabs).toBeVisible();
     await expect(page.getByRole("button", { name: "New memo" })).toBeHidden();
 
-    await tabs.getByRole("link", { name: "Sources" }).click();
-    await expect(page).toHaveURL(/\/sources$/);
-    await expect(tabs.getByRole("link", { name: "Sources" })).toHaveAttribute("aria-current", "page");
+    await tabs.getByRole("link", { name: "Manage" }).click();
+    await expect(page).toHaveURL(/\/manage$/);
+    await expect(tabs.getByRole("link", { name: "Manage" })).toHaveAttribute("aria-current", "page");
+    // Categories and Sources sit side by side as tabs, equally one tap away.
+    await page.getByRole("radio", { name: "Sources" }).click();
+    await expect(page).toHaveURL(/\/manage\?tab=sources$/);
+    await expect(tabs.getByRole("link", { name: "Manage" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByTestId("source-row").first()).toBeVisible();
     await tabs.getByRole("link", { name: "Settings" }).click();
     await expect(page).toHaveURL(/\/settings$/);
     await tabs.getByRole("link", { name: "Home" }).click();
@@ -474,7 +521,7 @@ test.describe("mobile", () => {
     void user;
     await gotoHome(page);
     const tabs = page.getByRole("navigation", { name: "Tabs" });
-    for (const name of ["Home", "Reports", "Sources", "Settings"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
+    for (const name of ["Home", "Reports", "Manage", "Settings"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
     const fab = await box(tabs.getByRole("button", { name: "Add memo" }));
     const vp = page.viewportSize()!;
     expect(Math.abs(fab.x + fab.width / 2 - vp.width / 2)).toBeLessThanOrEqual(1);
@@ -492,7 +539,7 @@ test("no horizontal overflow on home, categories, account, login", async ({ page
     category_id: food.id,
   });
   await api.memo({ direction: "income", amount_minor: 5000, currency: "EUR" });
-  for (const path of ["/", "/categories", "/account"]) {
+  for (const path of ["/", "/manage?tab=categories", "/manage?tab=sources", "/account"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     await noHorizontalOverflow(page);

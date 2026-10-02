@@ -29,7 +29,7 @@ test("credit: a limit/due day, an installment purchase, the plan and the limit b
   await expect(page.getByText("Split into 3 payments")).toBeVisible();
 
   // The plan shows under the source on the Sources page, split into equal monthly amounts.
-  await page.goto("/sources");
+  await page.goto("/manage?tab=sources");
   await expect(page.getByTestId("source-row").filter({ hasText: "Visa" })).toBeVisible();
   const plan = page.getByTestId("plan-row").filter({ hasText: "New TV" });
   await expect(plan).toBeVisible();

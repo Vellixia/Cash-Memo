@@ -798,7 +798,7 @@ function SourceChips({
 }) {
   return (
     <ChoiceChips label={label} moreLabel="More sources" items={sources} value={value} onChange={onChange} activeClassName="border-primary bg-primary/10 text-primary">
-      <Link href="/sources" onClick={onNavigate} aria-label="Add new source" className={cn(chipClass, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
+      <Link href="/manage?tab=sources" onClick={onNavigate} aria-label="Add new source" className={cn(chipClass, "border-dashed border-input text-muted-foreground hover:text-foreground")}>
         <Plus className="size-4" /> New
       </Link>
     </ChoiceChips>

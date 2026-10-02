@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, Pencil, PiggyBank, Plus, Trash2, X } from "lucide-react";
+import { Check, Ellipsis, Loader2, Pencil, PiggyBank, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmojiField } from "@/components/emoji-field";
 import { Segmented } from "@/components/segmented";
 import { OfflineHint } from "@/components/offline-hint";
@@ -32,7 +33,7 @@ import { cn } from "@/lib/utils";
 const DIRECTIONS: Direction[] = ["expense", "income"];
 const TITLE = { expense: "Expense", income: "Income" } as const;
 
-export default function CategoriesPage() {
+export function CategoriesPanel() {
   const [direction, setDirection] = useState<Direction>("expense");
   const { data: categories, isLoading } = useCategories();
   const { data: budgets } = useBudgets(currentMonth());
@@ -40,12 +41,7 @@ export default function CategoriesPage() {
   const currency = useMe().data?.default_currency ?? "USD";
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="font-serif text-3xl tracking-tight md:text-4xl">Categories</h1>
-        <p className="text-sm text-muted-foreground">Give each kind of money a name and an emoji.</p>
-      </header>
-
+    <div className="space-y-6">
       {categories?.length === 0 && <StarterCard />}
       <OfflineHint className="rounded-2xl bg-muted px-4 py-3" />
 
@@ -204,8 +200,6 @@ function CategoryRow({ category, budget, currency }: { category: Category; budge
     }
   }
 
-  if (budgeting) return <BudgetForm category={category} budget={budget ?? null} currency={currency} onDone={() => setBudgeting(false)} />;
-
   if (editing) {
     return (
       <li>
@@ -242,50 +236,49 @@ function CategoryRow({ category, budget, currency }: { category: Category; budge
         onChange={(e) => save({ emoji: e })}
         label={`Change emoji for ${category.name}`}
         disabled={!online}
-        className="size-10 rounded-2xl border-transparent bg-muted"
+        className="size-10 shrink-0 rounded-2xl border-transparent bg-muted"
       />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{category.name}</span>
-        {budget && <span className="block truncate text-xs text-muted-foreground">Budget {formatMoney(budget.limit_minor, budget.currency)} a month</span>}
+        {budget && <LimitStatus budget={budget} name={category.name} />}
       </span>
-      {budget !== undefined && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11 rounded-xl text-muted-foreground md:size-9"
-          aria-label={`Budget for ${category.name}`}
-          onClick={() => setBudgeting(true)}
-        >
-          <PiggyBank />
-        </Button>
-      )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-11 rounded-xl text-muted-foreground md:size-9"
-        aria-label={`Rename ${category.name}`}
-        onClick={() => {
-          setName(category.name);
-          setEmoji(category.emoji);
-          setEditing(true);
-        }}
-      >
-        <Pencil />
-      </Button>
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogTrigger
+      <DropdownMenu>
+        <DropdownMenuTrigger
           render={
             <Button
               variant="ghost"
               size="icon"
-              className="size-11 rounded-xl text-muted-foreground hover:text-destructive md:size-9"
-              aria-label={`Delete ${category.name}`}
-              disabled={!online}
+              className="size-11 shrink-0 rounded-xl text-muted-foreground md:size-9"
+              aria-label={`Actions for ${category.name}`}
             />
           }
         >
-          <Trash2 />
-        </AlertDialogTrigger>
+          <Ellipsis />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-auto min-w-48 rounded-xl p-1.5">
+          <DropdownMenuItem
+            className="px-2 py-1.5"
+            onClick={() => {
+              setName(category.name);
+              setEmoji(category.emoji);
+              setEditing(true);
+            }}
+          >
+            <Pencil /> Rename
+          </DropdownMenuItem>
+          {/* Monthly limits are for expense categories only. */}
+          {budget !== undefined && (
+            <DropdownMenuItem className="px-2 py-1.5" onClick={() => setBudgeting(true)}>
+              <PiggyBank /> {budget ? "Edit monthly limit" : "Set monthly limit"}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" className="px-2 py-1.5" onClick={() => setConfirm(true)} disabled={!online}>
+            <Trash2 /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{category.name}”?</AlertDialogTitle>
@@ -300,26 +293,65 @@ function CategoryRow({ category, budget, currency }: { category: Category; budge
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {budgeting && <LimitDialog category={category} budget={budget ?? null} currency={currency} onClose={() => setBudgeting(false)} />}
     </li>
   );
 }
 
-function BudgetForm({ category, budget, currency, onDone }: { category: Category; budget: Budget | null; currency: string; onDone: () => void }) {
+/** This month against the limit: spent of limit, what's left, and a warning when recurring expenses will push it over. */
+function LimitStatus({ budget, name }: { budget: Budget; name: string }) {
+  const { limit_minor: limit, spent_minor: spent, projected_minor: projected, currency } = budget;
+  const left = limit - spent;
+  // Same thresholds as the Home budgets card: amber from 80%, red once reached.
+  const tone = spent >= limit ? "bg-expense" : spent >= limit * 0.8 ? "bg-amber-500" : "bg-income";
+  return (
+    <span className="mt-1 block space-y-1" data-testid="limit-status">
+      <span className="num block truncate text-xs text-muted-foreground">
+        {formatMoney(spent, currency)} of {formatMoney(limit, currency)} this month
+      </span>
+      <span
+        role="progressbar"
+        aria-label={`${name} monthly limit`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round((spent / limit) * 100)}
+        className="relative block h-1.5 max-w-64 overflow-hidden rounded-full bg-muted"
+      >
+        <span className={cn("absolute inset-y-0 left-0 rounded-full opacity-35", tone)} style={{ width: `${Math.min(projected / limit, 1) * 100}%` }} />
+        <span className={cn("absolute inset-y-0 left-0 rounded-full", tone)} style={{ width: `${Math.min(spent / limit, 1) * 100}%` }} />
+      </span>
+      <span className="num flex flex-wrap gap-x-2 text-xs">
+        {left >= 0 ? (
+          <span className="text-muted-foreground">{formatMoney(left, currency)} remaining</span>
+        ) : (
+          <span className="text-expense">{formatMoney(-left, currency)} over</span>
+        )}
+        {left >= 0 && projected > limit && (
+          <span className="text-amber-700 dark:text-amber-400">Recurring expenses will take it {formatMoney(projected - limit, currency)} over</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/** Set, change or remove a category's monthly limit. */
+function LimitDialog({ category, budget, currency, onClose }: { category: Category; budget: Budget | null; currency: string; onClose: () => void }) {
   const save = useSaveBudget();
   const remove = useDeleteBudget();
   const online = useOnline();
   const [limit, setLimit] = useState(budget ? fromMinor(budget.limit_minor, currency) : "");
+  const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const limit_minor = toMinor(parseAmount(limit, currency), currency);
-    if (!(limit_minor > 0)) return toast.error("Enter a monthly limit above zero");
+    if (!(limit_minor > 0)) return setError("Enter a monthly limit above zero");
     try {
       await save.mutateAsync({ id: budget?.id, category_id: category.id, currency, limit_minor });
-      toast.success(`Budget set for “${category.name}”`);
-      onDone();
+      toast.success(`Monthly limit set for “${category.name}”`);
+      onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save budget");
+      setError(err instanceof Error ? err.message : "Could not save the limit");
     }
   }
 
@@ -327,40 +359,75 @@ function BudgetForm({ category, budget, currency, onDone }: { category: Category
     if (!budget) return;
     try {
       await remove.mutateAsync(budget.id);
-      toast.success(`Budget removed from “${category.name}”`);
-      onDone();
+      toast.success(`Monthly limit removed from “${category.name}”`);
+      onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not remove budget");
+      setError(err instanceof Error ? err.message : "Could not remove the limit");
     }
   }
 
   return (
-    <li>
-      <form className="flex items-center gap-2 px-3 py-2.5" onSubmit={onSubmit} onKeyDown={(e) => e.key === "Escape" && onDone()}>
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted" aria-hidden>
-          {category.emoji ?? <PiggyBank className="size-4" />}
-        </span>
-        <Input
-          autoFocus
-          inputMode="decimal"
-          aria-label={`Monthly budget for ${category.name} (${currency})`}
-          placeholder={`Monthly limit, ${currency}`}
-          value={limit}
-          onChange={(e) => setLimit(e.target.value)}
-          className="h-10 rounded-xl bg-card"
-        />
-        <Button type="submit" size="icon" className="size-10 rounded-xl" aria-label="Save budget" disabled={save.isPending || !online}>
-          {save.isPending ? <Loader2 className="animate-spin" /> : <Check />}
-        </Button>
-        {budget && (
-          <Button type="button" variant="ghost" size="icon" className="size-10 rounded-xl text-muted-foreground hover:text-destructive" aria-label="Remove budget" onClick={onRemove} disabled={remove.isPending || !online}>
-            <Trash2 />
-          </Button>
-        )}
-        <Button type="button" variant="ghost" size="icon" className="size-10 rounded-xl" aria-label="Cancel budget" onClick={onDone}>
-          <X />
-        </Button>
-      </form>
-    </li>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent showCloseButton={false} className="rounded-2xl sm:max-w-md">
+        <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl leading-tight">
+              {category.emoji && <span aria-hidden>{category.emoji} </span>}
+              Monthly limit for {category.name}
+            </DialogTitle>
+            <DialogDescription>Optional. See how each month compares, with a heads-up on Home as spending gets close.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-1.5">
+            <label htmlFor={`limit-${category.id}`} className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Monthly limit ({currency})
+            </label>
+            <Input
+              id={`limit-${category.id}`}
+              autoFocus
+              inputMode="decimal"
+              aria-invalid={!!error}
+              aria-describedby={`limit-${category.id}-hint`}
+              placeholder={fromMinor(0, currency)}
+              value={limit}
+              onChange={(e) => {
+                setLimit(e.target.value);
+                setError(null);
+              }}
+              className="h-11 rounded-xl bg-card px-3.5 text-base"
+            />
+            <p id={`limit-${category.id}-hint`} className="text-xs text-muted-foreground">
+              Limits use your default currency, {currency}. Change it in Settings.
+              {budget && ` ${formatMoney(budget.spent_minor, currency)} spent so far this month.`}
+            </p>
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            {budget && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+                onClick={onRemove}
+                disabled={remove.isPending || !online}
+              >
+                {remove.isPending && <Loader2 className="animate-spin" />}
+                Remove limit
+              </Button>
+            )}
+            <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" className="h-10 rounded-xl" disabled={save.isPending || !online}>
+              {save.isPending && <Loader2 className="animate-spin" />}
+              Save limit
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartColumn, Download, Home, LogOut, Plus, Search, Settings, Tags, UserRound, Wallet } from "lucide-react";
+import { ChartColumn, Download, Home, LogOut, Plus, Search, Settings, Shapes, Tags, UserRound, Wallet } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MemoEditor } from "@/components/memo-editor";
 import { Shortcuts } from "@/components/shortcuts";
@@ -31,8 +31,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/", label: "Home", icon: Home },
   { href: "/reports", label: "Reports", icon: ChartColumn },
-  { href: "/sources", label: "Sources", icon: Wallet },
-  { href: "/categories", label: "Categories", icon: Tags },
+  { href: "/manage", label: "Manage", icon: Shapes },
 ] as const;
 
 /** Log out, then hard-navigate so no cached query refetches (and 401s) on the way out. */
@@ -151,10 +150,10 @@ function AccountMenu() {
           <MenuPrimitive.LinkItem render={<Link href="/account" />} closeOnClick className={menuItem}>
             <UserRound /> Account
           </MenuPrimitive.LinkItem>
-          <MenuPrimitive.LinkItem render={<Link href="/categories" />} closeOnClick className={menuItem}>
+          <MenuPrimitive.LinkItem render={<Link href="/manage?tab=categories" />} closeOnClick className={menuItem}>
             <Tags /> Categories
           </MenuPrimitive.LinkItem>
-          <MenuPrimitive.LinkItem render={<Link href="/sources" />} closeOnClick className={menuItem}>
+          <MenuPrimitive.LinkItem render={<Link href="/manage?tab=sources" />} closeOnClick className={menuItem}>
             <Wallet /> Sources
           </MenuPrimitive.LinkItem>
           {canInstall && (
@@ -222,7 +221,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
             <Plus className="size-6" strokeWidth={2.4} />
           </button>
         </div>
-        {tab("/sources", "Sources", Wallet)}
+        {tab("/manage", "Manage", Shapes)}
         {tab("/settings", "Settings", Settings)}
       </div>
     </nav>
