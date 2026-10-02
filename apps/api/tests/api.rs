@@ -525,7 +525,8 @@ async fn source_balance_settings_can_be_edited() {
     // Enabling tracking needs a currency.
     let (s, _, _) = patch(json!({ "track_balance": true })).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
-    let (s, _, body) = patch(json!({ "track_balance": true, "currency": "USD", "opening_minor": 5_000 })).await;
+    let (s, _, body) =
+        patch(json!({ "track_balance": true, "currency": "USD", "opening_minor": 5_000 })).await;
     assert_eq!(s, StatusCode::OK, "{body}");
     assert_eq!(
         (body["track_balance"].clone(), body["currency"].clone()),
@@ -542,7 +543,10 @@ async fn source_balance_settings_can_be_edited() {
     // The currency lock holds: a USD memo is already on it, and EUR memos are refused.
     let (s, _, err) = patch(json!({ "currency": "EUR" })).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
-    assert_eq!(err["error"], "this source already has memos in another currency");
+    assert_eq!(
+        err["error"],
+        "this source already has memos in another currency"
+    );
     assert_eq!(memo("EUR").await, StatusCode::BAD_REQUEST);
 
     // Disabling tracking together with clearing the currency drops the balance and the lock.
