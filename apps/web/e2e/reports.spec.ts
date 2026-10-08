@@ -102,3 +102,36 @@ test("insights: installments refresh trend; future installments remain excluded"
   await expect(page.getByTestId("insight-expense")).toContainText("$30.00");
   await expect(page.getByTestId("insight-net")).toContainText("30.00");
 });
+
+
+test("insights: editing, deleting and restoring memos updates report totals", async ({ page, api }) => {
+  await api.signup();
+  await api.memo({ direction: "income", amount_minor: 10000, note: "Contract work" });
+  await page.goto("/reports");
+  await expect(page.getByTestId("insight-income")).toContainText("$100.00");
+
+  await page.goto("/");
+  await page.getByTestId("memo-row").filter({ hasText: "Contract work" }).click();
+  let editor = page.getByTestId("memo-editor");
+  await editor.getByLabel("Amount").fill("150");
+  await editor.getByRole("button", { name: "Save changes" }).click();
+  await expect(editor).toBeHidden();
+
+  await page.goto("/reports");
+  await expect(page.getByTestId("insight-income")).toContainText("$150.00");
+  await page.goto("/");
+  await page.getByTestId("memo-row").filter({ hasText: "Contract work" }).click();
+  editor = page.getByTestId("memo-editor");
+  await editor.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete memo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await page.goto("/reports");
+  await expect(page.getByTestId("insight-income")).toContainText("$150.00");
+
+  await page.goto("/");
+  await page.getByTestId("memo-row").filter({ hasText: "Contract work" }).click();
+  await page.getByTestId("memo-editor").getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete memo" }).click();
+  await page.goto("/reports");
+  await expect(page.getByTestId("insight-income")).toContainText("$0.00");
+});
