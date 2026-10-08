@@ -7,7 +7,7 @@ import { monthLabel } from "@/components/reports/trend-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Category, Trend } from "@/lib/api";
 import { categoryChanges, changePercent, completedComparisonMonths, totalsFor } from "@/lib/report-insights";
-import { formatMoney, signedMoney } from "@/lib/money";
+import { signedMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 function percentage(before: number, now: number, isNet = false): string {

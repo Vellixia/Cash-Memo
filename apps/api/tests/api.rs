@@ -1345,7 +1345,11 @@ async fn reports_trend_across_months_excludes_transfers() {
     // Computed off `now`, not hardcoded, so the test doesn't depend on which month it runs in.
     let now = chrono::Utc::now();
     let this_month = now.format("%Y-%m").to_string();
-    let last_month = (now - chrono::Duration::days(32))
+    let first_of_this_month =
+        chrono::NaiveDate::parse_from_str(&format!("{this_month}-01"), "%Y-%m-%d").unwrap();
+    let last_month = first_of_this_month
+        .checked_sub_months(chrono::Months::new(1))
+        .unwrap()
         .format("%Y-%m")
         .to_string();
 
@@ -1437,7 +1441,14 @@ async fn reports_trend_across_months_excludes_transfers() {
     assert_eq!(category_total(&this_month), Some(30000));
     assert_eq!(category_total(&last_month), Some(10000));
 
-    let (s3, _, three_months) = call(&app, "GET", "/api/reports/trend?months=3&offset=0", &a, None).await;
+    let (s3, _, three_months) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=3&offset=0",
+        &a,
+        None,
+    )
+    .await;
     assert_eq!(s3, StatusCode::OK);
     assert_eq!(three_months["months"].as_array().unwrap().len(), 3);
 
