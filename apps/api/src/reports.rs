@@ -101,7 +101,8 @@ async fn trend(
         )
     };
     let scope = "FROM memos
-         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3";
+         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3
+         AND occurred_at <= now()";
     let totals = MonthTotal::find_by_statement(stmt(format!(
         "SELECT {month_expr} AS month, currency::text AS currency, direction,
                 SUM(amount_minor)::bigint AS total_minor

@@ -259,6 +259,8 @@ function useInvalidatePlans() {
     qc.invalidateQueries({ queryKey: ["memos"] });
     qc.invalidateQueries({ queryKey: ["summary"] });
     qc.invalidateQueries({ queryKey: ["sources"] });
+    qc.invalidateQueries({ queryKey: ["budgets"] });
+    qc.invalidateQueries({ queryKey: ["reports-trend"] });
   };
 }
 

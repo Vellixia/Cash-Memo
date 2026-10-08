@@ -31,7 +31,7 @@ export function IncomeExpenseTrendCard({ trend, currency }: { trend: Trend | und
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="trend-title" className="font-serif text-lg sm:text-xl">Monthly trend</h2>
-          <p className="text-xs text-muted-foreground">Tap month for exact amounts. Latest month still in progress.</p>
+          <p className="text-xs text-muted-foreground">Tap month for exact amounts. Current month shows activity to date.</p>
         </div>
         <Segmented size="sm" label="Trend metric" value={metric} onChange={setMetric} options={[
           { value: "income", label: "Income" },

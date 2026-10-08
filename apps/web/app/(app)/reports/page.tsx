@@ -37,7 +37,7 @@ export default function ReportsPage() {
   const currency = [storedCurrency, defaultCurrency].find((c): c is string => !!c && currencies.includes(c)) ?? currencies[0] ?? defaultCurrency;
   const selectedMonths = trend ? monthsForRange(trend, range) : [];
   const totals = trend ? totalsFor(trend, currency, selectedMonths) : null;
-  const label = range === "month" ? "This month to date" : `Last ${range} calendar months · current month partial`;
+  const label = range === "month" ? "This month to date" : `Last ${range} months · current month to date`;
   const savings = totals && totals.income > 0 ? Math.round((totals.net / totals.income) * 100) : null;
 
   return (

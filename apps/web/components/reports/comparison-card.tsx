@@ -36,7 +36,7 @@ export function MonthComparisonCard({ trend, currency, categories }: { trend: Tr
     <section className={cn(card, "p-4 sm:p-6")} aria-labelledby="comparison-title">
       <h2 id="comparison-title" className="font-serif text-lg sm:text-xl">Compared with previous month</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        {monthLabel(pair.current)} vs {monthLabel(pair.previous)} · both complete months, not current month-to-date
+        {monthLabel(pair.current)} vs {monthLabel(pair.previous)} · both complete months, excluding current month-to-date
       </p>
       <div className="mt-4 grid grid-cols-3 gap-2">
         {summary.map((item) => {
