@@ -1491,7 +1491,7 @@ async fn reports_historical_months_respect_daylight_saving_time() {
     let today = chrono::Utc::now();
     let year: i32 = today.format("%Y").to_string().parse().unwrap();
     let month: u32 = today.format("%m").to_string().parse().unwrap();
-    let year = if month > 3 { year } else { year - 1 };
+    let year = if month >= 3 { year } else { year - 1 };
     for (stamp, amount) in [
         (format!("{year}-03-01T04:30:00Z"), 1400),
         (format!("{year}-03-01T05:30:00Z"), 1600),

@@ -116,7 +116,12 @@ async fn trend(
                    AND occurred_at >= ($2::date::timestamp AT TIME ZONE $4)
                    AND occurred_at < ($3::date::timestamp AT TIME ZONE $4)
                    AND occurred_at <= now()",
-                vec![uid.into(), start_month.into(), end_month.into(), zone.into()],
+                vec![
+                    uid.into(),
+                    start_month.into(),
+                    end_month.into(),
+                    zone.into(),
+                ],
             )
         } else {
             (
@@ -133,7 +138,8 @@ async fn trend(
                 ],
             )
         };
-    let stmt = |sql: String| Statement::from_sql_and_values(DbBackend::Postgres, sql, params.clone());
+    let stmt =
+        |sql: String| Statement::from_sql_and_values(DbBackend::Postgres, sql, params.clone());
 
     let totals = MonthTotal::find_by_statement(stmt(format!(
         "SELECT {month_expr} AS month, currency::text AS currency, direction,
