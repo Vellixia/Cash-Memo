@@ -55,8 +55,8 @@ async fn trend(
     CurrentUser(uid): CurrentUser,
     Query(q): Query<TrendQuery>,
 ) -> Result<Json<Trend>> {
-    if q.months != 6 && q.months != 12 {
-        return Err(AppError::BadRequest("months must be 6 or 12"));
+    if q.months != 3 && q.months != 6 && q.months != 12 {
+        return Err(AppError::BadRequest("months must be 3, 6 or 12"));
     }
     let tz = q
         .offset

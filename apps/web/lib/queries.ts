@@ -26,6 +26,7 @@ import {
   getSources,
   getSummary,
   getTrend,
+  utcOffsetMinutes,
   login,
   logout,
   requestPasswordReset,
@@ -118,6 +119,7 @@ function useInvalidateMoney() {
     // Memos move money between sources, so their balances may have changed too.
     qc.invalidateQueries({ queryKey: ["sources"] });
     qc.invalidateQueries({ queryKey: ["budgets"] });
+    qc.invalidateQueries({ queryKey: ["reports-trend"] });
   };
 }
 
@@ -206,6 +208,7 @@ export function useDeleteCategory() {
       qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["memos"] });
       qc.invalidateQueries({ queryKey: ["summary"] });
+      qc.invalidateQueries({ queryKey: ["reports-trend"] });
     },
   });
 }
@@ -339,6 +342,8 @@ export function useInvalidateAfterImport() {
     qc.invalidateQueries({ queryKey: ["summary"] });
     qc.invalidateQueries({ queryKey: ["categories"] });
     qc.invalidateQueries({ queryKey: ["sources"] });
+    qc.invalidateQueries({ queryKey: ["budgets"] });
+    qc.invalidateQueries({ queryKey: ["reports-trend"] });
   };
 }
 
@@ -377,8 +382,14 @@ export function useDeleteAttachment() {
 
 // --- reports -----------------------------------------------------------------
 
-export function useTrend(months: 6 | 12) {
-  return useQuery({ queryKey: ["reports-trend", months], queryFn: () => getTrend(months), placeholderData: keepPreviousData });
+export function useTrend(months: 3 | 6 | 12) {
+  const offset = utcOffsetMinutes();
+  return useQuery({
+    queryKey: ["reports-trend", months, offset],
+    queryFn: () => getTrend(months, offset),
+    // Recurring jobs can insert memos without a browser mutation; refresh an open report too.
+    refetchInterval: 60_000,
+  });
 }
 
 

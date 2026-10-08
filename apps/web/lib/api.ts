@@ -376,8 +376,8 @@ export type TrendTotal = { month: string; currency: string; direction: MemoDirec
 export type TrendCategoryTotal = { month: string; category_id: string | null; currency: string; total_minor: number };
 export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[] };
 
-export function getTrend(months: 6 | 12): Promise<Trend> {
-  const params = new URLSearchParams({ months: String(months), offset: String(utcOffsetMinutes()) });
+export function getTrend(months: 3 | 6 | 12, offset = utcOffsetMinutes()): Promise<Trend> {
+  const params = new URLSearchParams({ months: String(months), offset: String(offset) });
   return api<Trend>(`/reports/trend?${params}`);
 }
 

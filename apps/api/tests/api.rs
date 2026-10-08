@@ -1437,15 +1437,19 @@ async fn reports_trend_across_months_excludes_transfers() {
     assert_eq!(category_total(&this_month), Some(30000));
     assert_eq!(category_total(&last_month), Some(10000));
 
+    let (s3, _, three_months) = call(&app, "GET", "/api/reports/trend?months=3&offset=0", &a, None).await;
+    assert_eq!(s3, StatusCode::OK);
+    assert_eq!(three_months["months"].as_array().unwrap().len(), 3);
+
     let (s, _, _) = call(
         &app,
         "GET",
-        "/api/reports/trend?months=3&offset=0",
+        "/api/reports/trend?months=2&offset=0",
         &a,
         None,
     )
     .await;
-    assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 6 or 12");
+    assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 3, 6 or 12");
 }
 
 #[tokio::test]
