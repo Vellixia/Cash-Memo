@@ -75,3 +75,30 @@ test("insights: complete-month comparison excludes partial month and drills into
   await expect(page.getByTestId("memo-row").filter({ hasText: "Recent food" })).toBeVisible();
   await expect(page.getByTestId("memo-row").filter({ hasText: "Current partial food" })).toHaveCount(0);
 });
+
+
+test("insights: installments refresh trend; future installments remain excluded", async ({ page, api, isMobile }) => {
+  await api.signup();
+  await api.source({ name: "Credit", kind: "credit", currency: "USD" });
+
+  await page.goto("/reports");
+  await expect(page.getByTestId("insight-expense")).toContainText("$0.00");
+
+  const editor = await openNewMemo(page, isMobile);
+  await editor.getByRole("group", { name: "Paid with" }).getByRole("button", { name: "Credit" }).click();
+  await editor.getByLabel("Amount").fill("90");
+  await editor.getByRole("switch", { name: "Pay in installments" }).click();
+  await editor.getByRole("button", { name: "3×" }).click();
+  // First installment already due; following two belong to future months.
+  const firstDate = await page.evaluate(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T00:00`;
+  });
+  await editor.getByLabel("Date & time").fill(firstDate);
+  await editor.getByRole("button", { name: "Save expense" }).click();
+  await expect(editor).toBeHidden();
+
+  // Cache must invalidate immediately, not wait for 60s poll.
+  await expect(page.getByTestId("insight-expense")).toContainText("$30.00");
+  await expect(page.getByTestId("insight-net")).toContainText("30.00");
+});

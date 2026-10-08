@@ -1344,6 +1344,8 @@ async fn reports_trend_across_months_excludes_transfers() {
 
     // Computed off `now`, not hardcoded, so the test doesn't depend on which month it runs in.
     let now = chrono::Utc::now();
+    let current_stamp = now.to_rfc3339();
+    let future_stamp = (now + chrono::Duration::minutes(30)).to_rfc3339();
     let this_month = now.format("%Y-%m").to_string();
     let first_of_this_month =
         chrono::NaiveDate::parse_from_str(&format!("{this_month}-01"), "%Y-%m-%d").unwrap();
@@ -1360,7 +1362,7 @@ async fn reports_trend_across_months_excludes_transfers() {
         &a,
         Some(
             json!({ "direction": "income", "amount_minor": 100000, "currency": "USD",
-                     "occurred_at": format!("{this_month}-05T12:00:00Z") }),
+                     "occurred_at": current_stamp }),
         ),
     )
     .await;
@@ -1371,7 +1373,7 @@ async fn reports_trend_across_months_excludes_transfers() {
         &a,
         Some(
             json!({ "direction": "expense", "amount_minor": 30000, "currency": "USD",
-                     "occurred_at": format!("{this_month}-06T12:00:00Z"),
+                     "occurred_at": current_stamp,
                      "source_id": cash, "category_id": cat["id"] }),
         ),
     )
@@ -1384,7 +1386,7 @@ async fn reports_trend_across_months_excludes_transfers() {
         &a,
         Some(
             json!({ "direction": "transfer", "amount_minor": 50000, "currency": "USD",
-                     "occurred_at": format!("{this_month}-07T12:00:00Z"),
+                     "occurred_at": current_stamp,
                      "source_id": cash, "to_source_id": bank["id"] }),
         ),
     )
@@ -1401,6 +1403,20 @@ async fn reports_trend_across_months_excludes_transfers() {
         ),
     )
     .await;
+
+    // Scheduled expense stays in DB but must not count as spent before its time.
+    let (future_status, _, _) = call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(json!({
+            "direction": "expense", "amount_minor": 90000, "currency": "USD",
+            "occurred_at": future_stamp, "source_id": cash, "category_id": cat["id"]
+        })),
+    )
+    .await;
+    assert_eq!(future_status, StatusCode::CREATED);
 
     let (s, _, trend) = call(
         &app,
@@ -1461,6 +1477,91 @@ async fn reports_trend_across_months_excludes_transfers() {
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 3, 6 or 12");
+}
+
+#[tokio::test]
+async fn reports_historical_months_respect_daylight_saving_time() {
+    let (app, _db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+
+    // March boundary in New York is EST (-05:00), even if current offset is EDT (-04:00).
+    // Pick the most recently completed March, always in the trailing 12-month window.
+    let today = chrono::Utc::now();
+    let year: i32 = today.format("%Y").to_string().parse().unwrap();
+    let month: u32 = today.format("%m").to_string().parse().unwrap();
+    let year = if month > 3 { year } else { year - 1 };
+    for (stamp, amount) in [
+        (format!("{year}-03-01T04:30:00Z"), 1400),
+        (format!("{year}-03-01T05:30:00Z"), 1600),
+    ] {
+        let (status, _, _) = call(
+            &app,
+            "POST",
+            "/api/memos",
+            &a,
+            Some(json!({
+                "direction": "expense",
+                "amount_minor": amount,
+                "currency": "USD",
+                "occurred_at": stamp,
+                "source_id": cash,
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let (status, _, trend) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=12&offset=-240&time_zone=America%2FNew_York",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let sum = |month: &str| {
+        trend["totals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["month"] == month)
+            .map(|row| row["total_minor"].as_i64().unwrap())
+            .unwrap_or(0)
+    };
+    assert_eq!(sum(&format!("{year}-02")), 1400);
+    assert_eq!(sum(&format!("{year}-03")), 1600);
+
+    // Existing clients using only offset still work, even without historical DST precision.
+    let (status, _, legacy) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=12&offset=-240",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        legacy["totals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["month"] == format!("{year}-03"))
+            .unwrap()["total_minor"],
+        3000,
+    );
+    let (status, _, _) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=3&offset=0&time_zone=Invalid%2FZone",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
