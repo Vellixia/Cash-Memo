@@ -418,7 +418,7 @@ test("desktop nav has one Manage entry instead of Sources and Categories", async
   void user;
   await gotoHome(page);
   const nav = page.getByRole("navigation", { name: "Main" });
-  await expect(nav.getByRole("link")).toHaveText(["Home", "Reports", "Manage"]);
+  await expect(nav.getByRole("link")).toHaveText(["Home", "Insights", "Manage"]);
   await nav.getByRole("link", { name: "Manage" }).click();
   await expect(page).toHaveURL(/\/manage$/);
   await expect(nav.getByRole("link", { name: "Manage" })).toHaveAttribute("aria-current", "page");
@@ -526,7 +526,7 @@ test.describe("mobile", () => {
     void user;
     await gotoHome(page);
     const tabs = page.getByRole("navigation", { name: "Tabs" });
-    for (const name of ["Home", "Reports", "Manage", "Settings"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
+    for (const name of ["Home", "Insights", "Manage", "Settings"]) await expect(tabs.getByRole("link", { name })).toBeVisible();
     const fab = await box(tabs.getByRole("button", { name: "Add memo" }));
     const vp = page.viewportSize()!;
     expect(Math.abs(fab.x + fab.width / 2 - vp.width / 2)).toBeLessThanOrEqual(1);
