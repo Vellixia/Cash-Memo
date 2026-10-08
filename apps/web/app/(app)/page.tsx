@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { BalancesCard, CreditReminders, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
@@ -13,9 +13,19 @@ export default function HomePage() {
   const storedCurrency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
   const openEditor = useUiStore((s) => s.openEditor);
+  const setMonth = useUiStore((s) => s.setMonth);
   const [direction, setDirection] = useState<DirectionFilter>("all");
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [sourceId, setSourceId] = useState<string | undefined>();
+
+  // Reports drill-down reuses Home ledger filters; only accept valid URL values.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const monthParam = params.get("month");
+    const categoryParam = params.get("category");
+    if (monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) setMonth(monthParam);
+    if (categoryParam && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(categoryParam)) setCategoryId(categoryParam);
+  }, [setMonth]);
 
   const { data: summary } = useSummary(month);
   const { data: memos } = useMemos(month, categoryId, sourceId);
