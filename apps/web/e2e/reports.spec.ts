@@ -92,15 +92,18 @@ test("insights: installments refresh trend; future installments remain excluded"
   // First installment already due; following two belong to future months.
   const firstDate = await page.evaluate(() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T00:00`;
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01T00:00`;
   });
   await editor.getByLabel("Date & time").fill(firstDate);
   await editor.getByRole("button", { name: "Save expense" }).click();
   await expect(editor).toBeHidden();
 
   // Cache must invalidate immediately, not wait for 60s poll.
-  await expect(page.getByTestId("insight-expense")).toContainText("$30.00");
-  await expect(page.getByTestId("insight-net")).toContainText("30.00");
+  const comparison = page.getByRole("region", { name: "Compared with previous month" });
+  await expect(comparison).toContainText("+$30.00");
+  await expect(comparison).toContainText("New");
 });
 
 
