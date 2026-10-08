@@ -26,9 +26,9 @@ test("insights: selected period, exact touch values, currency, and top spending"
   await expect(page.getByTestId("insight-expense")).toContainText("100.000");
   await expect(page.getByTestId("insight-income")).toContainText("Rp");
   await page.getByRole("radiogroup", { name: "Date range" }).getByRole("radio", { name: "3M" }).click();
-  await expect(page.getByText("Last 3 calendar months", { exact: false })).toBeVisible();
+  await expect(page.getByText("Last 3 months · current month to date", { exact: true })).toBeVisible();
   await page.getByRole("radiogroup", { name: "Date range" }).getByRole("radio", { name: "12M" }).click();
-  await expect(page.getByText("Last 12 calendar months", { exact: false })).toBeVisible();
+  await expect(page.getByText("Last 12 months · current month to date", { exact: true })).toBeVisible();
   await noHorizontalOverflow(page);
 });
 
