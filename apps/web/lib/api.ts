@@ -376,8 +376,17 @@ export type TrendTotal = { month: string; currency: string; direction: MemoDirec
 export type TrendCategoryTotal = { month: string; category_id: string | null; currency: string; total_minor: number };
 export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[] };
 
-export function getTrend(months: 3 | 6 | 12, offset = utcOffsetMinutes()): Promise<Trend> {
+export function browserTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function getTrend(months: 3 | 6 | 12, offset = utcOffsetMinutes(), timeZone = browserTimeZone()): Promise<Trend> {
   const params = new URLSearchParams({ months: String(months), offset: String(offset) });
+  if (timeZone) params.set("time_zone", timeZone);
   return api<Trend>(`/reports/trend?${params}`);
 }
 

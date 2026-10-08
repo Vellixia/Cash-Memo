@@ -23,6 +23,9 @@ struct TrendQuery {
     /// /memos and /summary).
     #[serde(default)]
     offset: i32,
+    /// Optional IANA timezone; adjusts historical month boundaries for DST.
+    #[serde(default)]
+    time_zone: Option<String>,
 }
 
 #[derive(Serialize, FromQueryResult)]
@@ -39,6 +42,11 @@ struct MonthCategoryTotal {
     category_id: Option<Uuid>,
     currency: String,
     total_minor: i64,
+}
+
+#[derive(FromQueryResult)]
+struct TimeZoneCheck {
+    valid: bool,
 }
 
 #[derive(Serialize)]
@@ -71,13 +79,9 @@ async fn trend(
     let start_month = this_month
         .checked_sub_months(Months::new(q.months - 1))
         .ok_or(AppError::BadRequest("range out of bounds"))?;
-    let start = local_midnight(start_month, tz)?;
-    let end = local_midnight(
-        this_month
-            .checked_add_months(Months::new(1))
-            .ok_or(AppError::BadRequest("range out of bounds"))?,
-        tz,
-    )?;
+    let end_month = this_month
+        .checked_add_months(Months::new(1))
+        .ok_or(AppError::BadRequest("range out of bounds"))?;
     let months = (0..q.months)
         .map(|i| {
             start_month
@@ -88,21 +92,49 @@ async fn trend(
         })
         .collect();
 
-    // `occurred_at AT TIME ZONE 'UTC'` turns the timestamptz into a plain timestamp holding the
-    // same instant's UTC clock fields; adding the client's offset then shifts it to local wall
-    // time, so `to_char` reads the month the user actually saw (not the server's/session's zone).
-    let month_expr =
-        "to_char((occurred_at AT TIME ZONE 'UTC') + make_interval(mins => $4), 'YYYY-MM')";
-    let stmt = |sql: String| {
-        Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            sql,
-            [uid.into(), start.into(), end.into(), q.offset.into()],
-        )
-    };
-    let scope = "FROM memos
-         WHERE user_id = $1 AND deleted_at IS NULL AND occurred_at >= $2 AND occurred_at < $3
-         AND occurred_at <= now()";
+    // IANA zone accounts for DST at *each historical transaction* and at month boundaries.
+    // Keep fixed-offset fallback for old API clients.
+    let (month_expr, scope, params): (&str, &str, Vec<sea_orm::Value>) =
+        if let Some(zone) = q.time_zone.as_deref() {
+            if zone.is_empty() || zone.len() > 100 {
+                return Err(AppError::BadRequest("invalid time_zone"));
+            }
+            let result = TimeZoneCheck::find_by_statement(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name = $1) AS valid",
+                [zone.into()],
+            ))
+            .one(&st.db)
+            .await?;
+            if !result.is_some_and(|r| r.valid) {
+                return Err(AppError::BadRequest("invalid time_zone"));
+            }
+            (
+                "to_char(occurred_at AT TIME ZONE $4, 'YYYY-MM')",
+                "FROM memos
+                 WHERE user_id = $1 AND deleted_at IS NULL
+                   AND occurred_at >= ($2::date::timestamp AT TIME ZONE $4)
+                   AND occurred_at < ($3::date::timestamp AT TIME ZONE $4)
+                   AND occurred_at <= now()",
+                vec![uid.into(), start_month.into(), end_month.into(), zone.into()],
+            )
+        } else {
+            (
+                "to_char((occurred_at AT TIME ZONE 'UTC') + make_interval(mins => $4), 'YYYY-MM')",
+                "FROM memos
+                 WHERE user_id = $1 AND deleted_at IS NULL
+                   AND occurred_at >= $2 AND occurred_at < $3
+                   AND occurred_at <= now()",
+                vec![
+                    uid.into(),
+                    local_midnight(start_month, tz)?.into(),
+                    local_midnight(end_month, tz)?.into(),
+                    q.offset.into(),
+                ],
+            )
+        };
+    let stmt = |sql: String| Statement::from_sql_and_values(DbBackend::Postgres, sql, params.clone());
+
     let totals = MonthTotal::find_by_statement(stmt(format!(
         "SELECT {month_expr} AS month, currency::text AS currency, direction,
                 SUM(amount_minor)::bigint AS total_minor

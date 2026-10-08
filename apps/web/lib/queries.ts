@@ -26,6 +26,7 @@ import {
   getSources,
   getSummary,
   getTrend,
+  browserTimeZone,
   utcOffsetMinutes,
   login,
   logout,
@@ -386,9 +387,10 @@ export function useDeleteAttachment() {
 
 export function useTrend(months: 3 | 6 | 12) {
   const offset = utcOffsetMinutes();
+  const timeZone = browserTimeZone();
   return useQuery({
-    queryKey: ["reports-trend", months, offset],
-    queryFn: () => getTrend(months, offset),
+    queryKey: ["reports-trend", months, offset, timeZone ?? null],
+    queryFn: () => getTrend(months, offset, timeZone),
     // Recurring jobs can insert memos without a browser mutation; refresh an open report too.
     refetchInterval: 60_000,
   });
