@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { BalancesCard, CreditReminders, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
 import { BudgetsCard } from "@/components/budgets-card";
 import { useCategories, useMe, useMemos, useSources, useSummary, useUpcoming } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
+
+function subscribeUrl(callback: () => void) {
+  window.addEventListener("popstate", callback);
+  return () => window.removeEventListener("popstate", callback);
+}
+
+function categoryFromUrl(): string | undefined {
+  const value = new URLSearchParams(window.location.search).get("category");
+  return value && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
+}
 
 export default function HomePage() {
   const month = useUiStore((s) => s.month);
@@ -15,11 +25,11 @@ export default function HomePage() {
   const openEditor = useUiStore((s) => s.openEditor);
   const setMonth = useUiStore((s) => s.setMonth);
   const [direction, setDirection] = useState<DirectionFilter>("all");
-  const [categoryId, setCategoryId] = useState<string | undefined>(() => {
-    if (typeof window === "undefined") return undefined;
-    const value = new URLSearchParams(window.location.search).get("category");
-    return value && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
-  });
+  // Server + hydration start with same snapshot; query filter activates after hydration.
+  const urlCategory = useSyncExternalStore(subscribeUrl, categoryFromUrl, () => undefined);
+  const [localCategoryId, setLocalCategoryId] = useState<string | null>(null);
+  const categoryId = localCategoryId === null ? urlCategory : localCategoryId || undefined;
+  const setCategoryId = (id: string | undefined) => setLocalCategoryId(id ?? "");
   const [sourceId, setSourceId] = useState<string | undefined>();
 
   // Reports drill-down reuses Home ledger filters; only accept valid URL values.
