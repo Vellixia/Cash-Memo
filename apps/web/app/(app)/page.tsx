@@ -15,16 +15,18 @@ export default function HomePage() {
   const openEditor = useUiStore((s) => s.openEditor);
   const setMonth = useUiStore((s) => s.setMonth);
   const [direction, setDirection] = useState<DirectionFilter>("all");
-  const [categoryId, setCategoryId] = useState<string | undefined>();
+  const [categoryId, setCategoryId] = useState<string | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    const value = new URLSearchParams(window.location.search).get("category");
+    return value && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
+  });
   const [sourceId, setSourceId] = useState<string | undefined>();
 
   // Reports drill-down reuses Home ledger filters; only accept valid URL values.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const monthParam = params.get("month");
-    const categoryParam = params.get("category");
     if (monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) setMonth(monthParam);
-    if (categoryParam && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(categoryParam)) setCategoryId(categoryParam);
   }, [setMonth]);
 
   const { data: summary } = useSummary(month);
