@@ -26,6 +26,7 @@ import {
   getSources,
   getSummary,
   getTrend,
+  getCompare,
   browserTimeZone,
   utcOffsetMinutes,
   login,
@@ -121,6 +122,7 @@ function useInvalidateMoney() {
     qc.invalidateQueries({ queryKey: ["sources"] });
     qc.invalidateQueries({ queryKey: ["budgets"] });
     qc.invalidateQueries({ queryKey: ["reports-trend"] });
+    qc.invalidateQueries({ queryKey: ["reports-compare"] });
   };
 }
 
@@ -210,6 +212,7 @@ export function useDeleteCategory() {
       qc.invalidateQueries({ queryKey: ["memos"] });
       qc.invalidateQueries({ queryKey: ["summary"] });
       qc.invalidateQueries({ queryKey: ["reports-trend"] });
+      qc.invalidateQueries({ queryKey: ["reports-compare"] });
     },
   });
 }
@@ -262,6 +265,7 @@ function useInvalidatePlans() {
     qc.invalidateQueries({ queryKey: ["sources"] });
     qc.invalidateQueries({ queryKey: ["budgets"] });
     qc.invalidateQueries({ queryKey: ["reports-trend"] });
+    qc.invalidateQueries({ queryKey: ["reports-compare"] });
   };
 }
 
@@ -347,6 +351,7 @@ export function useInvalidateAfterImport() {
     qc.invalidateQueries({ queryKey: ["sources"] });
     qc.invalidateQueries({ queryKey: ["budgets"] });
     qc.invalidateQueries({ queryKey: ["reports-trend"] });
+    qc.invalidateQueries({ queryKey: ["reports-compare"] });
   };
 }
 
@@ -396,6 +401,15 @@ export function useTrend(months: 3 | 6 | 12) {
   });
 }
 
+export function useCompare(months: 1 | 3 | 6 | 12) {
+  const offset = utcOffsetMinutes();
+  const timeZone = browserTimeZone();
+  return useQuery({
+    queryKey: ["reports-compare", months, offset, timeZone ?? null],
+    queryFn: () => getCompare(months, offset, timeZone),
+    refetchInterval: 60_000,
+  });
+}
 
 // --- recurring memos & budgets ----------------------------------------------
 

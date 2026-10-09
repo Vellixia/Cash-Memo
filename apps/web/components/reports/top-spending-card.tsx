@@ -44,7 +44,7 @@ export function TopSpendingCard({ trend, currency, categories, months, drillDown
             return (
               <li key={r.key}>
                 {drillDown && c ? (
-                  <Link href={`/?month=${months[months.length - 1]}&category=${r.key}`} aria-label={`View ${name} memos`} className="flex min-h-11 items-center justify-between gap-2 rounded-md py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40">{body}</Link>
+                  <Link href={`/?month=${months[months.length - 1]}&category=${r.key}&currency=${currency}`} aria-label={`View ${name} memos`} className="flex min-h-11 items-center justify-between gap-2 rounded-md py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40">{body}</Link>
                 ) : <div className="flex min-h-11 items-center justify-between gap-2 py-2">{body}</div>}
               </li>
             );

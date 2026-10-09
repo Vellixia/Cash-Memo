@@ -1,4 +1,4 @@
-import type { Trend } from "@/lib/api";
+import type { ReportPeriod, Trend } from "@/lib/api";
 
 export type ReportRange = "month" | "3" | "6" | "12";
 export type Totals = { income: number; expense: number; net: number };
@@ -23,10 +23,16 @@ export function totalsFor(trend: Trend, currency: string, months: readonly strin
   return { income, expense, net: income - expense };
 }
 
-/** Compare only completed calendar months. Current partial month is never a baseline. */
-export function completedComparisonMonths(trend: Trend): { current: string; previous: string } | null {
-  if (trend.months.length < 3) return null;
-  return { current: trend.months[trend.months.length - 2], previous: trend.months[trend.months.length - 3] };
+/** Income/expense/net for one comparison period in one currency (transfers never arrive here). */
+export function periodTotals(period: ReportPeriod, currency: string): Totals {
+  let income = 0;
+  let expense = 0;
+  for (const row of period.totals) {
+    if (row.currency !== currency) continue;
+    if (row.direction === "income") income += row.total_minor;
+    if (row.direction === "expense") expense += row.total_minor;
+  }
+  return { income, expense, net: income - expense };
 }
 
 function categoryAmounts(trend: Trend, currency: string, months: readonly string[]): Map<string, number> {
@@ -45,9 +51,18 @@ export function changePercent(before: number, now: number): number | null {
   return before <= 0 ? null : Math.round(((now - before) / before) * 100);
 }
 
-export function categoryChanges(trend: Trend, currency: string, previous: string, current: string): CategoryChange[] {
-  const before = categoryAmounts(trend, currency, [previous]);
-  const now = categoryAmounts(trend, currency, [current]);
+export function categoryChanges(previous: ReportPeriod, current: ReportPeriod, currency: string): CategoryChange[] {
+  const amounts = (period: ReportPeriod) => {
+    const totals = new Map<string, number>();
+    for (const row of period.by_category) {
+      if (row.currency !== currency) continue;
+      const key = row.category_id ?? UNCATEGORIZED;
+      totals.set(key, (totals.get(key) ?? 0) + row.total_minor);
+    }
+    return totals;
+  };
+  const before = amounts(previous);
+  const now = amounts(current);
   return [...new Set([...before.keys(), ...now.keys()])]
     .map((key) => {
       const b = before.get(key) ?? 0;

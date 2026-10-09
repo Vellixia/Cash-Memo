@@ -9,6 +9,11 @@ type UiState = {
   /** Currency the hero + category breakdown show when a month has several. */
   currency: string | null;
   setCurrency: (currency: string) => void;
+  /** Home ledger filters set by Insights drill-down (not persisted). */
+  ledgerCategoryId: string | undefined;
+  setLedgerCategoryId: (id: string | undefined) => void;
+  ledgerCurrency: string | undefined;
+  setLedgerCurrency: (currency: string | undefined) => void;
   /** Last 5 currencies used on saved memos, newest first (the picker's "Recent"). */
   recentCurrencies: string[];
   noteCurrency: (currency: string) => void;
@@ -31,6 +36,10 @@ export const useUiStore = create<UiState>()(
       setMonth: (month) => set({ month }),
       currency: null,
       setCurrency: (currency) => set({ currency }),
+      ledgerCategoryId: undefined,
+      setLedgerCategoryId: (ledgerCategoryId) => set({ ledgerCategoryId }),
+      ledgerCurrency: undefined,
+      setLedgerCurrency: (ledgerCurrency) => set({ ledgerCurrency }),
       recentCurrencies: [],
       noteCurrency: (currency) =>
         set((s) => ({ recentCurrencies: [currency, ...s.recentCurrencies.filter((c) => c !== currency)].slice(0, 5) })),

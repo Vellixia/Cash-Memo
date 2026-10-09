@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { card } from "@/components/summary";
-import { monthLabel } from "@/lib/format";
+import { dateRangeLabel, monthLabel } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Category, Trend } from "@/lib/api";
-import { categoryChanges, changePercent, completedComparisonMonths, totalsFor } from "@/lib/report-insights";
+import type { Category, ReportCompare } from "@/lib/api";
+import { categoryChanges, changePercent, periodTotals } from "@/lib/report-insights";
 import { signedMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -16,14 +16,18 @@ function percentage(before: number, now: number, isNet = false): string {
   return `${pct > 0 ? "+" : ""}${pct}%`;
 }
 
-export function MonthComparisonCard({ trend, currency, categories }: { trend: Trend | undefined; currency: string; categories: Category[] }) {
-  if (!trend) return <Skeleton className="h-56 rounded-3xl" />;
-  const pair = completedComparisonMonths(trend);
-  if (!pair) return null;
-
-  const previous = totalsFor(trend, currency, [pair.previous]);
-  const current = totalsFor(trend, currency, [pair.current]);
-  const changes = categoryChanges(trend, currency, pair.previous, pair.current).slice(0, 5);
+/** `drillDown`: only a single-month window can be shown in the month-scoped Home ledger. */
+export function PeriodComparisonCard({ compare, currency, categories, drillDown }: {
+  compare: ReportCompare | undefined;
+  currency: string;
+  categories: Category[];
+  drillDown: boolean;
+}) {
+  if (!compare) return <Skeleton className="h-56 rounded-3xl" />;
+  const previous = periodTotals(compare.previous, currency);
+  const current = periodTotals(compare.current, currency);
+  const changes = categoryChanges(compare.previous, compare.current, currency).slice(0, 5);
+  const month = compare.current.end.slice(0, 7);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   const summary = [
@@ -34,9 +38,9 @@ export function MonthComparisonCard({ trend, currency, categories }: { trend: Tr
 
   return (
     <section className={cn(card, "p-4 sm:p-6")} aria-labelledby="comparison-title">
-      <h2 id="comparison-title" className="font-serif text-lg sm:text-xl">Compared with previous month</h2>
+      <h2 id="comparison-title" className="font-serif text-lg sm:text-xl">Compared with previous period</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        {monthLabel(pair.current, "short")} vs {monthLabel(pair.previous, "short")} · both complete months, excluding current month-to-date
+        {dateRangeLabel(compare.current.start, compare.current.end)} vs {dateRangeLabel(compare.previous.start, compare.previous.end)}
       </p>
       <div className="mt-4 grid grid-cols-3 gap-2">
         {summary.map((item) => {
@@ -66,14 +70,14 @@ export function MonthComparisonCard({ trend, currency, categories }: { trend: Tr
                 <span className="flex shrink-0 items-center gap-2">
                   <span className={cn("num text-sm font-medium", change.delta > 0 ? "text-expense" : "text-income")}>{signedMoney(change.delta, currency)}</span>
                   <span className="num w-12 text-right text-xs text-muted-foreground">{percentage(change.before, change.now)}</span>
-                  {category && <ArrowUpRight className="size-3.5 text-muted-foreground" aria-hidden />}
+                  {drillDown && category && <ArrowUpRight className="size-3.5 text-muted-foreground" aria-hidden />}
                 </span>
               </>
             );
             return (
               <li key={change.key}>
-                {category ? (
-                  <Link href={`/?month=${pair.current}&category=${change.key}`} aria-label={`View ${name} memos in ${monthLabel(pair.current, "short")}`} className="flex min-h-11 items-center justify-between gap-2 rounded-md py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40">{contents}</Link>
+                {drillDown && category ? (
+                  <Link href={`/?month=${month}&category=${change.key}&currency=${currency}`} aria-label={`View ${name} memos in ${monthLabel(month, "short")}`} className="flex min-h-11 items-center justify-between gap-2 rounded-md py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40">{contents}</Link>
                 ) : (
                   <div className="flex min-h-11 items-center justify-between gap-2 py-2">{contents}</div>
                 )}

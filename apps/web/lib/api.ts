@@ -374,7 +374,18 @@ export function deleteAttachment(memoId: string): Promise<void> {
 
 export type TrendTotal = { month: string; currency: string; direction: MemoDirection; total_minor: number };
 export type TrendCategoryTotal = { month: string; category_id: string | null; currency: string; total_minor: number };
-export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[] };
+export type ScheduledTotal = { currency: string; direction: MemoDirection; total_minor: number };
+/** `scheduled`: non-transfer memos dated after today but still this month (Home counts them, Insights doesn't). */
+export type Trend = { months: string[]; totals: TrendTotal[]; by_category: TrendCategoryTotal[]; scheduled: ScheduledTotal[] };
+
+/** Inclusive local dates, "YYYY-MM-DD". `by_category` is expense only. */
+export type ReportPeriod = {
+  start: string;
+  end: string;
+  totals: { currency: string; direction: MemoDirection; total_minor: number }[];
+  by_category: { category_id: string | null; currency: string; total_minor: number }[];
+};
+export type ReportCompare = { current: ReportPeriod; previous: ReportPeriod };
 
 export function browserTimeZone(): string | undefined {
   try {
@@ -390,6 +401,11 @@ export function getTrend(months: 3 | 6 | 12, offset = utcOffsetMinutes(), timeZo
   return api<Trend>(`/reports/trend?${params}`);
 }
 
+export function getCompare(months: 1 | 3 | 6 | 12, offset = utcOffsetMinutes(), timeZone = browserTimeZone()): Promise<ReportCompare> {
+  const params = new URLSearchParams({ months: String(months), offset: String(offset) });
+  if (timeZone) params.set("time_zone", timeZone);
+  return api<ReportCompare>(`/reports/compare?${params}`);
+}
 
 // --- recurring memos & budgets -------------------------------------------------
 

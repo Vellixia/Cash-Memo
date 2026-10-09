@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { MonthComparisonCard } from "@/components/reports/comparison-card";
+import { PeriodComparisonCard } from "@/components/reports/comparison-card";
 import { TopSpendingCard } from "@/components/reports/top-spending-card";
 import { IncomeExpenseTrendCard } from "@/components/reports/trend-card";
 import { Segmented } from "@/components/segmented";
 import { card } from "@/components/summary";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCategories, useMe, useTrend } from "@/lib/queries";
+import { useCategories, useCompare, useMe, useTrend } from "@/lib/queries";
 import { monthsForRange, totalsFor, type ReportRange } from "@/lib/report-insights";
 import { useUiStore } from "@/lib/store";
 import { formatMoney, signedMoney } from "@/lib/money";
@@ -23,9 +23,9 @@ const OPTIONS: { value: ReportRange; label: string }[] = [
 
 export default function ReportsPage() {
   const [range, setRange] = useState<ReportRange>("month");
-  // 3 months needed even in "This month" to compare last two completed months.
   const months = range === "month" ? 3 : Number(range) as 3 | 6 | 12;
   const { data: trend, isError, refetch } = useTrend(months);
+  const { data: compare } = useCompare(range === "month" ? 1 : (Number(range) as 3 | 6 | 12));
   const { data: categories = [] } = useCategories();
   const storedCurrency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
@@ -38,6 +38,13 @@ export default function ReportsPage() {
   const selectedMonths = trend ? monthsForRange(trend, range) : [];
   const totals = trend ? totalsFor(trend, currency, selectedMonths) : null;
   const label = range === "month" ? "This month to date" : `Last ${range} months · current month to date`;
+  const scheduled = (dir: string) => trend?.scheduled?.find((r) => r.currency === currency && r.direction === dir)?.total_minor ?? 0;
+  const scheduledExpense = scheduled("expense");
+  const scheduledIncome = scheduled("income");
+  const scheduledParts = [
+    scheduledExpense > 0 && `${formatMoney(scheduledExpense, currency)} expense`,
+    scheduledIncome > 0 && `${formatMoney(scheduledIncome, currency)} income`,
+  ].filter(Boolean);
   const savings = totals && totals.income > 0 ? Math.round((totals.net / totals.income) * 100) : null;
 
   return (
@@ -83,11 +90,16 @@ export default function ReportsPage() {
               {savings !== null && <p className="mt-1 text-xs text-muted-foreground">{savings}% savings rate</p>}
             </div>
           </dl>
+          {scheduledParts.length > 0 && (
+            <p data-testid="insight-scheduled" className="mt-3 text-xs text-muted-foreground">
+              Excludes {scheduledParts.join(" and ")} scheduled later this month (Home includes it).
+            </p>
+          )}
         </section>
       )}
 
       <IncomeExpenseTrendCard trend={trend} currency={currency} />
-      <MonthComparisonCard trend={trend} currency={currency} categories={categories} />
+      <PeriodComparisonCard compare={compare} currency={currency} categories={categories} drillDown={range === "month"} />
       <TopSpendingCard trend={trend} currency={currency} categories={categories} months={selectedMonths} drillDown={range === "month"} />
     </div>
   );

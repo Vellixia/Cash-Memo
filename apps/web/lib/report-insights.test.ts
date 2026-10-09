@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { Trend } from "./api";
-import { categoryChanges, changePercent, completedComparisonMonths, monthsForRange, topSpending, totalsFor } from "./report-insights";
+import type { ReportPeriod, Trend } from "./api";
+import { categoryChanges, changePercent, monthsForRange, periodTotals, topSpending, totalsFor } from "./report-insights";
 
 const trend: Trend = {
   months: ["2025-11", "2025-12", "2026-01"],
@@ -22,16 +22,40 @@ const trend: Trend = {
     { month: "2026-01", currency: "USD", category_id: null, total_minor: 7999 },
     { month: "2026-01", currency: "IDR", category_id: "food", total_minor: 100000 },
   ],
+  scheduled: [],
+};
+
+const previous: ReportPeriod = {
+  start: "2025-09-01",
+  end: "2025-09-09",
+  totals: [
+    { currency: "USD", direction: "income", total_minor: 7000 },
+    { currency: "USD", direction: "expense", total_minor: 4000 },
+    { currency: "IDR", direction: "expense", total_minor: 900 },
+  ],
+  by_category: [
+    { category_id: "food", currency: "USD", total_minor: 2000 },
+    { category_id: "rent", currency: "USD", total_minor: 2000 },
+    { category_id: "gone", currency: "USD", total_minor: 500 },
+    { category_id: "food", currency: "IDR", total_minor: 900 },
+  ],
+};
+const current: ReportPeriod = {
+  start: "2025-10-01",
+  end: "2025-10-09",
+  totals: [{ currency: "USD", direction: "expense", total_minor: 9500 }],
+  by_category: [
+    { category_id: "food", currency: "USD", total_minor: 1000 },
+    { category_id: "rent", currency: "USD", total_minor: 5000 },
+    { category_id: null, currency: "USD", total_minor: 3500 },
+  ],
 };
 
 describe("report periods", () => {
-  test("full-month comparison excludes current partial month across year boundary", () => {
-    expect(completedComparisonMonths(trend)).toEqual({ previous: "2025-11", current: "2025-12" });
-    expect(completedComparisonMonths({ ...trend, months: ["2026-02", "2026-03", "2026-04"] }))
-      .toEqual({ previous: "2026-02", current: "2026-03" });
-    expect(completedComparisonMonths({ ...trend, months: ["2024-12", "2025-01", "2025-02"] }))
-      .toEqual({ previous: "2024-12", current: "2025-01" });
-    expect(completedComparisonMonths({ ...trend, months: ["2026-02", "2026-03"] })).toBeNull();
+  test("period totals stay in the chosen currency", () => {
+    expect(periodTotals(previous, "USD")).toEqual({ income: 7000, expense: 4000, net: 3000 });
+    expect(periodTotals(current, "USD")).toEqual({ income: 0, expense: 9500, net: -9500 });
+    expect(periodTotals(current, "IDR")).toEqual({ income: 0, expense: 0, net: 0 });
   });
 
   test("selected range totals stay in chosen currency and exclude transfers", () => {
@@ -45,12 +69,15 @@ describe("report periods", () => {
 
 describe("category insights", () => {
   test("sort by absolute change and handle disappearing and new categories", () => {
-    const rows = categoryChanges(trend, "USD", "2025-11", "2025-12");
+    const rows = categoryChanges(previous, current, "USD");
     expect(rows.map((r) => [r.key, r.delta, r.percent])).toEqual([
+      ["uncategorized", 3500, null],
       ["rent", 3000, 150],
       ["food", -1000, -50],
+      ["gone", -500, -100],
     ]);
-    expect(categoryChanges(trend, "USD", "2025-12", "2026-01").find((r) => r.key === "uncategorized")?.percent).toBeNull();
+    // Other currencies never leak in; a category absent now is a full decrease.
+    expect(categoryChanges(previous, current, "IDR").map((r) => [r.key, r.delta])).toEqual([["food", -900]]);
     expect(changePercent(0, 500)).toBeNull();
     expect(changePercent(100, 0)).toBe(-100);
     expect(changePercent(-100, 100)).toBeNull();

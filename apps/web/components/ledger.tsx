@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, Paperclip, Plus, Repeat, Sparkles } from "lucide-react";
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Loader2, X, Paperclip, Plus, Repeat, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +24,8 @@ export function Ledger({
   sources,
   direction,
   onDirection,
+  currency,
+  onClearCurrency,
   categoryId,
   onCategory,
   sourceId,
@@ -37,6 +39,9 @@ export function Ledger({
   sources: Source[];
   direction: DirectionFilter;
   onDirection: (d: DirectionFilter) => void;
+  /** Currency filter set by Insights drill-down. */
+  currency?: string;
+  onClearCurrency?: () => void;
   categoryId: string | undefined;
   onCategory: (id: string | undefined) => void;
   sourceId: string | undefined;
@@ -49,12 +54,13 @@ export function Ledger({
   const byId = new Map(categories.map((c) => [c.id, c]));
   const sourceById = new Map(sources.map((s) => [s.id, s]));
   const options = categories.filter((c) => direction === "all" || c.direction === direction);
-  const shown = memos?.filter((m) => direction === "all" || m.direction === direction);
-  const filtered = direction !== "all" || !!categoryId || !!sourceId;
+  const shown = memos?.filter((m) => (direction === "all" || m.direction === direction) && (!currency || m.currency === currency));
+  const filtered = direction !== "all" || !!categoryId || !!sourceId || !!currency;
   const upcomingShown = shown
     ? (upcoming ?? []).filter(
         (u) =>
           (direction === "all" || u.direction === direction) &&
+          (!currency || u.currency === currency) &&
           (!categoryId || u.category_id === categoryId) &&
           (!sourceId || u.source_id === sourceId || u.to_source_id === sourceId),
       )
@@ -102,6 +108,16 @@ export function Ledger({
               ))}
             </SelectContent>
           </Select>
+          {currency && (
+            <button
+              type="button"
+              onClick={onClearCurrency}
+              aria-label={`Clear currency filter ${currency}`}
+              className="inline-flex h-9 shrink-0 snap-start items-center gap-1 rounded-full bg-card px-3 text-sm ring-1 ring-border outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40 pointer-coarse:h-11"
+            >
+              {currency} <X className="size-3.5" aria-hidden />
+            </button>
+          )}
           {sources.length > 0 && (
             <Select
               value={sourceId ?? ALL}
@@ -183,6 +199,7 @@ export function Ledger({
             onDirection("all");
             onCategory(undefined);
             onSource(undefined);
+            onClearCurrency?.();
           }}
           onAdd={onAdd}
         />

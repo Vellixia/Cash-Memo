@@ -1457,6 +1457,18 @@ async fn reports_trend_across_months_excludes_transfers() {
             .map(|t| t["total_minor"].as_i64().unwrap())
             .unwrap_or(0)
     };
+    // Dated after today but this month: scheduled, not in totals. Skipped on the last UTC day.
+    let scheduled = trend["scheduled"].as_array().unwrap();
+    let tomorrow = now.date_naive().succ_opt().unwrap();
+    if tomorrow.format("%Y-%m").to_string() == this_month {
+        assert_eq!(
+            scheduled,
+            &vec![json!({ "currency": "USD", "direction": "expense", "total_minor": 90000 })],
+            "only the future expense is scheduled; transfers never are"
+        );
+    } else {
+        assert!(scheduled.is_empty());
+    }
     assert_eq!(total(&this_month, "income"), 100000);
     assert_eq!(total(&this_month, "expense"), 35000);
     assert_eq!(total(&last_month, "expense"), 10000);
@@ -1495,6 +1507,180 @@ async fn reports_trend_across_months_excludes_transfers() {
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 3, 6 or 12");
+}
+
+#[tokio::test]
+async fn reports_compare_matches_periods_to_the_same_day() {
+    use chrono::Datelike;
+    let (app, _db) = test_app_db().await;
+    let a = signup(&app).await;
+    let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
+    let cash = sources[0]["id"].clone();
+    let (_, _, bank) = call(
+        &app,
+        "POST",
+        "/api/sources",
+        &a,
+        Some(json!({ "name": "Bank", "kind": "bank" })),
+    )
+    .await;
+    let (_, _, cat) = call(
+        &app,
+        "POST",
+        "/api/categories",
+        &a,
+        Some(json!({ "name": "Food", "direction": "expense" })),
+    )
+    .await;
+
+    let today = chrono::Utc::now().date_naive();
+    let this_month = today.with_day(1).unwrap();
+    let prev_month = this_month - chrono::Months::new(1);
+    let days_in_prev = (this_month - prev_month).num_days() as u32;
+    let stamp = |d: chrono::NaiveDate, h: u32| format!("{d}T{h:02}:00:00Z");
+    let add = |direction: &'static str, amount: i64, at: String, cat_id: Option<Value>| {
+        let app = app.clone();
+        let a = a.clone();
+        let cash = cash.clone();
+        let bank = bank["id"].clone();
+        async move {
+            let mut body = json!({ "direction": direction, "amount_minor": amount,
+                "currency": "USD", "occurred_at": at, "source_id": cash });
+            if let Some(c) = cat_id {
+                body["category_id"] = c;
+            }
+            if direction == "transfer" {
+                body["to_source_id"] = bank;
+            }
+            let (s, _, _) = call(&app, "POST", "/api/memos", &a, Some(body)).await;
+            assert_eq!(s, StatusCode::CREATED);
+        }
+    };
+    // Day 1 at 00:00 UTC is always inside both periods' first day (and never after today).
+    add(
+        "expense",
+        4000,
+        stamp(this_month, 0),
+        Some(cat["id"].clone()),
+    )
+    .await;
+    add("income", 9000, stamp(this_month, 0), None).await;
+    add("transfer", 7000, stamp(this_month, 0), None).await;
+    add(
+        "expense",
+        1500,
+        stamp(prev_month, 0),
+        Some(cat["id"].clone()),
+    )
+    .await;
+    add("expense", 600, stamp(prev_month, 0), None).await;
+    // Previous month, after today's day-of-month: the previous period is cut before it.
+    let after_cut = today.day() < days_in_prev;
+    if after_cut {
+        let last = prev_month.with_day(days_in_prev).unwrap();
+        add("expense", 99000, stamp(last, 23), Some(cat["id"].clone())).await;
+    }
+
+    let get = |months: u32| {
+        let app = app.clone();
+        let a = a.clone();
+        async move {
+            call(
+                &app,
+                "GET",
+                &format!("/api/reports/compare?months={months}&offset=0"),
+                &a,
+                None,
+            )
+            .await
+        }
+    };
+    let (s, _, one) = get(1).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(one["current"]["start"], json!(this_month.to_string()));
+    assert_eq!(one["current"]["end"], json!(today.to_string()));
+    assert_eq!(one["previous"]["start"], json!(prev_month.to_string()));
+    let cut = prev_month.with_day(today.day().min(days_in_prev)).unwrap();
+    assert_eq!(one["previous"]["end"], json!(cut.to_string()));
+
+    let total = |p: &Value, direction: &str| {
+        p["totals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["currency"] == "USD" && t["direction"] == direction)
+            .map(|t| t["total_minor"].as_i64().unwrap())
+            .unwrap_or(0)
+    };
+    let cat_total = |p: &Value, id: &Value| {
+        p["by_category"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| &r["category_id"] == id)
+            .map(|r| r["total_minor"].as_i64().unwrap())
+    };
+    let c = &one["current"];
+    assert_eq!(total(c, "expense"), 4000);
+    assert_eq!(total(c, "income"), 9000);
+    assert!(
+        !c["totals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["direction"] == "transfer")
+    );
+    assert_eq!(cat_total(c, &cat["id"]), Some(4000));
+    let p = &one["previous"];
+    assert_eq!(
+        total(p, "expense"),
+        2100,
+        "memos after the same-day cut-off are excluded"
+    );
+    assert_eq!(cat_total(p, &cat["id"]), Some(1500));
+    assert_eq!(cat_total(p, &Value::Null), Some(600));
+    assert_eq!(total(p, "income"), 0);
+
+    let (s, _, three) = get(3).await;
+    assert_eq!(s, StatusCode::OK);
+    let start3 = this_month - chrono::Months::new(2);
+    assert_eq!(three["current"]["start"], json!(start3.to_string()));
+    assert_eq!(three["current"]["end"], json!(today.to_string()));
+    assert_eq!(
+        three["previous"]["start"],
+        json!((this_month - chrono::Months::new(5)).to_string())
+    );
+    let cut_month3 = this_month - chrono::Months::new(3);
+    let dim3 = ((cut_month3 + chrono::Months::new(1)) - cut_month3).num_days() as u32;
+    let cut3 = cut_month3.with_day(today.day().min(dim3)).unwrap();
+    assert_eq!(three["previous"]["end"], json!(cut3.to_string()));
+    // The month-1 memos now fall in the current 3-month window.
+    assert_eq!(
+        total(&three["current"], "expense"),
+        4000 + 1500 + 600 + if after_cut { 99000 } else { 0 }
+    );
+    assert_eq!(total(&three["previous"], "expense"), 0);
+
+    let (s, _, _) = get(2).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "months must be 1, 3, 6 or 12");
+    let (s, _, _) = call(
+        &app,
+        "GET",
+        "/api/reports/compare?months=1&offset=0&time_zone=Invalid%2FZone",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call(
+        &app,
+        "GET",
+        "/api/reports/compare?months=1&offset=0&time_zone=UTC",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
 }
 
 #[tokio::test]

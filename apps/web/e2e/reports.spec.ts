@@ -17,7 +17,7 @@ test("insights: selected period, exact touch values, currency, and top spending"
   await expect(chart.getByRole("button", { name: /expense.*\$12\.50/ })).toHaveCount(1);
   await chart.getByRole("button", { name: /expense.*\$12\.50/ }).click();
   await expect(page.getByRole("heading", { name: "Top spending" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "View Food memos" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Top spending" }).getByRole("link", { name: "View Food memos" })).toBeVisible();
 
   await page.getByRole("radiogroup", { name: "Trend metric" }).getByRole("radio", { name: "Net" }).click();
   await expect(page.getByRole("group", { name: "Monthly net values" }).getByRole("button", { name: /net.*\$4,987\.50/ })).toHaveCount(1);
@@ -47,33 +47,66 @@ test("insights: creating memo from global editor refreshes report without naviga
   await expect(page.getByTestId("insight-net")).toContainText("$525.00");
 });
 
-test("insights: complete-month comparison excludes partial month and drills into filtered ledger", async ({ page, api }) => {
+test("insights: comparison follows the selected range and drills into a filtered ledger", async ({ page, api }) => {
   await api.signup();
   const food = await api.category("Food");
-  const months = await page.evaluate(() => {
+  // Day 1 at 00:05 local keeps both memos inside month-to-date and its previous-month twin.
+  const firsts = await page.evaluate(() => {
     const now = new Date();
-    return [-2, -1].map((n) => {
-      const date = new Date(now.getFullYear(), now.getMonth() + n, 10, 12);
-      return {
-        month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
-        occurred_at: date.toISOString(),
-      };
-    });
+    return [0, -1].map((n) => new Date(now.getFullYear(), now.getMonth() + n, 1, 0, 5).toISOString());
   });
-  await api.memo({ direction: "expense", amount_minor: 1000, category_id: food.id, occurred_at: months[0].occurred_at, note: "Older food" });
-  await api.memo({ direction: "expense", amount_minor: 1500, category_id: food.id, occurred_at: months[1].occurred_at, note: "Recent food" });
-  await api.memo({ direction: "expense", amount_minor: 300000, category_id: food.id, note: "Current partial food" });
+  await api.memo({ direction: "expense", amount_minor: 3000, category_id: food.id, occurred_at: firsts[0], note: "This month food" });
+  await api.memo({ direction: "expense", amount_minor: 1000, category_id: food.id, occurred_at: firsts[1], note: "Last month food" });
+  await api.memo({ direction: "expense", currency: "IDR", amount_minor: 50000, category_id: food.id, occurred_at: firsts[0], note: "Rupiah food" });
 
   await page.goto("/reports");
-  const comparison = page.getByRole("region", { name: "Compared with previous month" });
-  await expect(comparison).toContainText("both complete months");
+  const comparison = page.getByRole("region", { name: "Compared with previous period" });
+  const subtitle = comparison.locator("p").first();
+  await expect(subtitle).toContainText(" vs ");
+  const monthText = await subtitle.innerText();
   const row = comparison.getByRole("link", { name: /View Food memos/ });
-  await expect(row).toContainText("+$5.00");
-  await expect(row).toContainText("+50%");
-  await row.click();
-  await expect(page).toHaveURL(new RegExp(`month=${months[1].month}.*category=${food.id}`));
-  await expect(page.getByTestId("memo-row").filter({ hasText: "Recent food" })).toBeVisible();
-  await expect(page.getByTestId("memo-row").filter({ hasText: "Current partial food" })).toHaveCount(0);
+  await expect(row).toContainText("+$20.00");
+  await expect(row).toContainText("+200%");
+
+  await page.getByRole("radiogroup", { name: "Date range" }).getByRole("radio", { name: "3M" }).click();
+  await expect(subtitle).not.toHaveText(monthText);
+  await expect(subtitle).toContainText(" vs ");
+  // Multi-month windows can't open the month-scoped ledger.
+  await expect(comparison.getByRole("link", { name: /View Food memos/ })).toHaveCount(0);
+
+  await page.getByRole("radiogroup", { name: "Date range" }).getByRole("radio", { name: "This month" }).click();
+  await comparison.getByRole("link", { name: /View Food memos/ }).click();
+  await expect(page.getByTestId("memo-row").filter({ hasText: "This month food" })).toBeVisible();
+  await expect(page).not.toHaveURL(/category=/);
+  await expect(page).not.toHaveURL(/month=/);
+  await expect(page.getByTestId("memo-row").filter({ hasText: "Rupiah food" })).toHaveCount(0);
+
+  // Currency chip clears just the currency filter.
+  await page.getByRole("button", { name: "Clear currency filter USD" }).click();
+  await expect(page.getByTestId("memo-row").filter({ hasText: "Rupiah food" })).toBeVisible();
+
+  // A cleared category filter must not come back on reload.
+  await page.getByRole("combobox", { name: "Filter by category" }).click();
+  await page.getByRole("option", { name: "All categories" }).click();
+  await page.reload();
+  await expect(page.getByTestId("memo-row").filter({ hasText: "This month food" })).toBeVisible();
+  await expect(page.getByTestId("memo-row").filter({ hasText: "Rupiah food" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Clear currency filter/ })).toHaveCount(0);
+});
+
+test("insights: notes what is scheduled later this month and excluded", async ({ page, api }) => {
+  await api.signup();
+  const later = await page.evaluate(() => {
+    const now = new Date();
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return now.getDate() >= last ? null : new Date(now.getFullYear(), now.getMonth(), last, 12).toISOString();
+  });
+  test.skip(!later, "today is the last day of the month");
+  await api.memo({ direction: "expense", amount_minor: 4200, occurred_at: later!, note: "Scheduled rent" });
+
+  await page.goto("/reports");
+  await expect(page.getByTestId("insight-expense")).toContainText("$0.00");
+  await expect(page.getByTestId("insight-scheduled")).toContainText("Excludes $42.00 expense scheduled later this month");
 });
 
 
@@ -126,6 +159,8 @@ test("insights: editing, deleting and restoring memos updates report totals", as
   await editor.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("button", { name: "Delete memo" }).click();
   await page.getByRole("button", { name: "Undo" }).click();
+  // Navigating before the restore lands would abort it.
+  await expect(page.getByText("Memo restored")).toBeVisible();
   await page.goto("/reports");
   await expect(page.getByTestId("insight-income")).toContainText("$150.00");
 
@@ -133,6 +168,7 @@ test("insights: editing, deleting and restoring memos updates report totals", as
   await page.getByTestId("memo-row").filter({ hasText: "Contract work" }).click();
   await page.getByTestId("memo-editor").getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("button", { name: "Delete memo" }).click();
+  await expect(page.getByText("Memo deleted")).toBeVisible();
   await page.goto("/reports");
   await expect(page.getByTestId("insight-income")).toContainText("$0.00");
 });
