@@ -71,16 +71,16 @@ async fn trend(
         .checked_mul(60)
         .and_then(FixedOffset::east_opt)
         .ok_or(AppError::BadRequest("invalid offset"))?;
-    let this_month = Utc::now()
-        .with_timezone(&tz)
-        .date_naive()
-        .with_day(1)
-        .unwrap();
+    let today = Utc::now().with_timezone(&tz).date_naive();
+    let this_month = today.with_day(1).unwrap();
     let start_month = this_month
         .checked_sub_months(Months::new(q.months - 1))
         .ok_or(AppError::BadRequest("range out of bounds"))?;
-    let end_month = this_month
-        .checked_add_months(Months::new(1))
+    // The range ends with today, not `now()`: installments and recurring memos are stamped at
+    // local noon, so a `now()` cut-off would hide today's memos all morning. Memos dated after
+    // today (future installments, scheduled entries) stay out, so the current month is to date.
+    let end_day = today
+        .succ_opt()
         .ok_or(AppError::BadRequest("range out of bounds"))?;
     let months = (0..q.months)
         .map(|i| {
@@ -114,26 +114,19 @@ async fn trend(
                 "FROM memos
                  WHERE user_id = $1 AND deleted_at IS NULL
                    AND occurred_at >= ($2::date::timestamp AT TIME ZONE $4)
-                   AND occurred_at < ($3::date::timestamp AT TIME ZONE $4)
-                   AND occurred_at <= now()",
-                vec![
-                    uid.into(),
-                    start_month.into(),
-                    end_month.into(),
-                    zone.into(),
-                ],
+                   AND occurred_at < ($3::date::timestamp AT TIME ZONE $4)",
+                vec![uid.into(), start_month.into(), end_day.into(), zone.into()],
             )
         } else {
             (
                 "to_char((occurred_at AT TIME ZONE 'UTC') + make_interval(mins => $4), 'YYYY-MM')",
                 "FROM memos
                  WHERE user_id = $1 AND deleted_at IS NULL
-                   AND occurred_at >= $2 AND occurred_at < $3
-                   AND occurred_at <= now()",
+                   AND occurred_at >= $2 AND occurred_at < $3",
                 vec![
                     uid.into(),
                     local_midnight(start_month, tz)?.into(),
-                    local_midnight(end_month, tz)?.into(),
+                    local_midnight(end_day, tz)?.into(),
                     q.offset.into(),
                 ],
             )

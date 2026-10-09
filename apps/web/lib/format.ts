@@ -19,6 +19,12 @@ export function monthLabel(month: string, style: "long" | "short" = "long"): str
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: style, year: "numeric" });
 }
 
+/** "2026-09" -> "Sep". Fixed locale, like `monthLabel`. */
+export function monthAbbrev(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
+}
+
 export function toDatetimeLocal(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

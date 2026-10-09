@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { card } from "@/components/summary";
-import { monthLabel } from "@/components/reports/trend-card";
+import { monthLabel } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Category, Trend } from "@/lib/api";
 import { categoryChanges, changePercent, completedComparisonMonths, totalsFor } from "@/lib/report-insights";
@@ -36,7 +36,7 @@ export function MonthComparisonCard({ trend, currency, categories }: { trend: Tr
     <section className={cn(card, "p-4 sm:p-6")} aria-labelledby="comparison-title">
       <h2 id="comparison-title" className="font-serif text-lg sm:text-xl">Compared with previous month</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        {monthLabel(pair.current)} vs {monthLabel(pair.previous)} · both complete months, excluding current month-to-date
+        {monthLabel(pair.current, "short")} vs {monthLabel(pair.previous, "short")} · both complete months, excluding current month-to-date
       </p>
       <div className="mt-4 grid grid-cols-3 gap-2">
         {summary.map((item) => {
@@ -73,7 +73,7 @@ export function MonthComparisonCard({ trend, currency, categories }: { trend: Tr
             return (
               <li key={change.key}>
                 {category ? (
-                  <Link href={`/?month=${pair.current}&category=${change.key}`} aria-label={`View ${name} memos in ${monthLabel(pair.current)}`} className="flex min-h-11 items-center justify-between gap-2 rounded-md py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40">{contents}</Link>
+                  <Link href={`/?month=${pair.current}&category=${change.key}`} aria-label={`View ${name} memos in ${monthLabel(pair.current, "short")}`} className="flex min-h-11 items-center justify-between gap-2 rounded-md py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40">{contents}</Link>
                 ) : (
                   <div className="flex min-h-11 items-center justify-between gap-2 py-2">{contents}</div>
                 )}

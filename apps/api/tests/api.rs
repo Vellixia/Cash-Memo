@@ -1345,7 +1345,12 @@ async fn reports_trend_across_months_excludes_transfers() {
     // Computed off `now`, not hardcoded, so the test doesn't depend on which month it runs in.
     let now = chrono::Utc::now();
     let current_stamp = now.to_rfc3339();
-    let future_stamp = (now + chrono::Duration::minutes(30)).to_rfc3339();
+    // Later today still counts (recurring/installment memos sit at local noon); tomorrow doesn't.
+    let end_of_today = now.date_naive().and_hms_opt(23, 59, 59).unwrap().and_utc();
+    let later_today_stamp = (now + chrono::Duration::minutes(30))
+        .min(end_of_today)
+        .to_rfc3339();
+    let future_stamp = (now + chrono::Duration::days(1)).to_rfc3339();
     let this_month = now.format("%Y-%m").to_string();
     let first_of_this_month =
         chrono::NaiveDate::parse_from_str(&format!("{this_month}-01"), "%Y-%m-%d").unwrap();
@@ -1404,7 +1409,20 @@ async fn reports_trend_across_months_excludes_transfers() {
     )
     .await;
 
-    // Scheduled expense stays in DB but must not count as spent before its time.
+    let (later_status, _, _) = call(
+        &app,
+        "POST",
+        "/api/memos",
+        &a,
+        Some(json!({
+            "direction": "expense", "amount_minor": 5000, "currency": "USD",
+            "occurred_at": later_today_stamp, "source_id": cash, "category_id": cat["id"]
+        })),
+    )
+    .await;
+    assert_eq!(later_status, StatusCode::CREATED);
+
+    // Scheduled expense stays in DB but must not count as spent before its day.
     let (future_status, _, _) = call(
         &app,
         "POST",
@@ -1440,7 +1458,7 @@ async fn reports_trend_across_months_excludes_transfers() {
             .unwrap_or(0)
     };
     assert_eq!(total(&this_month, "income"), 100000);
-    assert_eq!(total(&this_month, "expense"), 30000);
+    assert_eq!(total(&this_month, "expense"), 35000);
     assert_eq!(total(&last_month, "expense"), 10000);
     assert!(
         !totals.iter().any(|t| t["direction"] == "transfer"),
@@ -1454,7 +1472,7 @@ async fn reports_trend_across_months_excludes_transfers() {
             .find(|r| r["month"] == month && r["category_id"] == cat["id"])
             .map(|r| r["total_minor"].as_i64().unwrap())
     };
-    assert_eq!(category_total(&this_month), Some(30000));
+    assert_eq!(category_total(&this_month), Some(35000));
     assert_eq!(category_total(&last_month), Some(10000));
 
     let (s3, _, three_months) = call(
@@ -1481,20 +1499,31 @@ async fn reports_trend_across_months_excludes_transfers() {
 
 #[tokio::test]
 async fn reports_historical_months_respect_daylight_saving_time() {
+    use chrono::Datelike;
     let (app, _db) = test_app_db().await;
     let a = signup(&app).await;
     let (_, _, sources) = call(&app, "GET", "/api/sources", &a, None).await;
     let cash = sources[0]["id"].clone();
 
-    // March boundary in New York is EST (-05:00), even if current offset is EDT (-04:00).
-    // Pick the most recently completed March, always in the trailing 12-month window.
-    let today = chrono::Utc::now();
-    let year: i32 = today.format("%Y").to_string().parse().unwrap();
-    let month: u32 = today.format("%m").to_string().parse().unwrap();
-    let year = if month >= 3 { year } else { year - 1 };
+    // New York month boundaries from April 1 to November 1 fall in daylight time (-04:00), so
+    // a client sending only its current winter offset (-05:00) would bucket them an hour off.
+    // Pick the latest such boundary whose month *and* previous month are both completed and
+    // inside the 12-month window. Any 10 consecutive months contain one, whatever month it is.
+    let this_month = chrono::Utc::now().date_naive().with_day(1).unwrap();
+    let boundary = (1..=9)
+        .map(|k| this_month - chrono::Months::new(k))
+        .find(|m| (4..=11).contains(&m.month()))
+        .unwrap();
+    let before = (boundary - chrono::Months::new(1))
+        .format("%Y-%m")
+        .to_string();
+    let after = boundary.format("%Y-%m").to_string();
+    let day = boundary.format("%Y-%m-%d");
     for (stamp, amount) in [
-        (format!("{year}-03-01T04:30:00Z"), 1400),
-        (format!("{year}-03-01T05:30:00Z"), 1600),
+        // 23:30 EDT on the last day of the previous month.
+        (format!("{day}T03:30:00Z"), 1400),
+        // 00:30 EDT on the 1st (but 23:30 the day before at a fixed -05:00).
+        (format!("{day}T04:30:00Z"), 1600),
     ] {
         let (status, _, _) = call(
             &app,
@@ -1513,16 +1542,7 @@ async fn reports_historical_months_respect_daylight_saving_time() {
         assert_eq!(status, StatusCode::CREATED);
     }
 
-    let (status, _, trend) = call(
-        &app,
-        "GET",
-        "/api/reports/trend?months=12&offset=-240&time_zone=America%2FNew_York",
-        &a,
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let sum = |month: &str| {
+    let sum = |trend: &Value, month: &str| {
         trend["totals"]
             .as_array()
             .unwrap()
@@ -1531,28 +1551,30 @@ async fn reports_historical_months_respect_daylight_saving_time() {
             .map(|row| row["total_minor"].as_i64().unwrap())
             .unwrap_or(0)
     };
-    assert_eq!(sum(&format!("{year}-02")), 1400);
-    assert_eq!(sum(&format!("{year}-03")), 1600);
-
-    // Existing clients using only offset still work, even without historical DST precision.
-    let (status, _, legacy) = call(
+    let (status, _, trend) = call(
         &app,
         "GET",
-        "/api/reports/trend?months=12&offset=-240",
+        "/api/reports/trend?months=12&offset=-300&time_zone=America%2FNew_York",
         &a,
         None,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        legacy["totals"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|row| row["month"] == format!("{year}-03"))
-            .unwrap()["total_minor"],
-        3000,
-    );
+    assert_eq!(sum(&trend, &before), 1400);
+    assert_eq!(sum(&trend, &after), 1600);
+
+    // Existing clients using only offset still work, even without historical DST precision.
+    let (status, _, legacy) = call(
+        &app,
+        "GET",
+        "/api/reports/trend?months=12&offset=-300",
+        &a,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(sum(&legacy, &before), 3000);
+    assert_eq!(sum(&legacy, &after), 0);
     let (status, _, _) = call(
         &app,
         "GET",

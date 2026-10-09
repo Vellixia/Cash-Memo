@@ -5,16 +5,12 @@ import { card } from "@/components/summary";
 import { Segmented } from "@/components/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Trend } from "@/lib/api";
+import { monthAbbrev, monthLabel } from "@/lib/format";
 import { totalsFor } from "@/lib/report-insights";
 import { formatMoney, signedMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Metric = "income" | "expense" | "net";
-
-export function monthLabel(month: string): string {
-  const [year, number] = month.split("-").map(Number);
-  return new Date(year, number - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
-}
 
 export function IncomeExpenseTrendCard({ trend, currency }: { trend: Trend | undefined; currency: string }) {
   const [metric, setMetric] = useState<Metric>("expense");
@@ -49,7 +45,7 @@ export function IncomeExpenseTrendCard({ trend, currency }: { trend: Trend | und
               type="button"
               key={row.month}
               aria-pressed={isActive}
-              aria-label={`${monthLabel(row.month)}: ${metric} ${signedMoney(value, currency)}`}
+              aria-label={`${monthLabel(row.month, "short")}: ${metric} ${signedMoney(value, currency)}`}
               onClick={() => setSelected(row.month)}
               className={cn("min-w-0 flex-1 rounded-lg px-0.5 py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40", isActive && "bg-muted ring-1 ring-border")}
             >
@@ -68,14 +64,14 @@ export function IncomeExpenseTrendCard({ trend, currency }: { trend: Trend | und
                   {value > 0 && <div className={cn("w-3/4 rounded-t-sm", bg)} style={{ height: `${pct}%` }} />}
                 </div>
               )}
-              <span className="mt-1 block truncate text-[0.65rem] text-muted-foreground">{monthLabel(row.month).split(" ")[0]}</span>
+              <span className="mt-1 block truncate text-[0.65rem] text-muted-foreground">{monthAbbrev(row.month)}</span>
             </button>
           );
         })}
       </div>
       {active && (
         <div className="mt-3 border-t border-border/70 pt-3" aria-live="polite">
-          <p className="mb-2 text-sm font-medium">{monthLabel(active.month)}</p>
+          <p className="mb-2 text-sm font-medium">{monthLabel(active.month, "short")}</p>
           <dl className="grid grid-cols-3 gap-2">
             <div className="min-w-0">
               <dt className="text-xs text-muted-foreground">Income</dt>
