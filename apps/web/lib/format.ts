@@ -19,6 +19,22 @@ export function monthLabel(month: string, style: "long" | "short" = "long"): str
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: style, year: "numeric" });
 }
 
+/** "2026-09" -> "Sep". Fixed locale, like `monthLabel`. */
+export function monthAbbrev(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
+}
+
+/** Two "YYYY-MM-DD" dates -> "Oct 1–9", "Sep 28 – Oct 9" or "Dec 1, 2025 – Jan 9, 2026". Fixed locale. */
+export function dateRangeLabel(start: string, end: string): string {
+  const [sy, sm, sd] = start.split("-").map(Number);
+  const [ey, em, ed] = end.split("-").map(Number);
+  const mon = (m: number) => new Date(2000, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
+  if (sy !== ey) return `${mon(sm)} ${sd}, ${sy} – ${mon(em)} ${ed}, ${ey}`;
+  if (sm === em) return sd === ed ? `${mon(sm)} ${sd}` : `${mon(sm)} ${sd}–${ed}`;
+  return `${mon(sm)} ${sd} – ${mon(em)} ${ed}`;
+}
+
 export function toDatetimeLocal(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

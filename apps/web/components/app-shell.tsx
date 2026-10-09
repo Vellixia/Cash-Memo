@@ -27,10 +27,10 @@ import { useUiStore } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import { cn } from "@/lib/utils";
 
-// Desktop top nav. /reports is being built by another worker; just link it.
+// Main navigation.
 const NAV = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/reports", label: "Reports", icon: ChartColumn },
+  { href: "/reports", label: "Insights", icon: ChartColumn },
   { href: "/manage", label: "Manage", icon: Shapes },
 ] as const;
 
@@ -210,7 +210,7 @@ function BottomNav({ onNew }: { onNew: () => void }) {
     >
       <div className="mx-auto grid h-16 max-w-md grid-cols-5 items-center px-1">
         {tab("/", "Home", Home)}
-        {tab("/reports", "Reports", ChartColumn)}
+        {tab("/reports", "Insights", ChartColumn)}
         <div className="flex justify-center">
           <button
             type="button"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { BalancesCard, CreditReminders, CurrenciesCard, HeroCard, SpendingCard } from "@/components/summary";
 import { Ledger, StarterCard, type DirectionFilter } from "@/components/ledger";
@@ -8,14 +8,39 @@ import { BudgetsCard } from "@/components/budgets-card";
 import { useCategories, useMe, useMemos, useSources, useSummary, useUpcoming } from "@/lib/queries";
 import { useUiStore } from "@/lib/store";
 
+const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
 export default function HomePage() {
   const month = useUiStore((s) => s.month);
   const storedCurrency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
   const openEditor = useUiStore((s) => s.openEditor);
   const [direction, setDirection] = useState<DirectionFilter>("all");
-  const [categoryId, setCategoryId] = useState<string | undefined>();
+  const categoryId = useUiStore((s) => s.ledgerCategoryId);
+  const setCategoryId = useUiStore((s) => s.setLedgerCategoryId);
+  const currencyFilter = useUiStore((s) => s.ledgerCurrency);
+  const setCurrencyFilter = useUiStore((s) => s.setLedgerCurrency);
   const [sourceId, setSourceId] = useState<string | undefined>();
+
+  // Reports drill-down arrives as ?month=&category=&currency=. Apply once, then drop the params
+  // so a reload or the month switcher doesn't fight a stale URL.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const { searchParams: params } = url;
+    const monthParam = params.get("month");
+    const categoryParam = params.get("category");
+    const currencyParam = params.get("currency");
+    if (monthParam === null && categoryParam === null && currencyParam === null) return;
+    const st = useUiStore.getState();
+    if (monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) st.setMonth(monthParam);
+    if (categoryParam && UUID.test(categoryParam)) st.setLedgerCategoryId(categoryParam);
+    if (currencyParam && /^[A-Z]{3}$/.test(currencyParam)) {
+      st.setCurrency(currencyParam);
+      st.setLedgerCurrency(currencyParam);
+    }
+    for (const k of ["month", "category", "currency"]) params.delete(k);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   const { data: summary } = useSummary(month);
   const { data: memos } = useMemos(month, categoryId, sourceId);
@@ -60,6 +85,8 @@ export default function HomePage() {
           const selected = categories?.find((c) => c.id === categoryId);
           if (selected && d !== "all" && selected.direction !== d) setCategoryId(undefined);
         }}
+        currency={currencyFilter}
+        onClearCurrency={() => setCurrencyFilter(undefined)}
         categoryId={categoryId}
         onCategory={setCategoryId}
         sourceId={sourceId}

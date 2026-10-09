@@ -26,6 +26,9 @@ import {
   getSources,
   getSummary,
   getTrend,
+  getCompare,
+  browserTimeZone,
+  utcOffsetMinutes,
   login,
   logout,
   requestPasswordReset,
@@ -118,6 +121,8 @@ function useInvalidateMoney() {
     // Memos move money between sources, so their balances may have changed too.
     qc.invalidateQueries({ queryKey: ["sources"] });
     qc.invalidateQueries({ queryKey: ["budgets"] });
+    qc.invalidateQueries({ queryKey: ["reports-trend"] });
+    qc.invalidateQueries({ queryKey: ["reports-compare"] });
   };
 }
 
@@ -206,6 +211,8 @@ export function useDeleteCategory() {
       qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["memos"] });
       qc.invalidateQueries({ queryKey: ["summary"] });
+      qc.invalidateQueries({ queryKey: ["reports-trend"] });
+      qc.invalidateQueries({ queryKey: ["reports-compare"] });
     },
   });
 }
@@ -256,6 +263,9 @@ function useInvalidatePlans() {
     qc.invalidateQueries({ queryKey: ["memos"] });
     qc.invalidateQueries({ queryKey: ["summary"] });
     qc.invalidateQueries({ queryKey: ["sources"] });
+    qc.invalidateQueries({ queryKey: ["budgets"] });
+    qc.invalidateQueries({ queryKey: ["reports-trend"] });
+    qc.invalidateQueries({ queryKey: ["reports-compare"] });
   };
 }
 
@@ -339,6 +349,9 @@ export function useInvalidateAfterImport() {
     qc.invalidateQueries({ queryKey: ["summary"] });
     qc.invalidateQueries({ queryKey: ["categories"] });
     qc.invalidateQueries({ queryKey: ["sources"] });
+    qc.invalidateQueries({ queryKey: ["budgets"] });
+    qc.invalidateQueries({ queryKey: ["reports-trend"] });
+    qc.invalidateQueries({ queryKey: ["reports-compare"] });
   };
 }
 
@@ -377,10 +390,26 @@ export function useDeleteAttachment() {
 
 // --- reports -----------------------------------------------------------------
 
-export function useTrend(months: 6 | 12) {
-  return useQuery({ queryKey: ["reports-trend", months], queryFn: () => getTrend(months), placeholderData: keepPreviousData });
+export function useTrend(months: 3 | 6 | 12) {
+  const offset = utcOffsetMinutes();
+  const timeZone = browserTimeZone();
+  return useQuery({
+    queryKey: ["reports-trend", months, offset, timeZone ?? null],
+    queryFn: () => getTrend(months, offset, timeZone),
+    // Recurring jobs can insert memos without a browser mutation; refresh an open report too.
+    refetchInterval: 60_000,
+  });
 }
 
+export function useCompare(months: 1 | 3 | 6 | 12) {
+  const offset = utcOffsetMinutes();
+  const timeZone = browserTimeZone();
+  return useQuery({
+    queryKey: ["reports-compare", months, offset, timeZone ?? null],
+    queryFn: () => getCompare(months, offset, timeZone),
+    refetchInterval: 60_000,
+  });
+}
 
 // --- recurring memos & budgets ----------------------------------------------
 
